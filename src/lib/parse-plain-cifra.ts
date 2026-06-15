@@ -18,17 +18,29 @@ export function cleanSongSections(sections: Section[]): Section[] {
 }
 
 function cleanLyricLine(line: LyricLine): LyricLine | null {
-  if (line.length === 1 && line[0]?.isTab) {
-    const text = line[0].text.replace(/\s+$/u, "");
-    return text.trim() ? [{ ...line[0], text }] : null;
-  }
-
+  if (isSingleTabLine(line)) return cleanTabLine(line);
   if (isEmptyLyricLine(line)) return line;
+  return cleanChordLyricLine(line);
+}
 
-  const filtered = line.filter(
-    (b) => b.chord.trim() || b.text.trim(),
-  ) as LyricLine;
+function isSingleTabLine(line: LyricLine): boolean {
+  return line.length === 1 && Boolean(line[0]?.isTab);
+}
+
+function cleanTabLine(line: LyricLine): LyricLine | null {
+  const block = line[0];
+  if (!block) return null;
+  const text = block.text.replace(/\s+$/u, "");
+  return text.trim() ? [{ ...block, text }] : null;
+}
+
+function cleanChordLyricLine(line: LyricLine): LyricLine | null {
+  const filtered = line.filter(hasChordOrText) as LyricLine;
   return filtered.length > 0 ? filtered : null;
+}
+
+function hasChordOrText(block: LyricLine[number]): boolean {
+  return Boolean(block.chord.trim() || block.text.trim());
 }
 
 function trimTrailingEmptyLines(lines: LyricLine[]) {
@@ -67,53 +79,79 @@ function isTabLine(_line: string, stripped: string): boolean {
 }
 
 function isEmptyLyricLine(line: LyricLine | undefined): boolean {
-  return Boolean(
-    line &&
-    line.length === 1 &&
-    !line[0]?.chord &&
-    !line[0]?.text &&
-    !line[0]?.isTab,
-  );
+  const block = singleLineBlock(line);
+  return Boolean(block && isEmptyBlock(block));
+}
+
+function singleLineBlock(line: LyricLine | undefined): LyricLine[number] | null {
+  return line?.length === 1 ? (line[0] ?? null) : null;
+}
+
+function isEmptyBlock(block: LyricLine[number]): boolean {
+  return !block.chord && !block.text && !block.isTab;
 }
 
 function lyricLineToPlainPair(line: LyricLine): string[] {
-  if (line.length === 1 && line[0]?.isTab) return [line[0].text];
   if (line.length === 0) return [];
+  return isSingleTabLine(line) ? tabLineText(line) : chordLyricPairLines(line);
+}
 
-  let chordLine = "";
-  let lyricLine = "";
-  for (const block of line) {
-    const lyricStart = lyricLine.length;
-    chordLine = alignChordLine(chordLine, lyricStart, block.chord);
-    if (block.chord) chordLine += block.chord;
-    lyricLine += block.text + (block.spaceAfter === false ? "" : " ");
-  }
+function tabLineText(line: LyricLine) {
+  return [line[0]?.text ?? ""];
+}
 
-  chordLine = chordLine.padEnd(lyricLine.length, " ");
-  return plainPairLines(chordLine.trimEnd(), lyricLine.trimEnd());
+function chordLyricPairLines(line: LyricLine) {
+  const pair = line.reduce(appendPlainPairBlock, { chordLine: "", lyricLine: "" });
+  return plainPairLines(finalChordLine(pair), pair.lyricLine.trimEnd());
+}
+
+function finalChordLine(pair: PlainPair) {
+  return pair.chordLine.padEnd(pair.lyricLine.length, " ").trimEnd();
+}
+
+type PlainPair = { chordLine: string; lyricLine: string };
+
+function appendPlainPairBlock(pair: PlainPair, block: LyricLine[number]): PlainPair {
+  const chordLine = appendPlainChord(pair.chordLine, pair.lyricLine.length, block.chord);
+  return {
+    chordLine,
+    lyricLine: pair.lyricLine + block.text + blockSpace(block),
+  };
+}
+
+function appendPlainChord(chordLine: string, lyricStart: number, chord: string): string {
+  const aligned = alignChordLine(chordLine, lyricStart, chord);
+  return chord ? `${aligned}${chord}` : aligned;
+}
+
+function blockSpace(block: LyricLine[number]): string {
+  return block.spaceAfter === false ? "" : " ";
 }
 
 function alignChordLine(chordLine: string, lyricStart: number, chord: string): string {
-  if (!chord) return chordLine.padEnd(lyricStart, " ");
-  if (chordLine.length < lyricStart) return chordLine.padEnd(lyricStart, " ");
-  if (chordLine.length > lyricStart) return `${chordLine}  `;
-  if (!shouldSeparateChord(chordLine, lyricStart)) return chordLine;
-  return `${chordLine}  `;
+  const padded = chordLine.padEnd(lyricStart, " ");
+  if (!chord || chordLine.length < lyricStart) return padded;
+  return needsChordLinePadding(chordLine, lyricStart) ? `${chordLine}  ` : chordLine;
+}
+
+function needsChordLinePadding(chordLine: string, lyricStart: number) {
+  return chordLine.length > lyricStart || shouldSeparateChord(chordLine, lyricStart);
 }
 
 function shouldSeparateChord(chordLine: string, lyricStart: number): boolean {
-  if (lyricStart === 0 || chordLine.length !== lyricStart || chordLine.length === 0) {
-    return false;
-  }
-  const lastCh = chordLine[chordLine.length - 1];
-  return Boolean(lastCh && lastCh !== " " && /[A-G#b0-9/]/.test(lastCh));
+  return canCheckChordSeparation(chordLine, lyricStart) && isChordTail(chordLine.at(-1));
+}
+
+function canCheckChordSeparation(chordLine: string, lyricStart: number) {
+  return lyricStart > 0 && chordLine.length === lyricStart && chordLine.length > 0;
+}
+
+function isChordTail(value: string | undefined) {
+  return Boolean(value && value !== " " && /[A-G#b0-9/]/.test(value));
 }
 
 function plainPairLines(chordLine: string, lyricLine: string): string[] {
-  if (chordLine && lyricLine) return [chordLine, lyricLine];
-  if (chordLine) return [chordLine];
-  if (lyricLine) return [lyricLine];
-  return [];
+  return [chordLine, lyricLine].filter(Boolean);
 }
 
 export function sectionToPlainText(section: Section): string {
@@ -212,25 +250,31 @@ function isMarkerChordLine(line: string, stripped: string): boolean {
 
 function canConsumeNextLyricLine(lines: string[], index: number): boolean {
   const nextLine = lines[index + 1];
-  if (nextLine === undefined) return false;
-  const stripped = nextLine.trim();
-  return (
-    index + 1 < lines.length &&
-    !isChordOnlyLine(nextLine) &&
-    !lineHasAngleChordMarkers(nextLine) &&
-    !SECTION_RE.test(stripped) &&
-    !isTabLine(nextLine, stripped)
-  );
+  return nextLine !== undefined && isPlainLyricCandidate(nextLine);
+}
+
+function isPlainLyricCandidate(line: string) {
+  const stripped = line.trim();
+  return !isChordOnlyLine(line)
+    && !lineHasAngleChordMarkers(line)
+    && !SECTION_RE.test(stripped)
+    && !isTabLine(line, stripped);
 }
 
 function parseChordBlocks(lines: string[], index: number, markerLine: boolean) {
-  const line = lines[index] ?? "";
-  const chordLineClean = markerLine ? chordLineFromAngleMarkers(line) : line;
-  const lyricLine = canConsumeNextLyricLine(lines, index) ? (lines[index + 1] ?? "") : "";
+  const lyricLine = nextLyricLine(lines, index);
   return {
-    blocks: parseChordLinePair(chordLineClean, lyricLine),
+    blocks: parseChordLinePair(cleanChordLine(lines[index] ?? "", markerLine), lyricLine),
     consumedNextLine: lyricLine !== "",
   };
+}
+
+function cleanChordLine(line: string, markerLine: boolean) {
+  return markerLine ? chordLineFromAngleMarkers(line) : line;
+}
+
+function nextLyricLine(lines: string[], index: number) {
+  return canConsumeNextLyricLine(lines, index) ? (lines[index + 1] ?? "") : "";
 }
 
 function addBlankLine(state: ParseState) {
@@ -248,52 +292,112 @@ function handlePlainLine(state: ParseState, stripped: string) {
 }
 
 export function parsePlainTextCifra(raw: string): ParsePlainCifraResult {
-  const normalized = raw
-    .replace(/\r\n/g, "\n")
-    .replace(/<CHORD:([^>]+)>/gi, "‹CHORD:$1›");
-  if (!normalized.trim()) {
-    return { ok: false, error: "Digite o conteúdo da cifra." };
-  }
+  const normalized = normalizePlainCifra(raw);
+  if (!normalized.trim()) return plainParseError("Digite o conteúdo da cifra.");
 
-  const lines = normalized.split("\n");
-  const state = createParseState();
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    const stripped = line.trim();
-    const sectionMatch = isSectionHeaderLine(line, stripped);
-
-    if (sectionMatch) {
-      startSection(state, stripped, sectionMatch[1] ?? "");
-      continue;
-    }
-
-    if (isTabLine(line, stripped)) {
-      addParsedLine(state, [
-        { chord: "", text: line.replace(/\s+$/, ""), isTab: true, spaceAfter: true },
-      ]);
-      continue;
-    }
-
-    const markerLine = isMarkerChordLine(line, stripped);
-    if (isChordOnlyLine(line) || markerLine) {
-      const { blocks, consumedNextLine } = parseChordBlocks(lines, i, markerLine);
-      if (blocks.length > 0) addParsedLine(state, blocks);
-      if (consumedNextLine) i++;
-      continue;
-    }
-
-    handlePlainLine(state, stripped);
-  }
-
+  const state = parsePlainLines(normalized.split("\n"));
   flushSection(state);
 
   if (state.sections.length === 0) {
-    return {
-      ok: false,
-      error: "Não foi possível montar seções a partir do texto.",
-    };
+    return plainParseError("Não foi possível montar seções a partir do texto.");
   }
 
   return { ok: true, data: state.sections };
+}
+
+function normalizePlainCifra(raw: string): string {
+  return raw.replace(/\r\n/g, "\n").replace(/<CHORD:([^>]+)>/gi, "‹CHORD:$1›");
+}
+
+function plainParseError(error: string): ParsePlainCifraResult {
+  return { ok: false, error };
+}
+
+function parsePlainLines(lines: string[]): ParseState {
+  const state = createParseState();
+  for (let i = 0; i < lines.length; i++) {
+    i += parsePlainLine(state, lines, i);
+  }
+  return state;
+}
+
+type PlainLineContext = {
+  line: string;
+  stripped: string;
+};
+
+function plainLineContext(lines: string[], index: number): PlainLineContext {
+  const line = lines[index] ?? "";
+  return { line, stripped: line.trim() };
+}
+
+function parsePlainLine(state: ParseState, lines: string[], index: number): number {
+  const context = plainLineContext(lines, index);
+  return parseStructuredPlainLine(state, lines, index, context)
+    ?? parsePlainTextLine(state, context.stripped);
+}
+
+function parseStructuredPlainLine(
+  state: ParseState,
+  lines: string[],
+  index: number,
+  context: PlainLineContext,
+): number | null {
+  return parsePlainSection(state, context)
+    ?? parsePlainTab(state, context)
+    ?? parsePlainChordOrMarker(state, lines, index, context);
+}
+
+function parsePlainSection(state: ParseState, context: PlainLineContext): number | null {
+  const sectionMatch = isSectionHeaderLine(context.line, context.stripped);
+  return sectionMatch ? parseSectionLine(state, context.stripped, sectionMatch[1] ?? "") : null;
+}
+
+function parsePlainTab(state: ParseState, context: PlainLineContext): number | null {
+  return isTabLine(context.line, context.stripped) ? parseTabLine(state, context.line) : null;
+}
+
+function parsePlainChordOrMarker(
+  state: ParseState,
+  lines: string[],
+  index: number,
+  context: PlainLineContext,
+): number | null {
+  return isChordOrMarkerLine(context.line, context.stripped)
+    ? parseChordOrMarkerLine(state, lines, index, context.line, context.stripped)
+    : null;
+}
+
+function parsePlainTextLine(state: ParseState, stripped: string): number {
+  handlePlainLine(state, stripped);
+  return 0;
+}
+
+function parseSectionLine(state: ParseState, stripped: string, typeText: string): number {
+  startSection(state, stripped, typeText);
+  return 0;
+}
+
+function parseTabLine(state: ParseState, line: string): number {
+  addParsedLine(state, [
+    { chord: "", text: line.replace(/\s+$/, ""), isTab: true, spaceAfter: true },
+  ]);
+  return 0;
+}
+
+function isChordOrMarkerLine(line: string, stripped: string): boolean {
+  return isChordOnlyLine(line) || isMarkerChordLine(line, stripped);
+}
+
+function parseChordOrMarkerLine(
+  state: ParseState,
+  lines: string[],
+  index: number,
+  line: string,
+  stripped: string,
+): number {
+  const markerLine = isMarkerChordLine(line, stripped);
+  const { blocks, consumedNextLine } = parseChordBlocks(lines, index, markerLine);
+  if (blocks.length > 0) addParsedLine(state, blocks);
+  return consumedNextLine ? 1 : 0;
 }

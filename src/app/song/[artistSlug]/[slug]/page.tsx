@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SongView } from "@/components/song/song-view";
 import { SongViewProvider, type SongViewContextValue } from "@/components/song/song-context";
 import { usePlayerStore } from "@/store/use-player-store";
@@ -16,129 +16,148 @@ import { useSession } from "@/hooks/use-session";
 import { cloudAddSongToFolder, cloudRemoveSongFromFolder, saveFolders } from "@/lib/storage";
 import { writeEditSnapshot } from "@/lib/cifras-edit-bridge";
 
-export default function SongPage() {
+function useSongParams() {
   const params = useParams();
-  const router = useRouter();
+  return {
+    artistSlug: Array.isArray(params.artistSlug) ? params.artistSlug[0] : params.artistSlug,
+    slug: Array.isArray(params.slug) ? params.slug[0] : params.slug,
+  };
+}
 
-  // Next.js app router params
-  const artistSlug = Array.isArray(params.artistSlug) ? params.artistSlug[0] : params.artistSlug;
-  const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug;
-
+function useLoadedSong(artistSlug: string | undefined, slug: string | undefined) {
   const [currentSong, setCurrentSong] = useState<StoredSong | null>(null);
   const [songData, setSongData] = useState<Section[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-
-  const { status } = useSession();
-  const isCloud = status === "authenticated";
-  const { addToRecentes, doCreateFolder, notifyCloudMutation } = useLibraryActions();
-
-  // Zustand — seletores individuais para memoização correta
-  const setFolders = useLibraryStore((s) => s.setFolders);
-  const folders = useLibraryStore((s) => s.folders);
-
-  const tone = usePlayerStore((s) => s.tone);
-  const setTone = usePlayerStore((s) => s.setTone);
-  const capo = usePlayerStore((s) => s.capo);
-  const setCapo = usePlayerStore((s) => s.setCapo);
-  const simplified = usePlayerStore((s) => s.simplified);
-  const setSimplified = usePlayerStore((s) => s.setSimplified);
-  const showTabs = usePlayerStore((s) => s.showTabs);
-  const setShowTabs = usePlayerStore((s) => s.setShowTabs);
-  const mirrored = usePlayerStore((s) => s.mirrored);
-  const setMirrored = usePlayerStore((s) => s.setMirrored);
-  const fontSizeOffset = usePlayerStore((s) => s.fontSizeOffset);
-  const setFontSizeOffset = usePlayerStore((s) => s.setFontSizeOffset);
-  const columns = usePlayerStore((s) => s.columns);
-  const setColumns = usePlayerStore((s) => s.setColumns);
-  const spacingOffset = usePlayerStore((s) => s.spacingOffset);
-  const setSpacingOffset = usePlayerStore((s) => s.setSpacingOffset);
-  const zenMode = usePlayerStore((s) => s.zenMode);
-  const setZenMode = usePlayerStore((s) => s.setZenMode);
-  const autoScroll = usePlayerStore((s) => s.autoScroll);
-  const setAutoScroll = usePlayerStore((s) => s.setAutoScroll);
-  const scrollSpeed = usePlayerStore((s) => s.scrollSpeed);
-  const setScrollSpeed = usePlayerStore((s) => s.setScrollSpeed);
-  const metronomeActive = usePlayerStore((s) => s.metronomeActive);
-  const setMetronomeActive = usePlayerStore((s) => s.setMetronomeActive);
-  const bpm = usePlayerStore((s) => s.bpm);
-  const setBpm = usePlayerStore((s) => s.setBpm);
-  const activeChord = usePlayerStore((s) => s.activeChord);
-  const setActiveChord = usePlayerStore((s) => s.setActiveChord);
-  const displaySettingsOpen = usePlayerStore((s) => s.displaySettingsOpen);
-  const setDisplaySettingsOpen = usePlayerStore((s) => s.setDisplaySettingsOpen);
-  const youtubeMiniOpen = usePlayerStore((s) => s.youtubeMiniOpen);
-  const setYoutubeMiniOpen = usePlayerStore((s) => s.setYoutubeMiniOpen);
   const resetPlayer = usePlayerStore((s) => s.reset);
+  const { addToRecentes } = useLibraryActions();
 
-  const load = async () => {
+  // addToRecentes changes identity whenever the recentes store changes, and
+  // load() itself mutates that store. Keep it in a ref so load's identity (and
+  // thus the load effect below) only depends on the song being viewed —
+  // otherwise loading a song retriggers the effect in an infinite fetch loop.
+  const addToRecentesRef = useRef(addToRecentes);
+  useEffect(() => {
+    addToRecentesRef.current = addToRecentes;
+  }, [addToRecentes]);
+
+  const load = useCallback(async () => {
     if (!artistSlug || !slug) return;
-    try {
-        setIsLoading(true);
-        setError(null);
-        const html = await fetchChordsHtml(artistSlug, slug);
-        const songObj = processHtmlAndExtract(html, `${artistSlug}-${slug}`, "", "", artistSlug, slug);
-        setCurrentSong(songObj);
-        setSongData(songObj.songData);
-        resetPlayer();
-        addToRecentes(songObj);
-    } catch (err) {
-        setError(err instanceof Error ? err : new Error("Erro desconhecido."));
-    } finally {
-        setIsLoading(false);
+    setIsLoading(true);
+    setError(null);
+
+    const result = await loadSongResult(artistSlug, slug);
+    if (isLoadSongError(result)) {
+      setError(result.error);
+    } else {
+      applyLoadedSong(result.song, setCurrentSong, setSongData, resetPlayer, addToRecentesRef.current);
     }
-  };
+
+    setIsLoading(false);
+  }, [artistSlug, resetPlayer, slug]);
 
   useEffect(() => {
-    load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artistSlug, slug]);
+    const timeout = window.setTimeout(() => {
+      void load();
+    }, 0);
 
+    return () => window.clearTimeout(timeout);
+  }, [load]);
+
+  return { currentSong, setCurrentSong, songData, isLoading, error, load };
+}
+
+type LoadSongResult = { song: StoredSong } | { error: Error };
+
+async function loadSongResult(artistSlug: string, slug: string): Promise<LoadSongResult> {
+  try {
+    const html = await fetchChordsHtml(artistSlug, slug);
+    return { song: processHtmlAndExtract(html, `${artistSlug}-${slug}`, "", "", artistSlug, slug) };
+  } catch (err) {
+    return { error: err instanceof Error ? err : new Error("Erro desconhecido.") };
+  }
+}
+
+function isLoadSongError(result: LoadSongResult): result is { error: Error } {
+  return "error" in result;
+}
+
+function applyLoadedSong(
+  song: StoredSong,
+  setCurrentSong: (song: StoredSong) => void,
+  setSongData: (data: Section[]) => void,
+  resetPlayer: () => void,
+  addToRecentes: (song: StoredSong) => void,
+) {
+  setCurrentSong(song);
+  setSongData(song.songData);
+  resetPlayer();
+  addToRecentes(song);
+}
+
+function usePlayerContextState() {
+  return {
+    tone: usePlayerStore((s) => s.tone),
+    setTone: usePlayerStore((s) => s.setTone),
+    capo: usePlayerStore((s) => s.capo),
+    setCapo: usePlayerStore((s) => s.setCapo),
+    simplified: usePlayerStore((s) => s.simplified),
+    setSimplified: usePlayerStore((s) => s.setSimplified),
+    showTabs: usePlayerStore((s) => s.showTabs),
+    setShowTabs: usePlayerStore((s) => s.setShowTabs),
+    mirrored: usePlayerStore((s) => s.mirrored),
+    setMirrored: usePlayerStore((s) => s.setMirrored),
+    fontSizeOffset: usePlayerStore((s) => s.fontSizeOffset),
+    setFontSizeOffset: usePlayerStore((s) => s.setFontSizeOffset),
+    columns: usePlayerStore((s) => s.columns),
+    setColumns: usePlayerStore((s) => s.setColumns),
+    spacingOffset: usePlayerStore((s) => s.spacingOffset),
+    setSpacingOffset: usePlayerStore((s) => s.setSpacingOffset),
+    zenMode: usePlayerStore((s) => s.zenMode),
+    setZenMode: usePlayerStore((s) => s.setZenMode),
+    autoScroll: usePlayerStore((s) => s.autoScroll),
+    setAutoScroll: usePlayerStore((s) => s.setAutoScroll),
+    scrollSpeed: usePlayerStore((s) => s.scrollSpeed),
+    setScrollSpeed: usePlayerStore((s) => s.setScrollSpeed),
+    metronomeActive: usePlayerStore((s) => s.metronomeActive),
+    setMetronomeActive: usePlayerStore((s) => s.setMetronomeActive),
+    bpm: usePlayerStore((s) => s.bpm),
+    setBpm: usePlayerStore((s) => s.setBpm),
+    activeChord: usePlayerStore((s) => s.activeChord),
+    setActiveChord: usePlayerStore((s) => s.setActiveChord),
+    displaySettingsOpen: usePlayerStore((s) => s.displaySettingsOpen),
+    setDisplaySettingsOpen: usePlayerStore((s) => s.setDisplaySettingsOpen),
+    youtubeMiniOpen: usePlayerStore((s) => s.youtubeMiniOpen),
+    setYoutubeMiniOpen: usePlayerStore((s) => s.setYoutubeMiniOpen),
+  };
+}
+
+function songMatches(a: StoredSong | null | undefined, b: StoredSong | null) {
+  return Boolean(a && b && a.artistSlug === b.artistSlug && a.slug === b.slug);
+}
+
+function useSongFolderActions(currentSong: StoredSong | null) {
+  const { status } = useSession();
+  const isCloud = status === "authenticated";
+  const { doCreateFolder, notifyCloudMutation } = useLibraryActions();
+  const folders = useLibraryStore((s) => s.folders);
+  const setFolders = useLibraryStore((s) => s.setFolders);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
 
-  const isSavedInAnyFolder = currentSong ? folders.some((f) =>
-    f.songs.some((s) => s.artistSlug === currentSong.artistSlug && s.slug === currentSong.slug)
-  ) : false;
+  const isSavedInAnyFolder = currentSong ? folders.some((f) => f.songs.some((s) => songMatches(s, currentSong))) : false;
 
   const onToggleSongInFolder = useCallback(async (folderId: string) => {
-    const isSaved = folders.some((f) =>
-      f.id === folderId &&
-      f.songs.some((s) => s.artistSlug === currentSong?.artistSlug && s.slug === currentSong?.slug)
-    );
+    const isSaved = folders.some((f) => f.id === folderId && f.songs.some((s) => songMatches(s, currentSong)));
 
     if (isCloud) {
-      try {
-        if (isSaved) {
-          const folder = folders.find(f => f.id === folderId);
-          const songInFolder = folder?.songs.find(s => s.artistSlug === currentSong?.artistSlug && s.slug === currentSong?.slug);
-          if (songInFolder) {
-            const { folders: next } = await cloudRemoveSongFromFolder(folderId, songInFolder.arrangementId || songInFolder.id);
-            setFolders(next);
-            notifyCloudMutation();
-          }
-        } else if (currentSong) {
-          const { folders: next } = await cloudAddSongToFolder(folderId, currentSong);
-          setFolders(next);
-          notifyCloudMutation();
-        }
-      } catch (err) {
-        console.error("Error toggling folder", err);
-      }
-    } else {
-      const next = folders.map(f => {
-        if (f.id === folderId) {
-          if (isSaved) {
-            return { ...f, songs: f.songs.filter(s => !(s.artistSlug === currentSong?.artistSlug && s.slug === currentSong?.slug)) };
-          } else if (currentSong) {
-            return { ...f, songs: [...f.songs, currentSong] };
-          }
-        }
-        return f;
-      });
-      saveFolders(next);
-      setFolders(next);
+      await toggleCloudSongFolder(folderId, folders, currentSong, isSaved, setFolders, notifyCloudMutation);
+      return;
     }
+
+    const next = toggleLocalSongFolder(folderId, folders, currentSong, isSaved);
+    saveFolders(next);
+    setFolders(next);
   }, [currentSong, folders, isCloud, notifyCloudMutation, setFolders]);
 
   const onCreateFolderFromSave = useCallback(async (e: React.FormEvent) => {
@@ -148,121 +167,172 @@ export default function SongPage() {
     setNewFolderName("");
   }, [doCreateFolder, newFolderName]);
 
+  return {
+    folders,
+    saveModalOpen,
+    setSaveModalOpen,
+    newFolderName,
+    setNewFolderName,
+    isSavedInAnyFolder,
+    onToggleSongInFolder,
+    onCreateFolderFromSave,
+  };
+}
+
+async function toggleCloudSongFolder(
+  folderId: string,
+  folders: ReturnType<typeof useLibraryStore.getState>["folders"],
+  currentSong: StoredSong | null,
+  isSaved: boolean,
+  setFolders: (folders: ReturnType<typeof useLibraryStore.getState>["folders"]) => void,
+  notifyCloudMutation: () => void,
+) {
+  try {
+    const next = isSaved
+      ? await removeCloudSongFromFolder(folderId, folders, currentSong)
+      : await addCloudSongToFolder(folderId, currentSong);
+
+    if (!next) return;
+    setFolders(next);
+    notifyCloudMutation();
+  } catch (err) {
+    console.error("Error toggling folder", err);
+  }
+}
+
+async function removeCloudSongFromFolder(
+  folderId: string,
+  folders: ReturnType<typeof useLibraryStore.getState>["folders"],
+  currentSong: StoredSong | null,
+) {
+  const songInFolder = folders.find((f) => f.id === folderId)?.songs.find((s) => songMatches(s, currentSong));
+  if (!songInFolder) return null;
+  const { folders: next } = await cloudRemoveSongFromFolder(folderId, songInFolder.arrangementId || songInFolder.id);
+  return next;
+}
+
+async function addCloudSongToFolder(folderId: string, currentSong: StoredSong | null) {
+  if (!currentSong) return null;
+  const { folders: next } = await cloudAddSongToFolder(folderId, currentSong);
+  return next;
+}
+
+function toggleLocalSongFolder(
+  folderId: string,
+  folders: ReturnType<typeof useLibraryStore.getState>["folders"],
+  currentSong: StoredSong | null,
+  isSaved: boolean,
+) {
+  return folders.map((folder) => {
+    if (folder.id !== folderId) return folder;
+    if (isSaved) return { ...folder, songs: folder.songs.filter((song) => !songMatches(song, currentSong)) };
+    if (currentSong) return { ...folder, songs: [...folder.songs, currentSong] };
+    return folder;
+  });
+}
+
+function useSongPageActions(
+  currentSong: StoredSong | null,
+  songData: Section[],
+  setCurrentSong: (updater: (song: StoredSong | null) => StoredSong | null) => void,
+) {
+  const router = useRouter();
+  const player = usePlayerContextState();
+
+  return {
+    player,
+    onYoutubeVideoResolved: (youtubeId: string) => setCurrentSong((prev) => prev ? { ...prev, youtubeId } : prev),
+    onBack: () => router.back(),
+    onOpenVideo: () => player.setYoutubeMiniOpen(true),
+    onOpenArtistSongs: () => {
+      if (currentSong) router.push(`/artist/${currentSong.artistSlug}`);
+    },
+    onPrint: () => window.print(),
+    onTapZone: () => {},
+    onToggleZen: () => player.setZenMode(!usePlayerStore.getState().zenMode),
+    onOpenSongEditor: () => {
+      if (!currentSong) return;
+      const ps = usePlayerStore.getState();
+      writeEditSnapshot({
+        v: 1,
+        currentSong,
+        songData,
+        songReturnTarget: "home",
+        activeFolderId: null,
+        setlistDetail: null,
+        activeArtist: null,
+        display: {
+          tone: ps.tone,
+          capo: ps.capo,
+          simplified: ps.simplified,
+          showTabs: ps.showTabs,
+          mirrored: ps.mirrored,
+          fontSizeOffset: ps.fontSizeOffset,
+          columns: ps.columns,
+          spacingOffset: ps.spacingOffset,
+        },
+      });
+      router.push("/editar");
+    },
+    onShareArrangement: () => {
+      if (typeof window !== "undefined" && navigator?.clipboard) {
+        void navigator.clipboard.writeText(window.location.href);
+      }
+    },
+  };
+}
+
+function useSongContextValue({
+  currentSong,
+  songData,
+  folderState,
+  actions,
+}: {
+  currentSong: StoredSong | null;
+  songData: Section[];
+  folderState: ReturnType<typeof useSongFolderActions>;
+  actions: ReturnType<typeof useSongPageActions>;
+}) {
+  const p = actions.player;
   const youtubeEmbedUrl = currentSong?.youtubeId ? `https://www.youtube.com/embed/${currentSong.youtubeId}` : null;
 
-  const value = useMemo(() => ({
-      currentSong,
-      songData,
-      isParsing: false,
-      parseError: null,
-      tone,
-      setTone,
-      capo,
-      setCapo,
-      simplified,
-      setSimplified,
-      showTabs,
-      setShowTabs,
-      mirrored,
-      setMirrored,
-      fontSizeOffset,
-      setFontSizeOffset,
-      columns,
-      setColumns,
-      spacingOffset,
-      setSpacingOffset,
-      effectiveTransposition: tone - capo,
-      zenMode,
-      autoScroll,
-      setAutoScroll,
-      scrollSpeed,
-      setScrollSpeed,
-      metronomeActive,
-      setMetronomeActive,
-      bpm,
-      setBpm,
-      activeChord,
-      setActiveChord,
-      displaySettingsOpen,
-      setDisplaySettingsOpen,
-      saveModalOpen,
-      setSaveModalOpen,
-      youtubeMiniOpen,
-      setYoutubeMiniOpen,
-      folders,
-      newFolderName,
-      setNewFolderName,
-      isSavedInAnyFolder,
-      onToggleSongInFolder,
-      onCreateFolderFromSave,
-      youtubeEmbedUrl,
-      youtubeFallbackSearchQuery: currentSong ? currentSong.title + " " + currentSong.artist : "",
-      onYoutubeVideoResolved: (youtubeId: string) => {
-         setCurrentSong(prev => prev ? { ...prev, youtubeId } : prev);
-      },
-      onBack: () => router.back(),
-      onOpenVideo: () => setYoutubeMiniOpen(true),
-      onOpenArtistSongs: () => {
-        if (currentSong) router.push(`/artist/${currentSong.artistSlug}`);
-      },
-      onPrint: () => window.print(),
-      onTapZone: () => {},
-      onToggleZen: () => {
-          // Lê direto do store para evitar stale closure
-          const current = usePlayerStore.getState().zenMode;
-          setZenMode(!current);
-      },
-      onOpenSongEditor: () => {
-          if (!currentSong) return;
-          const ps = usePlayerStore.getState();
-          writeEditSnapshot({
-            v: 1,
-            currentSong,
-            songData,
-            songReturnTarget: "home",
-            activeFolderId: null,
-            setlistDetail: null,
-            activeArtist: null,
-            display: {
-                tone: ps.tone,
-                capo: ps.capo,
-                simplified: ps.simplified,
-                showTabs: ps.showTabs,
-                mirrored: ps.mirrored,
-                fontSizeOffset: ps.fontSizeOffset,
-                columns: ps.columns,
-                spacingOffset: ps.spacingOffset,
-            }
-          });
-          router.push("/editar");
-      },
-      onShareArrangement: () => {
-         if (typeof window !== "undefined" && navigator?.clipboard) {
-            navigator.clipboard.writeText(window.location.href);
-         }
-      },
-      shareArrangementDisabled: false,
-  }), [
-    currentSong, songData,
-    tone, setTone, capo, setCapo, simplified, setSimplified,
-    showTabs, setShowTabs, mirrored, setMirrored,
-    fontSizeOffset, setFontSizeOffset, columns, setColumns,
-    spacingOffset, setSpacingOffset, zenMode, setZenMode,
-    autoScroll, setAutoScroll, scrollSpeed, setScrollSpeed,
-    metronomeActive, setMetronomeActive, bpm, setBpm,
-    activeChord, setActiveChord, displaySettingsOpen, setDisplaySettingsOpen,
-    saveModalOpen, youtubeMiniOpen, setYoutubeMiniOpen,
-    folders, newFolderName, isSavedInAnyFolder, youtubeEmbedUrl,
-    onToggleSongInFolder, onCreateFolderFromSave, router,
-  ]);
+  return useMemo(() => ({
+    currentSong,
+    songData,
+    isParsing: false,
+    parseError: null,
+    ...p,
+    effectiveTransposition: p.tone - p.capo,
+    ...folderState,
+    youtubeEmbedUrl,
+    youtubeFallbackSearchQuery: currentSong ? currentSong.title + " " + currentSong.artist : "",
+    onYoutubeVideoResolved: actions.onYoutubeVideoResolved,
+    onBack: actions.onBack,
+    onOpenVideo: actions.onOpenVideo,
+    onOpenArtistSongs: actions.onOpenArtistSongs,
+    onPrint: actions.onPrint,
+    onTapZone: actions.onTapZone,
+    onToggleZen: actions.onToggleZen,
+    onOpenSongEditor: actions.onOpenSongEditor,
+    onShareArrangement: actions.onShareArrangement,
+    shareArrangementDisabled: false,
+  }), [actions, currentSong, folderState, p, songData, youtubeEmbedUrl]);
+}
 
-  if (isLoading) return <SongPageSkeleton />;
-  if (error) return <SongPageError error={error} onRetry={load} />;
-  if (!currentSong) return <SongPageError error={new Error("Cifra não encontrada.")} onRetry={load} />;
+export default function SongPage() {
+  const { artistSlug, slug } = useSongParams();
+  const songState = useLoadedSong(artistSlug, slug);
+  const folderState = useSongFolderActions(songState.currentSong);
+  const actions = useSongPageActions(songState.currentSong, songState.songData, songState.setCurrentSong);
+  const value = useSongContextValue({ currentSong: songState.currentSong, songData: songState.songData, folderState, actions });
+
+  if (songState.isLoading) return <SongPageSkeleton />;
+  if (songState.error) return <SongPageError error={songState.error} onRetry={songState.load} />;
+  if (!songState.currentSong) return <SongPageError error={new Error("Cifra não encontrada.")} onRetry={songState.load} />;
 
   return (
     <SongViewProvider value={value as SongViewContextValue}>
-       <SongView />
+      <SongView />
     </SongViewProvider>
   );
 }

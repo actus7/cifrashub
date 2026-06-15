@@ -17,15 +17,7 @@ type FolderSongCardProps = {
   onLongPressSelect: () => void;
 };
 
-export function FolderSongCard({
-  song,
-  selected,
-  selectionMode,
-  onOpen,
-  onRemove,
-  onToggleSelect,
-  onLongPressSelect,
-}: FolderSongCardProps) {
+function useLongPress(onLongPressSelect: () => void) {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
 
@@ -35,11 +27,9 @@ export function FolderSongCard({
     longPressTimerRef.current = null;
   };
 
-  useEffect(() => {
-    return () => clearLongPressTimer();
-  }, []);
+  useEffect(() => clearLongPressTimer, []);
 
-  const handlePointerDown = () => {
+  const startLongPressTimer = () => {
     longPressTriggeredRef.current = false;
     clearLongPressTimer();
     longPressTimerRef.current = setTimeout(() => {
@@ -48,11 +38,58 @@ export function FolderSongCard({
     }, 450);
   };
 
+  const consumeLongPress = () => {
+    if (!longPressTriggeredRef.current) return false;
+    longPressTriggeredRef.current = false;
+    return true;
+  };
+
+  return { clearLongPressTimer, consumeLongPress, startLongPressTimer };
+}
+
+function FolderSongIcon({ selected }: { selected: boolean }) {
+  return (
+    <div
+      className={cn(
+        "flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground",
+        selected && "bg-primary text-primary-foreground",
+      )}
+    >
+      {selected ? <Check className="size-5" /> : <Music className="size-5" />}
+    </div>
+  );
+}
+
+function RemoveSongButton({ onRemove }: { onRemove: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      className="absolute top-1/2 right-4 z-10 size-8 -translate-y-1/2 rounded-full bg-muted opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive"
+      onClick={(e) => {
+        e.stopPropagation();
+        onRemove();
+      }}
+    >
+      <Trash2 className="size-3.5" />
+    </Button>
+  );
+}
+
+export function FolderSongCard({
+  song,
+  selected,
+  selectionMode,
+  onOpen,
+  onRemove,
+  onToggleSelect,
+  onLongPressSelect,
+}: FolderSongCardProps) {
+  const { clearLongPressTimer, consumeLongPress, startLongPressTimer } = useLongPress(onLongPressSelect);
+
   const handleClick = () => {
-    if (longPressTriggeredRef.current) {
-      longPressTriggeredRef.current = false;
-      return;
-    }
+    if (consumeLongPress()) return;
     if (selectionMode) {
       onToggleSelect();
       return;
@@ -68,7 +105,7 @@ export function FolderSongCard({
         onClick={handleClick}
         onContextMenu={(e) => e.preventDefault()}
         onPointerCancel={clearLongPressTimer}
-        onPointerDown={handlePointerDown}
+        onPointerDown={startLongPressTimer}
         onPointerLeave={clearLongPressTimer}
         onPointerUp={clearLongPressTimer}
         className="w-full touch-manipulation select-none text-left"
@@ -79,14 +116,7 @@ export function FolderSongCard({
             selected && "border-primary bg-primary/10 ring-2 ring-primary/30",
           )}
         >
-          <div
-            className={cn(
-              "flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground",
-              selected && "bg-primary text-primary-foreground",
-            )}
-          >
-            {selected ? <Check className="size-5" /> : <Music className="size-5" />}
-          </div>
+          <FolderSongIcon selected={selected} />
           <div className="min-w-0 flex-1 pr-10">
             <h3 className="truncate text-base font-bold text-foreground">
               {song.title}
@@ -97,20 +127,7 @@ export function FolderSongCard({
           </div>
         </Card>
       </button>
-      {!selectionMode && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="absolute top-1/2 right-4 z-10 size-8 -translate-y-1/2 rounded-full bg-muted opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
-      )}
+      {!selectionMode && <RemoveSongButton onRemove={onRemove} />}
     </div>
   );
 }

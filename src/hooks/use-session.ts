@@ -3,38 +3,48 @@
 import { authClient } from "@/lib/auth";
 
 /** Compatível com o formato usado no app (loading | authenticated | unauthenticated). */
-export function useSession() {
-  const { data, isPending, error, refetch } = authClient.useSession();
+type SessionResult = ReturnType<typeof authClient.useSession>;
 
-  if (isPending) {
-    return {
-      data: null,
-      status: "loading" as const,
-      update: refetch,
-    };
-  }
+type SessionRefetch = SessionResult["refetch"];
 
-  if (data?.user) {
-    return {
-      data: {
-        user: {
-          id: data.user.id,
-          name: data.user.name,
-          email: data.user.email,
-          image: data.user.image ?? null,
-        },
+function loadingSession(refetch: SessionRefetch) {
+  return {
+    data: null,
+    status: "loading" as const,
+    update: refetch,
+  };
+}
+
+function authenticatedSession(data: NonNullable<SessionResult["data"]>, refetch: SessionRefetch) {
+  return {
+    data: {
+      user: {
+        id: data.user.id,
+        name: data.user.name,
+        email: data.user.email,
+        image: data.user.image ?? null,
       },
-      status: "authenticated" as const,
-      update: refetch,
-    };
-  }
+    },
+    status: "authenticated" as const,
+    update: refetch,
+  };
+}
 
+function unauthenticatedSession(error: SessionResult["error"], refetch: SessionRefetch) {
   return {
     data: null,
     status: "unauthenticated" as const,
     update: refetch,
     error,
   };
+}
+
+export function useSession() {
+  const { data, isPending, error, refetch } = authClient.useSession();
+
+  if (isPending) return loadingSession(refetch);
+  if (data?.user) return authenticatedSession(data, refetch);
+  return unauthenticatedSession(error, refetch);
 }
 
 export function signIn(
@@ -51,16 +61,21 @@ export function signIn(
   });
 }
 
+function finishSignOut(callbackUrl?: string) {
+  if (typeof window === "undefined") return;
+  if (callbackUrl) {
+    window.location.replace(callbackUrl);
+    return;
+  }
+  window.location.reload();
+}
+
 export async function signOut(options?: { callbackUrl?: string }): Promise<void> {
   try {
     await authClient.signOut();
   } catch (error) {
     console.error("Sign out failed:", error);
   } finally {
-    if (options?.callbackUrl && typeof window !== "undefined") {
-      window.location.replace(options.callbackUrl);
-    } else if (typeof window !== "undefined") {
-      window.location.reload();
-    }
+    finishSignOut(options?.callbackUrl);
   }
 }

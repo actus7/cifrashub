@@ -1,9 +1,5 @@
-// CifrasHub Service Worker
-// Strategy: Network-first for pages/API, Cache-first for static assets
-
 const CACHE_NAME = 'cifrashub-v1';
 
-// Static assets to pre-cache on install
 const PRECACHE_URLS = [
   '/',
   '/manifest.json',
@@ -12,80 +8,87 @@ const PRECACHE_URLS = [
   '/apple-touch-icon.png',
 ];
 
-// Install: pre-cache shell assets
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
-  );
+self.addEventListener('install', handleInstall);
+self.addEventListener('activate', handleActivate);
+self.addEventListener('fetch', handleFetch);
+
+function handleInstall(event) {
+  event.waitUntil(precacheAssets());
   self.skipWaiting();
-});
+}
 
-// Activate: clean up old caches
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      )
-    )
-  );
+function precacheAssets() {
+  return caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS));
+}
+
+function handleActivate(event) {
+  event.waitUntil(cleanOldCaches());
   self.clients.claim();
-});
+}
 
-// Fetch: route-based strategy
-self.addEventListener('fetch', (event) => {
+function cleanOldCaches() {
+  return caches
+    .keys()
+    .then((keys) => Promise.all(keys.filter(isOldCache).map(deleteCache)));
+}
+
+function isOldCache(key) {
+  return key !== CACHE_NAME;
+}
+
+function deleteCache(key) {
+  return caches.delete(key);
+}
+
+function handleFetch(event) {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET and cross-origin requests
-  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (shouldSkipRequest(request, url)) return;
+  if (isStaticNextAsset(url)) return event.respondWith(cacheFirstWithStore(request));
+  if (isPublicAsset(url)) return event.respondWith(cacheFirst(request));
 
-  // Skip API routes — always network
-  if (url.pathname.startsWith('/api/')) return;
+  event.respondWith(networkFirst(request));
+}
 
-  // Static assets (Next.js /_next/static/**) — cache-first
-  if (url.pathname.startsWith('/_next/static/')) {
-    event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ||
-          fetch(request).then((response) => {
-            if (response.ok) {
-              const clone = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-            }
-            return response;
-          })
-      )
-    );
-    return;
+function shouldSkipRequest(request, url) {
+  return request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/');
+}
+
+function isStaticNextAsset(url) {
+  return url.pathname.startsWith('/_next/static/');
+}
+
+function isPublicAsset(url) {
+  return publicAssetPattern().test(url.pathname) || url.pathname === '/manifest.json';
+}
+
+function publicAssetPattern() {
+  return /\.(png|ico|svg|webp|jpg|jpeg|gif|woff2?|ttf)$/;
+}
+
+function cacheFirst(request) {
+  return caches.match(request).then((cached) => cached || fetch(request));
+}
+
+function cacheFirstWithStore(request) {
+  return caches.match(request).then((cached) => cached || fetchAndStore(request));
+}
+
+function networkFirst(request) {
+  return fetch(request)
+    .then((response) => storeIfOk(request, response))
+    .catch(() => caches.match(request).then((cached) => cached || caches.match('/')));
+}
+
+function fetchAndStore(request) {
+  return fetch(request).then((response) => storeIfOk(request, response));
+}
+
+function storeIfOk(request, response) {
+  if (response.ok) {
+    const clone = response.clone();
+    caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
   }
-
-  // Static public files (icons, manifest) — cache-first
-  if (
-    url.pathname.match(/\.(png|ico|svg|webp|jpg|jpeg|gif|woff2?|ttf)$/) ||
-    url.pathname === '/manifest.json'
-  ) {
-    event.respondWith(
-      caches.match(request).then(
-        (cached) => cached || fetch(request)
-      )
-    );
-    return;
-  }
-
-  // Pages — network-first, fall back to cache, then offline page
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match('/')))
-  );
-});
+  return response;
+}

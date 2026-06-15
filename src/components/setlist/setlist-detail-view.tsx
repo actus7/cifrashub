@@ -63,6 +63,12 @@ type SetlistItemRowProps = {
   onMoveItem: (itemId: string, direction: -1 | 1) => void;
 };
 
+type MoveControlsProps = Pick<SetlistItemRowProps, "disabled" | "index" | "item" | "onMoveItem" | "total">;
+
+type SetlistItemButtonProps = Pick<SetlistItemRowProps, "item" | "onOpenSong">;
+
+type RemoveItemButtonProps = Pick<SetlistItemRowProps, "disabled" | "item" | "onRemoveItem">;
+
 export function SetlistDetailViewScreen({
   detail,
   folders,
@@ -212,63 +218,85 @@ function SetlistItems({ items, disabled, onOpenSong, onRemoveItem, onMoveItem }:
   );
 }
 
-function SetlistItemRow({
-  item,
-  index,
-  total,
-  disabled,
-  onOpenSong,
-  onRemoveItem,
-  onMoveItem,
-}: SetlistItemRowProps) {
+function SetlistItemRow(props: SetlistItemRowProps) {
   return (
     <li className="flex items-stretch gap-1 rounded-xl border border-border/60 bg-card/50 p-2">
-      <div className="flex flex-col justify-center gap-0.5 border-r border-border/50 pr-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="size-7"
-          disabled={disabled || index === 0}
-          onClick={() => onMoveItem(item.itemId, -1)}
-        >
-          <ChevronUp className="size-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="size-7"
-          disabled={disabled || index === total - 1}
-          onClick={() => onMoveItem(item.itemId, 1)}
-        >
-          <ChevronDown className="size-4" />
-        </Button>
-      </div>
-      <button
-        type="button"
-        className="min-w-0 flex-1 px-2 text-left"
-        disabled={!item.song}
-        onClick={() => item.song && onOpenSong(item.song)}
-      >
-        <p className="truncate font-medium text-foreground">
-          {item.song?.title ?? "(música removida da biblioteca)"}
-        </p>
-        <p className="truncate text-xs text-muted-foreground">
-          {item.song?.artist ?? item.arrangementId}
-        </p>
-        {item.notes ? <p className="mt-1 text-xs text-muted-foreground">{item.notes}</p> : null}
-      </button>
+      <MoveControls {...props} />
+      <SetlistItemButton item={props.item} onOpenSong={props.onOpenSong} />
+      <RemoveItemButton
+        disabled={props.disabled}
+        item={props.item}
+        onRemoveItem={props.onRemoveItem}
+      />
+    </li>
+  );
+}
+
+function MoveControls({ disabled, index, item, onMoveItem, total }: MoveControlsProps) {
+  return (
+    <div className="flex flex-col justify-center gap-0.5 border-r border-border/50 pr-1">
       <Button
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="shrink-0 text-muted-foreground hover:text-destructive"
-        disabled={disabled}
-        onClick={() => onRemoveItem(item.itemId)}
+        className="size-7"
+        disabled={disabled || index === 0}
+        onClick={() => onMoveItem(item.itemId, -1)}
       >
-        <Trash2 className="size-4" />
+        <ChevronUp className="size-4" />
       </Button>
-    </li>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="size-7"
+        disabled={disabled || index === total - 1}
+        onClick={() => onMoveItem(item.itemId, 1)}
+      >
+        <ChevronDown className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
+function setlistItemTitle(item: SetlistItemView) {
+  return item.song?.title ?? "(música removida da biblioteca)";
+}
+
+function setlistItemSubtitle(item: SetlistItemView) {
+  return item.song?.artist ?? item.arrangementId;
+}
+
+function SetlistItemButton({ item, onOpenSong }: SetlistItemButtonProps) {
+  const openSong = () => {
+    if (item.song) onOpenSong(item.song);
+  };
+
+  return (
+    <button
+      type="button"
+      className="min-w-0 flex-1 px-2 text-left"
+      disabled={!item.song}
+      onClick={openSong}
+    >
+      <p className="truncate font-medium text-foreground">{setlistItemTitle(item)}</p>
+      <p className="truncate text-xs text-muted-foreground">{setlistItemSubtitle(item)}</p>
+      {item.notes ? <p className="mt-1 text-xs text-muted-foreground">{item.notes}</p> : null}
+    </button>
+  );
+}
+
+function RemoveItemButton({ disabled, item, onRemoveItem }: RemoveItemButtonProps) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      className="shrink-0 text-muted-foreground hover:text-destructive"
+      disabled={disabled}
+      onClick={() => onRemoveItem(item.itemId)}
+    >
+      <Trash2 className="size-4" />
+    </Button>
   );
 }

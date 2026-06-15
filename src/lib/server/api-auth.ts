@@ -3,36 +3,44 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { neonAuth } from "@/lib/auth-server";
 
+function unauthorized() {
+  return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
+}
+
+type SessionUser = NonNullable<Awaited<ReturnType<typeof neonAuth.getSession>>["data"]>["user"];
+
+function userValues(user: SessionUser) {
+  return {
+    id: user.id,
+    name: user.name ?? null,
+    email: user.email ?? null,
+    image: user.image ?? null,
+  };
+}
+
+async function upsertLocalUser(user: SessionUser) {
+  const values = userValues(user);
+  await db
+    .insert(users)
+    .values(values)
+    .onConflictDoUpdate({
+      target: users.id,
+      set: {
+        name: values.name,
+        email: values.email,
+        image: values.image,
+      },
+    });
+}
+
 export async function requireUserId(): Promise<
   { userId: string } | { error: NextResponse }
 > {
   const { data: session } = await neonAuth.getSession();
-  const userId = session?.user?.id;
+  const user = session?.user;
 
-  if (!userId) {
-    return {
-      error: NextResponse.json({ error: "Nao autorizado" }, { status: 401 }),
-    };
-  }
+  if (!user?.id) return { error: unauthorized() };
 
-  // Backward compatibility for databases that still have legacy foreign keys
-  // from app tables to the local `user` table while auth comes from Neon Auth.
-  await db
-    .insert(users)
-    .values({
-      id: userId,
-      name: session.user.name ?? null,
-      email: session.user.email ?? null,
-      image: session.user.image ?? null,
-    })
-    .onConflictDoUpdate({
-      target: users.id,
-      set: {
-        name: session.user.name ?? null,
-        email: session.user.email ?? null,
-        image: session.user.image ?? null,
-      },
-    });
-
-  return { userId };
+  await upsertLocalUser(user);
+  return { userId: user.id };
 }

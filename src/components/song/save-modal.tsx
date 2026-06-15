@@ -25,6 +25,52 @@ type SaveModalProps = {
   onToggleSongInFolder: (folderId: string) => void;
 };
 
+function SaveFolderButton({
+  folder,
+  currentArrangementKey,
+  onToggleSongInFolder,
+}: {
+  folder: FolderType;
+  currentArrangementKey: string;
+  onToggleSongInFolder: (folderId: string) => void;
+}) {
+  const inFolder = folderHasSong(folder, currentArrangementKey);
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      className="h-auto justify-between gap-3 rounded-2xl px-4 py-4 text-left hover:bg-muted"
+      onClick={() => onToggleSongInFolder(folder.id)}
+    >
+      <span className="flex items-center gap-3">
+        <FolderIcon folder={folder} />
+        <span className={folderTitleClassName(inFolder)}>{folder.title}</span>
+      </span>
+      {inFolder && <CheckCircle2 className="size-5 shrink-0 text-primary" />}
+    </Button>
+  );
+}
+
+function folderHasSong(folder: FolderType, currentArrangementKey: string) {
+  return folder.songs.some((song) => arrangementKey(song) === currentArrangementKey);
+}
+
+function FolderIcon({ folder }: { folder: FolderType }) {
+  const isDefault = folder.id === "default";
+  return (
+    <Folder
+      className={isDefault ? "size-5 text-primary" : "size-5 text-muted-foreground"}
+      fill={isDefault ? "currentColor" : "none"}
+      fillOpacity={0.2}
+    />
+  );
+}
+
+function folderTitleClassName(inFolder: boolean) {
+  return inFolder ? "font-medium text-foreground" : "font-medium text-foreground/80";
+}
+
 export function SaveModal({
   open,
   onOpenChange,
@@ -68,44 +114,14 @@ export function SaveModal({
 
         <ScrollArea className="min-h-0 max-h-[50vh] flex-1 sm:max-h-[min(50vh,320px)]">
           <div className="flex flex-col gap-2 p-3">
-            {folders.map((folder) => {
-              const inFolder = folder.songs.some(
-                (s) => arrangementKey(s) === currentArrangementKey,
-              );
-              return (
-                <Button
-                  key={folder.id}
-                  type="button"
-                  variant="ghost"
-                  className="h-auto justify-between gap-3 rounded-2xl px-4 py-4 text-left hover:bg-muted"
-                  onClick={() => onToggleSongInFolder(folder.id)}
-                >
-                  <span className="flex items-center gap-3">
-                    <Folder
-                      className={
-                        folder.id === "default"
-                          ? "size-5 text-primary"
-                          : "size-5 text-muted-foreground"
-                      }
-                      fill={folder.id === "default" ? "currentColor" : "none"}
-                      fillOpacity={0.2}
-                    />
-                    <span
-                      className={
-                        inFolder
-                          ? "font-medium text-foreground"
-                          : "font-medium text-foreground/80"
-                      }
-                    >
-                      {folder.title}
-                    </span>
-                  </span>
-                  {inFolder && (
-                    <CheckCircle2 className="size-5 shrink-0 text-primary" />
-                  )}
-                </Button>
-              );
-            })}
+            {folders.map((folder) => (
+              <SaveFolderButton
+                key={folder.id}
+                folder={folder}
+                currentArrangementKey={currentArrangementKey}
+                onToggleSongInFolder={onToggleSongInFolder}
+              />
+            ))}
           </div>
         </ScrollArea>
 

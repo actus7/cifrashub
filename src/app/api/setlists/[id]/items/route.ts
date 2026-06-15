@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { userSetlistItems } from "@/db/schema";
 import { requireUserId } from "@/lib/server/api-auth";
 import { readJsonBody } from "@/lib/server/api-route";
+import { nextPosition } from "@/lib/server/positions";
 import {
   assertUserOwnsArrangement,
   assertUserOwnsSetlist,
@@ -40,36 +41,50 @@ async function requireOwnedSetlistJson<T>(req: Request, ctx: RouteCtx) {
 export async function POST(req: Request, ctx: RouteCtx) {
   const request = await requireOwnedSetlistJson<{ arrangementId?: string; notes?: string | null }>(req, ctx);
   if ("error" in request) return request.error;
-  const { body, setlist } = request;
-  const aid = body.arrangementId?.trim();
-  if (!aid) {
-    return NextResponse.json({ error: "arrangementId obrigatório" }, { status: 400 });
-  }
-  const ok = await assertUserOwnsArrangement(setlist.userId, aid);
+
+  const arrangementId = await ownedArrangementId(request.setlist.userId, request.body.arrangementId);
+  if ("error" in arrangementId) return arrangementId.error;
+
+  await insertSetlistItem(request.setlist.setlistId, arrangementId.value, request.body.notes);
+  return setlistDetailResponse(request.setlist.userId, request.setlist.setlistId);
+}
+
+async function ownedArrangementId(userId: string, arrangementId: string | undefined) {
+  const value = arrangementId?.trim();
+  if (!value) return { error: NextResponse.json({ error: "arrangementId obrigatório" }, { status: 400 }) };
+
+  const ok = await assertUserOwnsArrangement(userId, value);
   if (!ok) {
-    return NextResponse.json(
-      { error: "Arranjo não encontrado na sua biblioteca" },
-      { status: 400 },
-    );
+    return {
+      error: NextResponse.json(
+        { error: "Arranjo não encontrado na sua biblioteca" },
+        { status: 400 },
+      ),
+    };
   }
 
+  return { value };
+}
+
+async function insertSetlistItem(setlistId: string, arrangementId: string, notes: string | null | undefined) {
+  await db.insert(userSetlistItems).values({
+    setlistId,
+    arrangementId,
+    position: await nextSetlistItemPosition(setlistId),
+    notes: notes?.trim() || null,
+  });
+}
+
+async function nextSetlistItemPosition(setlistId: string) {
   const current = await db
     .select()
     .from(userSetlistItems)
-    .where(eq(userSetlistItems.setlistId, setlist.setlistId));
-  const position =
-    current.length === 0
-      ? 0
-      : Math.max(...current.map((r) => r.position)) + 1;
+    .where(eq(userSetlistItems.setlistId, setlistId));
+  return nextPosition(current);
+}
 
-  await db.insert(userSetlistItems).values({
-    setlistId: setlist.setlistId,
-    arrangementId: aid,
-    position,
-    notes: body.notes?.trim() || null,
-  });
-
-  const detail = await getSetlistDetail(setlist.userId, setlist.setlistId);
+async function setlistDetailResponse(userId: string, setlistId: string) {
+  const detail = await getSetlistDetail(userId, setlistId);
   return NextResponse.json(detail);
 }
 
@@ -99,28 +114,37 @@ async function batchUpdatePositions(
 export async function PATCH(req: Request, ctx: RouteCtx) {
   const request = await requireOwnedSetlistJson<{ orderedItemIds?: string[] }>(req, ctx);
   if ("error" in request) return request.error;
-  const { body, setlist } = request;
-  const order = body.orderedItemIds;
-  if (!Array.isArray(order) || !order.every((x) => typeof x === "string")) {
-    return NextResponse.json({ error: "orderedItemIds inválido" }, { status: 400 });
+
+  const order = await validItemOrder(request.setlist.setlistId, request.body.orderedItemIds);
+  if ("error" in order) return order.error;
+
+  await batchUpdatePositions(request.setlist.setlistId, order.value);
+  return setlistDetailResponse(request.setlist.userId, request.setlist.setlistId);
+}
+
+async function validItemOrder(setlistId: string, orderedItemIds: string[] | undefined) {
+  if (!Array.isArray(orderedItemIds) || !orderedItemIds.every((x) => typeof x === "string")) {
+    return { error: NextResponse.json({ error: "orderedItemIds inválido" }, { status: 400 }) };
   }
 
   const items = await db
     .select()
     .from(userSetlistItems)
-    .where(eq(userSetlistItems.setlistId, setlist.setlistId));
-  const idSet = new Set(items.map((i) => i.id));
-  if (order.length !== items.length || !order.every((id) => idSet.has(id))) {
-    return NextResponse.json(
-      { error: "orderedItemIds deve listar todos os itens exatamente uma vez" },
-      { status: 400 },
-    );
-  }
+    .where(eq(userSetlistItems.setlistId, setlistId));
 
-  await batchUpdatePositions(setlist.setlistId, order);
+  return hasExactItemOrder(orderedItemIds, items.map((i) => i.id))
+    ? { value: orderedItemIds }
+    : {
+        error: NextResponse.json(
+          { error: "orderedItemIds deve listar todos os itens exatamente uma vez" },
+          { status: 400 },
+        ),
+      };
+}
 
-  const detail = await getSetlistDetail(setlist.userId, setlist.setlistId);
-  return NextResponse.json(detail);
+function hasExactItemOrder(order: string[], itemIds: string[]) {
+  const idSet = new Set(itemIds);
+  return order.length === itemIds.length && order.every((id) => idSet.has(id));
 }
 
 export async function DELETE(req: Request, ctx: RouteCtx) {
@@ -154,6 +178,5 @@ export async function DELETE(req: Request, ctx: RouteCtx) {
     remaining.map((r) => r.id),
   );
 
-  const detail = await getSetlistDetail(setlist.userId, setlist.setlistId);
-  return NextResponse.json(detail);
+  return setlistDetailResponse(setlist.userId, setlist.setlistId);
 }

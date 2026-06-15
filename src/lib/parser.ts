@@ -3,13 +3,31 @@ import { isValidYoutubeId } from "./youtube";
 import type { LyricBlock, LyricLine, Section, SectionType, StoredSong } from "./types";
 
 function randomUuid(): string {
-  const c = globalThis.crypto;
-  if (typeof c?.randomUUID === "function") return c.randomUUID();
-  const bytes = new Uint8Array(16);
-  if (typeof c?.getRandomValues === "function") c.getRandomValues(bytes);
-  else for (let i = 0; i < 16; i++) bytes[i] = (Math.random() * 256) | 0;
+  const nativeUuid = cryptoRandomUuid();
+  if (nativeUuid) return nativeUuid;
+  const bytes = randomUuidBytes();
   bytes[6] = (bytes[6]! & 0x0f) | 0x40;
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  return formatUuidBytes(bytes);
+}
+
+function cryptoRandomUuid() {
+  const c = globalThis.crypto;
+  return typeof c?.randomUUID === "function" ? c.randomUUID() : null;
+}
+
+function randomUuidBytes() {
+  const bytes = new Uint8Array(16);
+  const c = globalThis.crypto;
+  if (typeof c?.getRandomValues === "function") {
+    c.getRandomValues(bytes);
+    return bytes;
+  }
+  for (let i = 0; i < 16; i++) bytes[i] = (Math.random() * 256) | 0;
+  return bytes;
+}
+
+function formatUuidBytes(bytes: Uint8Array) {
   const h = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
@@ -37,10 +55,18 @@ function plainLyricBlocks(lyricLine: string): LyricBlock[] {
 }
 
 function leadingLyricBlocks(matches: RegExpMatchArray[], lyricLine: string): LyricBlock[] {
-  const firstIndex = matches[0]?.index ?? 0;
+  const firstIndex = firstMatchIndex(matches);
   const prefix = lyricLine.slice(0, firstIndex);
   if (firstIndex <= 0 || !prefix.trim()) return [];
-  return [{ chord: "", text: prefix.trimEnd(), spaceAfter: /\s+$/.test(prefix) || prefix.length < firstIndex }];
+  return [{ chord: "", text: prefix.trimEnd(), spaceAfter: prefixHasTrailingSpace(prefix, firstIndex) }];
+}
+
+function firstMatchIndex(matches: RegExpMatchArray[]) {
+  return matches[0]?.index ?? 0;
+}
+
+function prefixHasTrailingSpace(prefix: string, firstIndex: number) {
+  return /\s+$/.test(prefix) || prefix.length < firstIndex;
 }
 
 function chordMatchToBlock(
@@ -52,16 +78,29 @@ function chordMatchToBlock(
   if (!match || match.index === undefined) return null;
 
   const chord = match[1] as string;
-  const start = match.index;
-  const end = matchEnd(matches[index + 1], lyricLine, start, chord.length);
-  const textSegment = start < lyricLine.length ? lyricLine.slice(start, end) : "";
+  const textSegment = chordTextSegment(matches, index, lyricLine, match.index, chord.length);
   const text = textSegment.trimEnd();
 
   return {
     chord,
     text,
-    spaceAfter: /\s+$/.test(textSegment) || (text === "" && index < matches.length - 1),
+    spaceAfter: chordBlockSpaceAfter(textSegment, text, index, matches.length),
   };
+}
+
+function chordTextSegment(
+  matches: RegExpMatchArray[],
+  index: number,
+  lyricLine: string,
+  start: number,
+  chordLength: number,
+) {
+  const end = matchEnd(matches[index + 1], lyricLine, start, chordLength);
+  return start < lyricLine.length ? lyricLine.slice(start, end) : "";
+}
+
+function chordBlockSpaceAfter(textSegment: string, text: string, index: number, matchCount: number) {
+  return /\s+$/.test(textSegment) || (text === "" && index < matchCount - 1);
 }
 
 function matchEnd(
@@ -83,18 +122,31 @@ function extractCifraClubKeyCapo(htmlContent: string): {
   writtenKey?: string;
   capo?: number;
 } {
+  const metadata = keyCapoMetadata(htmlContent);
+  return keyCapoResult(metadata.writtenKey, metadata.capoRaw);
+}
+
+function keyCapoMetadata(htmlContent: string) {
   const block = keyCapoScriptBlock(htmlContent);
   const visible = visibleKeyCapo(htmlContent);
-  const writtenKey = keyFromScript(block, htmlContent) ?? visible.writtenKey;
-  const capoRaw = capoFromScript(block) ?? visible.capoRaw;
-  const capo = capoRaw !== undefined
-    ? Math.min(24, Math.max(0, parseInt(capoRaw, 10)))
-    : undefined;
+  return {
+    writtenKey: keyFromScript(block, htmlContent) ?? visible.writtenKey,
+    capoRaw: capoFromScript(block) ?? visible.capoRaw,
+  };
+}
 
+function keyCapoResult(writtenKey: string | undefined, capoRaw: string | undefined) {
+  const capo = parseCapoValue(capoRaw);
   return {
     ...(writtenKey ? { writtenKey } : {}),
     ...(capo !== undefined ? { capo } : {}),
   };
+}
+
+function parseCapoValue(capoRaw: string | undefined) {
+  return capoRaw !== undefined
+    ? Math.min(24, Math.max(0, parseInt(capoRaw, 10)))
+    : undefined;
 }
 
 function keyCapoScriptBlock(htmlContent: string): string {
@@ -123,10 +175,19 @@ function visibleKeyCapo(htmlContent: string): { writtenKey?: string; capoRaw?: s
 }
 
 function visibleWrittenKey(tomHtml: string): string | undefined {
-  const formKey = tomHtml.match(/forma\s+dos\s+acordes\s+no\s+tom\s+de\s+([A-G][#b♯♭]?m?)/i)?.[1];
-  if (formKey) return normalizeNoteText(formKey);
-  const linkKey = tomHtml.match(/<a[^>]*>\s*([A-G][#b♯♭]?m?)\s*<\/a>/i)?.[1];
-  return linkKey ? normalizeNoteText(linkKey) : undefined;
+  return normalizeOptionalNote(visibleFormKey(tomHtml) ?? visibleLinkKey(tomHtml));
+}
+
+function visibleFormKey(tomHtml: string): string | undefined {
+  return tomHtml.match(/forma\s+dos\s+acordes\s+no\s+tom\s+de\s+([A-G][#b♯♭]?m?)/i)?.[1];
+}
+
+function visibleLinkKey(tomHtml: string): string | undefined {
+  return tomHtml.match(/<a[^>]*>\s*([A-G][#b♯♭]?m?)\s*<\/a>/i)?.[1];
+}
+
+function normalizeOptionalNote(note: string | undefined): string | undefined {
+  return note ? normalizeNoteText(note) : undefined;
 }
 
 export function extractYoutubeIdFromHtml(htmlContent: string): string | undefined {
@@ -179,7 +240,14 @@ function youtubeIdFromDom(htmlContent: string): string | undefined {
 }
 
 function youtubeIdFromIframe(doc: Document): string | undefined {
-  const src = doc.querySelector("iframe[src*='youtube']")?.getAttribute("src") ?? "";
+  return youtubeIdFromIframeSrc(youtubeIframeSrc(doc));
+}
+
+function youtubeIframeSrc(doc: Document): string {
+  return doc.querySelector("iframe[src*='youtube']")?.getAttribute("src") ?? "";
+}
+
+function youtubeIdFromIframeSrc(src: string): string | undefined {
   return validMatchedId(src.match(/embed\/([a-zA-Z0-9_-]{11})/)?.[1])
     ?? validMatchedId(src.match(/[?&]v=([a-zA-Z0-9_-]{11})/)?.[1]);
 }
@@ -247,23 +315,49 @@ function flushHtmlSection(state: HtmlParseState) {
 function parseHtmlLine(state: HtmlParseState, lines: string[], index: number) {
   const line = lines[index] ?? "";
   const stripped = line.trim();
+
+  return parseHtmlSectionMatch(state, line, stripped)
+    ?? parseHtmlSpecialLine(state, lines, index, line, stripped)
+    ?? parseHtmlPlainLine(state, stripped);
+}
+
+function parseHtmlSectionMatch(state: HtmlParseState, line: string, stripped: string) {
   const section = htmlSectionMatch(line, stripped);
-  if (section) {
-    startHtmlSection(state, stripped, section[1] ?? "");
-    return { consumedNextLine: false };
-  }
+  return section ? parseHtmlSectionLine(state, stripped, section[1] ?? "") : null;
+}
 
-  if (isHtmlTabLine(line, stripped)) {
-    state.currentLines.push([{ chord: "", text: htmlTabText(line), isTab: true, spaceAfter: true }]);
-    return { consumedNextLine: false };
-  }
+function parseHtmlSpecialLine(
+  state: HtmlParseState,
+  lines: string[],
+  index: number,
+  line: string,
+  stripped: string,
+) {
+  if (isHtmlTabLine(line, stripped)) return parseHtmlTabLine(state, line);
+  return CHORD_MARKER_RE.test(line) ? parseHtmlChordLine(state, lines, index, line) : null;
+}
 
-  if (CHORD_MARKER_RE.test(line)) {
-    return parseHtmlChordLine(state, lines, index, line);
-  }
+function parseHtmlPlainLine(state: HtmlParseState, stripped: string) {
+  addHtmlPlainLine(state, stripped);
+  return htmlLineResult(false);
+}
 
+function htmlLineResult(consumedNextLine: boolean) {
+  return { consumedNextLine };
+}
+
+function parseHtmlSectionLine(state: HtmlParseState, stripped: string, typeText: string) {
+  startHtmlSection(state, stripped, typeText);
+  return htmlLineResult(false);
+}
+
+function parseHtmlTabLine(state: HtmlParseState, line: string) {
+  state.currentLines.push([{ chord: "", text: htmlTabText(line), isTab: true, spaceAfter: true }]);
+  return htmlLineResult(false);
+}
+
+function addHtmlPlainLine(state: HtmlParseState, stripped: string) {
   if (stripped) state.currentLines.push([{ chord: "", text: stripped, spaceAfter: true }]);
-  return { consumedNextLine: false };
 }
 
 function htmlSectionMatch(line: string, stripped: string): RegExpMatchArray | null {
@@ -296,16 +390,18 @@ function parseHtmlChordLine(
   const lyricLine = htmlNextLyricLine(lines, index);
   const blocks = parseChordLinePair(line.replace(/‹CHORD:([^›]+)›/g, "$1"), lyricLine);
   if (blocks.length > 0) state.currentLines.push(blocks);
-  return { consumedNextLine: lyricLine !== "" };
+  return htmlLineResult(lyricLine !== "");
 }
 
 function htmlNextLyricLine(lines: string[], index: number): string {
   const nextLine = lines[index + 1];
-  if (nextLine === undefined) return "";
-  if (CHORD_MARKER_RE.test(nextLine)) return "";
-  if (SECTION_RE.test(nextLine.trim())) return "";
-  if (nextLine.includes("‹TAB_LINE›")) return "";
-  return nextLine;
+  return nextLine && isHtmlLyricCandidate(nextLine) ? nextLine : "";
+}
+
+function isHtmlLyricCandidate(line: string) {
+  return !CHORD_MARKER_RE.test(line)
+    && !SECTION_RE.test(line.trim())
+    && !line.includes("‹TAB_LINE›");
 }
 
 function extractDisplayTitle(doc: Document, fallbackTitle: string, slug: string): string {
@@ -332,13 +428,26 @@ function titleFromSlug(slug: string): string {
   return slug.split("-").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
-function contentNodeFromDocument(doc: Document): Element | null {
-  const selected = doc.querySelector("#cifra_conteudo")
-    ?? doc.querySelector(".g-fix pre")
-    ?? doc.querySelector(".cifra_cnt pre")
-    ?? doc.querySelector(".cifra_cnt");
-  if (selected) return selected;
+const CONTENT_SELECTORS = [
+  "#cifra_conteudo",
+  ".g-fix pre",
+  ".cifra_cnt pre",
+  ".cifra_cnt",
+] as const;
 
+function contentNodeFromDocument(doc: Document): Element | null {
+  return selectedContentNode(doc) ?? longestPreNode(doc);
+}
+
+function selectedContentNode(doc: Document): Element | null {
+  for (const selector of CONTENT_SELECTORS) {
+    const node = doc.querySelector(selector);
+    if (node) return node;
+  }
+  return null;
+}
+
+function longestPreNode(doc: Document): Element | null {
   return Array.from(doc.querySelectorAll("pre"))
     .sort((a, b) => (b.textContent ?? "").length - (a.textContent ?? "").length)[0]
     ?? null;
@@ -363,14 +472,56 @@ export function processHtmlAndExtract(
   slug: string,
 ): StoredSong {
   const doc = new DOMParser().parseFromString(htmlContent, "text/html");
+  const contentNode = requireCifraContentNode(doc);
+  const parsedSections = requireParsedSections(contentNode);
+
+  return storedSongFromHtml({
+    artistName,
+    artistSlug,
+    doc,
+    htmlContent,
+    parsedSections,
+    slug,
+    songId,
+    title,
+  });
+}
+
+type HtmlSongArgs = {
+  artistName: string;
+  artistSlug: string;
+  doc: Document;
+  htmlContent: string;
+  parsedSections: Section[];
+  slug: string;
+  songId: string;
+  title: string;
+};
+
+function requireCifraContentNode(doc: Document) {
   const contentNode = contentNodeFromDocument(doc);
   if (!contentNode || (contentNode.textContent ?? "").trim().length < 20) {
     throw new Error("Cifra indisponível neste formato.");
   }
+  return contentNode;
+}
 
+function requireParsedSections(contentNode: Element) {
   const parsedSections = parseHtmlCifra(contentNode.outerHTML);
   if (parsedSections.length === 0) throw new Error("Erro ao processar cifra.");
+  return parsedSections;
+}
 
+function storedSongFromHtml({
+  artistName,
+  artistSlug,
+  doc,
+  htmlContent,
+  parsedSections,
+  slug,
+  songId,
+  title,
+}: HtmlSongArgs): StoredSong {
   return {
     id: songId,
     arrangementId: randomUuid(),

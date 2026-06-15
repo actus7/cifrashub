@@ -12,19 +12,32 @@ export function cloudSyncDoneKey(userId: string) {
 export * from "./cloud-api";
 
 function safeSetItem(key: string, value: string): boolean {
-  if (typeof window === "undefined") return false;
+  if (!canUseLocalStorage()) return false;
   try {
     localStorage.setItem(key, value);
     return true;
-  } catch (e) {
-    if (
-      e instanceof DOMException &&
-      (e.name === "QuotaExceededError" || e.code === 22)
-    ) {
-      console.warn(`localStorage quota exceeded for key "${key}"`);
-    }
+  } catch (error) {
+    warnStorageError(key, error);
     return false;
   }
+}
+
+function canUseLocalStorage(): boolean {
+  return typeof window !== "undefined";
+}
+
+function warnStorageError(key: string, error: unknown) {
+  if (isQuotaExceeded(error)) {
+    console.warn(`localStorage quota exceeded for key "${key}"`);
+  }
+}
+
+function isQuotaExceeded(error: unknown): boolean {
+  return error instanceof DOMException && isQuotaExceededCode(error);
+}
+
+function isQuotaExceededCode(error: DOMException): boolean {
+  return error.name === "QuotaExceededError" || error.code === 22;
 }
 
 function loadJson<T>(key: string): T | null {
@@ -49,28 +62,48 @@ type LegacyFolder = Omit<Folder, "title" | "songs"> & {
 };
 
 function normalizeFolder(folder: LegacyFolder): Folder | null {
-  const title = (folder.title ?? folder.name)?.trim();
-  if (!folder.id || !title) return null;
+  const title = folderTitle(folder);
+  return folder.id && title ? normalizedFolder(folder, title) : null;
+}
+
+function folderTitle(folder: LegacyFolder) {
+  return (folder.title ?? folder.name)?.trim();
+}
+
+function normalizedFolder(folder: LegacyFolder, title: string): Folder {
   return {
     id: folder.id,
     title,
-    songs: Array.isArray(folder.songs) ? folder.songs : [],
+    songs: folderSongs(folder),
     isDefault: folder.isDefault,
   };
 }
 
+function folderSongs(folder: LegacyFolder) {
+  return Array.isArray(folder.songs) ? folder.songs : [];
+}
+
 export function loadFolders(): Folder[] | null {
   const folders = loadJson<LegacyFolder[]>(STORAGE_FOLDERS);
-  if (!folders) return null;
   if (!Array.isArray(folders)) return null;
-  const hasLegacyShape = folders.some((folder) => !folder.title && folder.name);
-  const normalized = folders
+
+  const normalized = normalizedFolders(folders);
+  if (shouldPersistNormalizedFolders(folders, normalized)) saveFolders(normalized);
+  return normalized;
+}
+
+function normalizedFolders(folders: LegacyFolder[]) {
+  return folders
     .map((folder) => normalizeFolder(folder))
     .filter((folder): folder is Folder => folder !== null);
-  if (hasLegacyShape || normalized.length !== folders.length) {
-    saveFolders(normalized);
-  }
-  return normalized;
+}
+
+function shouldPersistNormalizedFolders(folders: LegacyFolder[], normalized: Folder[]) {
+  return hasLegacyFolderShape(folders) || normalized.length !== folders.length;
+}
+
+function hasLegacyFolderShape(folders: LegacyFolder[]) {
+  return folders.some((folder) => !folder.title && Boolean(folder.name));
 }
 
 export function saveFolders(folders: Folder[]): boolean {

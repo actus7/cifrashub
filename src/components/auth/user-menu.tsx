@@ -1,16 +1,7 @@
 "use client";
 
-import { Trash2, LogOut } from "lucide-react";
+import { LogOut, Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,11 +12,120 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { LoginButton } from "@/components/auth/login-button";
 import { signOut, useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
-import { LoginButton } from "@/components/auth/login-button";
 import { toast } from "sonner";
+
+function userInitials(name?: string | null): string {
+  return (
+    name
+      ?.split(/\s+/)
+      .filter(Boolean)
+      .map((n) => n[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() ?? "?"
+  );
+}
+
+function resolveBaseUrl(): string {
+  const raw =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : (process.env.NEXT_PUBLIC_BASE_URL ?? "/");
+  return raw.replace(/\/+$/, "");
+}
+
+function UserAvatar({ image, name }: { image?: string | null; name?: string | null }) {
+  return (
+    <Avatar size="sm" className="size-8">
+      <AvatarImage src={image ?? undefined} alt={name ?? ""} />
+      <AvatarFallback className="text-[10px] font-semibold">
+        {userInitials(name)}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
+function DeleteAccountDialog({
+  open,
+  onOpenChange,
+  pending,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  pending: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Excluir conta?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Esta ação é irreversível. Todos os seus dados — pastas, cifras,
+            setlists e compartilhamentos — serão permanentemente excluídos.
+            Você poderá criar uma nova conta depois.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={onConfirm}
+            disabled={pending}
+          >
+            {pending ? "Excluindo…" : "Excluir conta"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+async function deleteAccount() {
+  const response = await fetch("/api/account", { method: "DELETE" });
+  const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+
+  if (!response.ok) {
+    toast.error(payload?.error ?? "Erro ao excluir conta.");
+    return;
+  }
+
+  await signOut({ callbackUrl: resolveBaseUrl() });
+}
+
+async function runDeleteAccount() {
+  try {
+    await deleteAccount();
+  } catch {
+    toast.error("Erro ao excluir conta.");
+  }
+}
+
+function useDeleteAccount() {
+  const [pending, startTransition] = useTransition();
+
+  function handleDeleteAccount() {
+    startTransition(() => {
+      void runDeleteAccount();
+    });
+  }
+
+  return { pending, handleDeleteAccount };
+}
 
 type UserMenuProps = {
   className?: string;
@@ -36,45 +136,11 @@ function UserMenu({ className, triggerClassName }: UserMenuProps) {
   const { data: session } = useSession();
   const user = session?.user;
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const { pending, handleDeleteAccount } = useDeleteAccount();
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
-  const baseUrl = (
-    typeof window !== "undefined"
-      ? window.location.origin
-      : (process.env.NEXT_PUBLIC_BASE_URL ?? "/")
-  ).replace(/\/+$/, "");
-
-  const initials =
-    user.name
-      ?.split(/\s+/)
-      .filter(Boolean)
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() ?? "?";
-
-  function handleDeleteAccount() {
-    startTransition(async () => {
-      try {
-        const response = await fetch("/api/account", { method: "DELETE" });
-        const payload = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-
-        if (!response.ok) {
-          toast.error(payload?.error ?? "Erro ao excluir conta.");
-          return;
-        }
-        await signOut({ callbackUrl: baseUrl });
-      } catch {
-        toast.error("Erro ao excluir conta.");
-      }
-    });
-  }
+  const baseUrl = resolveBaseUrl();
 
   return (
     <div className={cn(className)}>
@@ -86,12 +152,7 @@ function UserMenu({ className, triggerClassName }: UserMenuProps) {
           )}
           aria-label="Menu da conta"
         >
-          <Avatar size="sm" className="size-8">
-            <AvatarImage src={user.image ?? undefined} alt={user.name ?? ""} />
-            <AvatarFallback className="text-[10px] font-semibold">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar image={user.image} name={user.name} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-56">
           <DropdownMenuGroup>
@@ -121,50 +182,31 @@ function UserMenu({ className, triggerClassName }: UserMenuProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir conta?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação é irreversível. Todos os seus dados — pastas, cifras,
-              setlists e compartilhamentos — serão permanentemente excluídos.
-              Você poderá criar uma nova conta depois.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={handleDeleteAccount}
-              disabled={pending}
-            >
-              {pending ? "Excluindo…" : "Excluir conta"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteAccountDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        pending={pending}
+        onConfirm={handleDeleteAccount}
+      />
     </div>
   );
 }
 
-/** Controle único do header: carregando / login / menu. */
+function LoadingAvatar({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "size-9 shrink-0 animate-pulse rounded-full bg-muted/60 ring-1 ring-border",
+        className,
+      )}
+    />
+  );
+}
+
 export function AuthHeaderControl({ className }: { className?: string }) {
   const { status } = useSession();
 
-  if (status === "loading") {
-    return (
-      <div
-        className={cn(
-          "size-9 shrink-0 animate-pulse rounded-full bg-muted/60 ring-1 ring-border",
-          className,
-        )}
-      />
-    );
-  }
-
-  if (status === "unauthenticated") {
-    return <LoginButton compact className={className} />;
-  }
-
+  if (status === "loading") return <LoadingAvatar className={className} />;
+  if (status === "unauthenticated") return <LoginButton compact className={className} />;
   return <UserMenu className={className} />;
 }

@@ -13,6 +13,31 @@ import { arrangementKey } from "@/lib/stored-song-key";
 import type { Folder, StoredSong } from "@/lib/types";
 import { cloudSyncSignalKey } from "@/lib/sync-signal-key";
 
+function isDefaultFolder(folders: Folder[], folderId: string) {
+  return folderId === "default" || folders.some((folder) => folder.id === folderId && folder.isDefault);
+}
+
+type DeleteFolderArgs = {
+  deleteCloudFolder: (folderId: string) => Promise<void>;
+  deleteLocalFolder: (folderId: string) => void;
+  folderId: string;
+  isCloud: boolean;
+};
+
+async function deleteFolder({
+  deleteCloudFolder,
+  deleteLocalFolder,
+  folderId,
+  isCloud,
+}: DeleteFolderArgs) {
+  if (isCloud) {
+    await deleteCloudFolder(folderId);
+    return;
+  }
+
+  deleteLocalFolder(folderId);
+}
+
 export function useLibraryActions() {
   const { data: session, status } = useSession();
   const isCloud = status === "authenticated";
@@ -58,26 +83,34 @@ export function useLibraryActions() {
     [folders, isCloud, notifyCloudMutation, setFolders],
   );
 
-  const handleDeleteFolder = useCallback(
+  const deleteCloudFolder = useCallback(
     async (folderId: string) => {
-      const meta = folders.find((f) => f.id === folderId);
-      if (meta?.isDefault || folderId === "default") return;
-
-      if (isCloud) {
-        try {
-          const { folders: next } = await cloudDeleteFolder(folderId);
-          setFolders(next);
-          notifyCloudMutation();
-        } catch (error) {
-          console.error("Failed to delete folder in cloud", error);
-        }
-      } else {
-        const next = folders.filter((f) => f.id !== folderId);
-        saveFolders(next);
+      try {
+        const { folders: next } = await cloudDeleteFolder(folderId);
         setFolders(next);
+        notifyCloudMutation();
+      } catch (error) {
+        console.error("Failed to delete folder in cloud", error);
       }
     },
-    [folders, isCloud, notifyCloudMutation, setFolders],
+    [notifyCloudMutation, setFolders],
+  );
+
+  const deleteLocalFolder = useCallback(
+    (folderId: string) => {
+      const next = folders.filter((f) => f.id !== folderId);
+      saveFolders(next);
+      setFolders(next);
+    },
+    [folders, setFolders],
+  );
+
+  const handleDeleteFolder = useCallback(
+    async (folderId: string) => {
+      if (isDefaultFolder(folders, folderId)) return;
+      await deleteFolder({ deleteCloudFolder, deleteLocalFolder, folderId, isCloud });
+    },
+    [deleteCloudFolder, deleteLocalFolder, folders, isCloud],
   );
 
   const syncRecentes = useCallback(

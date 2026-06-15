@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { userSetlists } from "@/db/schema";
-import { requireUserId } from "@/lib/server/api-auth";
+import { readJsonBody, requireApiUserId } from "@/lib/server/api-route";
 import {
   getSetlistDetail,
   listSetlistsForUser,
@@ -10,63 +10,78 @@ import {
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
+type SetlistUpdateBody = { title?: string; description?: string | null };
+
+type SetlistRow = typeof userSetlists.$inferSelect;
+
+function setlistOwnerWhere(id: string, userId: string) {
+  return and(eq(userSetlists.id, id), eq(userSetlists.userId, userId));
+}
+
+function nextSetlistTitle(row: SetlistRow, body: SetlistUpdateBody) {
+  return body.title === undefined ? row.title : body.title.trim() || row.title;
+}
+
+function nextSetlistDescription(row: SetlistRow, body: SetlistUpdateBody) {
+  return body.description === undefined ? row.description : body.description?.trim() || null;
+}
+
+function setlistUpdateValues(row: SetlistRow, body: SetlistUpdateBody) {
+  return {
+    title: nextSetlistTitle(row, body),
+    description: nextSetlistDescription(row, body),
+    updatedAt: new Date(),
+  };
+}
+
+function setlistNotFound() {
+  return NextResponse.json({ error: "Setlist não encontrada" }, { status: 404 });
+}
+
 export async function GET(_req: Request, ctx: RouteCtx) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return authResult.error;
+  const auth = await requireApiUserId();
+  if ("response" in auth) return auth.response;
 
   const { id } = await ctx.params;
-  const detail = await getSetlistDetail(authResult.userId, id);
-  if (!detail) {
-    return NextResponse.json({ error: "Setlist não encontrada" }, { status: 404 });
-  }
+  const detail = await getSetlistDetail(auth.userId, id);
+  if (!detail) return setlistNotFound();
   return NextResponse.json(detail);
 }
 
 export async function PATCH(req: Request, ctx: RouteCtx) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return authResult.error;
+  const auth = await requireApiUserId();
+  if ("response" in auth) return auth.response;
 
   const { id } = await ctx.params;
-  let body: { title?: string; description?: string | null };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
+  const json = await readJsonBody<SetlistUpdateBody>(req);
+  if ("response" in json) return json.response;
+  const body = json.body;
 
   const [row] = await db
     .select()
     .from(userSetlists)
-    .where(and(eq(userSetlists.id, id), eq(userSetlists.userId, authResult.userId)))
+    .where(setlistOwnerWhere(id, auth.userId))
     .limit(1);
-  if (!row) {
-    return NextResponse.json({ error: "Setlist não encontrada" }, { status: 404 });
-  }
+  if (!row) return setlistNotFound();
 
   await db
     .update(userSetlists)
-    .set({
-      ...(body.title !== undefined ? { title: body.title.trim() || row.title } : {}),
-      ...(body.description !== undefined
-        ? { description: body.description?.trim() || null }
-        : {}),
-      updatedAt: new Date(),
-    })
+    .set(setlistUpdateValues(row, body))
     .where(eq(userSetlists.id, id));
 
-  const detail = await getSetlistDetail(authResult.userId, id);
+  const detail = await getSetlistDetail(auth.userId, id);
   return NextResponse.json(detail);
 }
 
 export async function DELETE(_req: Request, ctx: RouteCtx) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return authResult.error;
+  const auth = await requireApiUserId();
+  if ("response" in auth) return auth.response;
 
   const { id } = await ctx.params;
   await db
     .delete(userSetlists)
-    .where(and(eq(userSetlists.id, id), eq(userSetlists.userId, authResult.userId)));
+    .where(setlistOwnerWhere(id, auth.userId));
 
-  const setlists = await listSetlistsForUser(authResult.userId);
+  const setlists = await listSetlistsForUser(auth.userId);
   return NextResponse.json({ setlists });
 }

@@ -43,11 +43,18 @@ async function migrateGuestSetlist(sl: LocalSetlistStored) {
   const { setlist } = await cloudCreateSetlist(sl.title, sl.description ?? null);
 
   for (const item of sl.items) {
-    try {
-      await cloudAddSetlistItem(setlist.id, item.arrangementId, item.notes ?? null);
-    } catch {
-      /* arranjo não está na biblioteca */
-    }
+    await tryAddGuestSetlistItem(setlist.id, item);
+  }
+}
+
+async function tryAddGuestSetlistItem(
+  setlistId: string,
+  item: LocalSetlistStored["items"][number],
+) {
+  try {
+    await cloudAddSetlistItem(setlistId, item.arrangementId, item.notes ?? null);
+  } catch {
+    /* arranjo não está na biblioteca */
   }
 }
 
@@ -69,32 +76,49 @@ async function migrateGuestSetlistsProgressive(
 }
 
 function loadLocalLibrary(setters: LibrarySetters) {
-  const folders = loadFolders();
-  const recentes = loadRecentes();
-  const setlists = loadLocalSetlists();
-
-  if (folders !== null) setters.setFolders(folders.length > 0 ? folders : DEFAULT_FOLDERS);
-  if (recentes !== null) setters.setRecentes(recentes);
-  if (setlists !== null) {
-    setters.setLocalSetlistsRaw(setlists);
-    setters.setSetlistSummaries(localSetlistsToSummaries(setlists));
-  }
-
+  applyLocalFolders(setters, loadFolders());
+  applyLocalRecentes(setters, loadRecentes());
+  applyLocalSetlists(setters, loadLocalSetlists());
   setters.setLibraryLoaded(true);
+}
+
+function applyLocalFolders(setters: Pick<LibrarySetters, "setFolders">, folders: Folder[] | null) {
+  if (folders !== null) setters.setFolders(folders.length > 0 ? folders : DEFAULT_FOLDERS);
+}
+
+function applyLocalRecentes(setters: Pick<LibrarySetters, "setRecentes">, recentes: StoredSong[] | null) {
+  if (recentes !== null) setters.setRecentes(recentes);
+}
+
+function applyLocalSetlists(
+  setters: Pick<LibrarySetters, "setLocalSetlistsRaw" | "setSetlistSummaries">,
+  setlists: LocalSetlistStored[] | null,
+) {
+  if (setlists === null) return;
+  setters.setLocalSetlistsRaw(setlists);
+  setters.setSetlistSummaries(localSetlistsToSummaries(setlists));
 }
 
 async function loadInitialCloudLibrary(isFirstSync: boolean, ctx: CloudSyncContext) {
   if (isFirstSync) {
-    const merged = await cloudSync({
-      folders: loadFoldersPayload(),
-      recentes: loadRecentes() ?? [],
-    });
-    if (ctx.cancelled()) return;
-    ctx.applyCloudLibrarySnapshot(merged);
-    localStorage.setItem(cloudSyncDoneKey(ctx.userId), "1");
+    await syncInitialCloudLibrary(ctx);
     return;
   }
 
+  await fetchInitialCloudLibrary(ctx);
+}
+
+async function syncInitialCloudLibrary(ctx: CloudSyncContext) {
+  const merged = await cloudSync({
+    folders: loadFoldersPayload(),
+    recentes: loadRecentes() ?? [],
+  });
+  if (ctx.cancelled()) return;
+  ctx.applyCloudLibrarySnapshot(merged);
+  localStorage.setItem(cloudSyncDoneKey(ctx.userId), "1");
+}
+
+async function fetchInitialCloudLibrary(ctx: CloudSyncContext) {
   const library = await cloudFetchLibrary();
   if (!ctx.cancelled()) ctx.applyCloudLibrarySnapshot(library);
 }
@@ -124,6 +148,60 @@ async function performSyncOrFetch(isFirstSync: boolean, ctx: CloudSyncContext) {
   await loadCloudSetlists(ctx);
 }
 
+function canRefreshCloud(isCloud: boolean) {
+  return isCloud && (typeof window === "undefined" || navigator.onLine);
+}
+
+async function loadCloudSnapshot() {
+  return Promise.allSettled([
+    cloudFetchLibrary(),
+    cloudFetchSetlists(),
+  ]);
+}
+
+function createCloudRefreshSubscription(
+  syncSignalKey: string,
+  refreshCloudState: () => Promise<void>,
+) {
+  const runRefresh = () => {
+    void refreshCloudState();
+  };
+
+  let intervalId: number | null = null;
+  const startPolling = () => {
+    if (!intervalId) intervalId = window.setInterval(runRefresh, CLOUD_SYNC_POLL_MS);
+  };
+  const stopPolling = () => {
+    if (intervalId) window.clearInterval(intervalId);
+    intervalId = null;
+  };
+  const handleVisibility = () => {
+    if (document.visibilityState === "visible") {
+      runRefresh();
+      startPolling();
+      return;
+    }
+    stopPolling();
+  };
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === syncSignalKey && event.newValue) runRefresh();
+  };
+
+  if (document.visibilityState === "visible") startPolling();
+  window.addEventListener("focus", runRefresh);
+  window.addEventListener("online", runRefresh);
+  window.addEventListener("storage", handleStorage);
+  document.addEventListener("visibilitychange", handleVisibility);
+
+  return () => {
+    stopPolling();
+    window.removeEventListener("focus", runRefresh);
+    window.removeEventListener("online", runRefresh);
+    window.removeEventListener("storage", handleStorage);
+    document.removeEventListener("visibilitychange", handleVisibility);
+  };
+}
+
 async function runInitialCloudSync(ctx: CloudSyncContext) {
   const key = cloudSyncDoneKey(ctx.userId);
   const alreadyDone = typeof window !== "undefined" && localStorage.getItem(key) === "1";
@@ -140,12 +218,9 @@ async function runInitialCloudSync(ctx: CloudSyncContext) {
 }
 
 function loadLocalLibraryFallback(ctx: CloudSyncContext) {
-  const folders = loadFolders();
-  const recentes = loadRecentes();
-
   if (ctx.cancelled()) return;
-  if (folders !== null) ctx.setFolders(folders.length > 0 ? folders : DEFAULT_FOLDERS);
-  if (recentes !== null) ctx.setRecentes(recentes);
+  applyLocalFolders(ctx, loadFolders());
+  applyLocalRecentes(ctx, loadRecentes());
 }
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
@@ -171,13 +246,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   );
 
   const refreshCloudState = useCallback(async () => {
-    if (!isCloud) return;
-    if (typeof window !== "undefined" && !navigator.onLine) return;
+    if (!canRefreshCloud(isCloud)) return;
 
-    const [libraryResult, setlistsResult] = await Promise.allSettled([
-      cloudFetchLibrary(),
-      cloudFetchSetlists(),
-    ]);
+    const [libraryResult, setlistsResult] = await loadCloudSnapshot();
 
     if (libraryResult.status === "fulfilled") {
       applyCloudLibrarySnapshot(libraryResult.value);
@@ -228,56 +299,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isCloud || !userId || !syncSignalKey) return;
-
-    const runRefresh = () => {
-      void refreshCloudState();
-    };
-
-    let intervalId: number | null = null;
-
-    const startPolling = () => {
-      if (!intervalId) {
-        intervalId = window.setInterval(runRefresh, CLOUD_SYNC_POLL_MS);
-      }
-    };
-
-    const stopPolling = () => {
-      if (intervalId) {
-        window.clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        runRefresh();
-        startPolling();
-      } else {
-        stopPolling();
-      }
-    };
-
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== syncSignalKey || !event.newValue) return;
-      runRefresh();
-    };
-
-    if (document.visibilityState === "visible") {
-      startPolling();
-    }
-
-    window.addEventListener("focus", runRefresh);
-    window.addEventListener("online", runRefresh);
-    window.addEventListener("storage", handleStorage);
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    return () => {
-      stopPolling();
-      window.removeEventListener("focus", runRefresh);
-      window.removeEventListener("online", runRefresh);
-      window.removeEventListener("storage", handleStorage);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
+    return createCloudRefreshSubscription(syncSignalKey, refreshCloudState);
   }, [isCloud, userId, syncSignalKey, refreshCloudState]);
 
   return <>{children}</>;

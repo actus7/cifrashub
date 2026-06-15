@@ -1,12 +1,33 @@
 "use client";
 
 import type { StoredSong } from "@/lib/types";
+import { isValidYoutubeId } from "@/lib/youtube";
 
-/**
- * O `youtubeId` fica em `<script>` na página principal. No browser, fetch direto ao
- * Cifra Club falha por CORS e proxies costumam remover scripts — a rota `/api/cifra-youtube`
- * busca o HTML no servidor (sem CORS) e extrai o ID.
- */
+function cifraYoutubeUrl(song: StoredSong) {
+  const params = new URLSearchParams({
+    artistSlug: song.artistSlug,
+    slug: song.slug,
+  });
+  return `/api/cifra-youtube?${params}`;
+}
+
+function validYoutubeId(value: string | null | undefined) {
+  const raw = value?.trim();
+  return isValidYoutubeId(raw) ? raw : null;
+}
+
+async function fetchYoutubeId(song: StoredSong, signal?: AbortSignal) {
+  try {
+    const res = await fetch(cifraYoutubeUrl(song), { signal });
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as { youtubeId?: string | null };
+    return validYoutubeId(data.youtubeId);
+  } catch {
+    return null;
+  }
+}
+
 export async function enrichStoredSongWithYoutube(
   song: StoredSong,
   signal?: AbortSignal,
@@ -14,21 +35,6 @@ export async function enrichStoredSongWithYoutube(
   if (song.youtubeId) return song;
   signal?.throwIfAborted();
 
-  let youtubeId: string | null = null;
-  try {
-    const params = new URLSearchParams({
-      artistSlug: song.artistSlug,
-      slug: song.slug,
-    });
-    const res = await fetch(`/api/cifra-youtube?${params}`, { signal });
-    if (res.ok) {
-      const data = (await res.json()) as { youtubeId?: string | null };
-      const raw = data.youtubeId?.trim();
-      if (raw && /^[a-zA-Z0-9_-]{11}$/.test(raw)) youtubeId = raw;
-    }
-  } catch {
-    /* abort / rede */
-  }
-
+  const youtubeId = await fetchYoutubeId(song, signal);
   return youtubeId ? { ...song, youtubeId } : song;
 }

@@ -7,6 +7,7 @@ import {
   requireApiUserJson,
   requireTrimmedText,
 } from "@/lib/server/api-route";
+import { nextPosition } from "@/lib/server/positions";
 import { listSetlistsForUser } from "@/lib/server/setlist-queries";
 
 export async function GET() {
@@ -25,25 +26,30 @@ export async function POST(req: Request) {
   if ("response" in titleResult) return titleResult.response;
   const title = titleResult.value;
 
-  const existing = await db
-    .select()
-    .from(userSetlists)
-    .where(eq(userSetlists.userId, request.userId));
-  const position =
-    existing.length === 0
-      ? 0
-      : Math.max(...existing.map((r) => r.position)) + 1;
+  const created = await createSetlist(request.userId, title, request.body.description);
+  const setlists = await listSetlistsForUser(request.userId);
+  return NextResponse.json({ setlist: created, setlists });
+}
 
+async function createSetlist(userId: string, title: string, description?: string | null) {
   const [created] = await db
     .insert(userSetlists)
     .values({
-      userId: request.userId,
+      userId,
       title,
-      description: request.body.description?.trim() || null,
-      position,
+      description: description?.trim() || null,
+      position: await nextSetlistPosition(userId),
     })
     .returning();
 
-  const setlists = await listSetlistsForUser(request.userId);
-  return NextResponse.json({ setlist: created, setlists });
+  return created;
+}
+
+async function nextSetlistPosition(userId: string) {
+  const existing = await db
+    .select({ position: userSetlists.position })
+    .from(userSetlists)
+    .where(eq(userSetlists.userId, userId));
+
+  return nextPosition(existing);
 }

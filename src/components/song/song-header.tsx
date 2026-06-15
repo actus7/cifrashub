@@ -85,8 +85,15 @@ function cifraClubMetaLines(song: CurrentSongMeta, tone: number, capo: number) {
   const lines = [originalKeyLine(song), currentKeyLine(song, tone, capo), capoLine(capo)].filter(
     (line): line is string => Boolean(line),
   );
-  const hasStaticMeta = Boolean(song.cifraSoundingKey) || Boolean(song.cifraWrittenKey) || song.cifraCapo !== undefined;
-  return hasStaticMeta || capo !== 0 || tone !== 0 ? lines : [];
+  return shouldShowCifraMeta(song, tone, capo) ? lines : [];
+}
+
+function shouldShowCifraMeta(song: CurrentSongMeta, tone: number, capo: number) {
+  return hasStaticCifraMeta(song) || capo !== 0 || tone !== 0;
+}
+
+function hasStaticCifraMeta(song: CurrentSongMeta) {
+  return Boolean(song.cifraSoundingKey) || Boolean(song.cifraWrittenKey) || song.cifraCapo !== undefined;
 }
 
 function originalKeyLine(song: CurrentSongMeta) {
@@ -204,35 +211,19 @@ function AutoScrollHeaderControl() {
 
   return (
     <div className="flex items-center">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "rounded-xl",
-          autoScroll ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
-        )}
+      <HeaderToggleButton
+        active={autoScroll}
+        inactiveLabel="Rolagem automática"
+        activeLabel="Parar rolagem"
         onClick={() => setAutoScroll(!autoScroll)}
-        title={autoScroll ? "Parar rolagem" : "Rolagem automática"}
-        aria-label={autoScroll ? "Parar rolagem" : "Rolagem automática"}
       >
         {autoScroll ? (
           <Pause className="size-[18px]" fill="currentColor" />
         ) : (
           <Play className="ml-0.5 size-[18px]" fill="currentColor" />
         )}
-      </Button>
-      {autoScroll && (
-        <div className="hidden items-center gap-0.5 sm:flex">
-          <HeaderMiniButton onClick={() => setScrollSpeed(Math.max(1, scrollSpeed - 1))} disabled={scrollSpeed <= 1}>
-            <Rewind className="size-3" />
-          </HeaderMiniButton>
-          <span className="min-w-[1.5rem] text-center text-[10px] font-bold text-primary">{scrollSpeed}x</span>
-          <HeaderMiniButton onClick={() => setScrollSpeed(Math.min(5, scrollSpeed + 1))} disabled={scrollSpeed >= 5}>
-            <FastForward className="size-3" />
-          </HeaderMiniButton>
-        </div>
-      )}
+      </HeaderToggleButton>
+      {autoScroll && <AutoScrollSpeedControls scrollSpeed={scrollSpeed} setScrollSpeed={setScrollSpeed} />}
     </div>
   );
 }
@@ -242,30 +233,87 @@ function MetronomeHeaderControl() {
 
   return (
     <div className="flex items-center">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "rounded-xl",
-          metronomeActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
-        )}
+      <HeaderToggleButton
+        active={metronomeActive}
+        inactiveLabel="Metrônomo"
+        activeLabel="Parar metrônomo"
         onClick={() => setMetronomeActive(!metronomeActive)}
-        title={metronomeActive ? "Parar metrônomo" : "Metrônomo"}
-        aria-label={metronomeActive ? "Parar metrônomo" : "Metrônomo"}
       >
         {metronomeActive ? <span className="text-[11px] font-bold">{bpm}</span> : <Timer className="size-[18px]" />}
-      </Button>
-      {metronomeActive && (
-        <div className="hidden items-center gap-0.5 sm:flex">
-          <HeaderMiniButton onClick={() => setBpm(Math.max(40, bpm - 5))}>
-            <Minus className="size-3" />
-          </HeaderMiniButton>
-          <HeaderMiniButton onClick={() => setBpm(Math.min(240, bpm + 5))}>
-            <Plus className="size-3" />
-          </HeaderMiniButton>
-        </div>
+      </HeaderToggleButton>
+      {metronomeActive && <MetronomeBpmControls bpm={bpm} setBpm={setBpm} />}
+    </div>
+  );
+}
+
+function HeaderToggleButton({
+  active,
+  inactiveLabel,
+  activeLabel,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  inactiveLabel: string;
+  activeLabel: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const label = active ? activeLabel : inactiveLabel;
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className={cn(
+        "rounded-xl",
+        active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
       )}
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function AutoScrollSpeedControls({
+  scrollSpeed,
+  setScrollSpeed,
+}: {
+  scrollSpeed: number;
+  setScrollSpeed: (speed: number) => void;
+}) {
+  return (
+    <div className="hidden items-center gap-0.5 sm:flex">
+      <HeaderMiniButton onClick={() => setScrollSpeed(Math.max(1, scrollSpeed - 1))} disabled={scrollSpeed <= 1}>
+        <Rewind className="size-3" />
+      </HeaderMiniButton>
+      <span className="min-w-[1.5rem] text-center text-[10px] font-bold text-primary">{scrollSpeed}x</span>
+      <HeaderMiniButton onClick={() => setScrollSpeed(Math.min(5, scrollSpeed + 1))} disabled={scrollSpeed >= 5}>
+        <FastForward className="size-3" />
+      </HeaderMiniButton>
+    </div>
+  );
+}
+
+function MetronomeBpmControls({
+  bpm,
+  setBpm,
+}: {
+  bpm: number;
+  setBpm: (bpm: number) => void;
+}) {
+  return (
+    <div className="hidden items-center gap-0.5 sm:flex">
+      <HeaderMiniButton onClick={() => setBpm(Math.max(40, bpm - 5))}>
+        <Minus className="size-3" />
+      </HeaderMiniButton>
+      <HeaderMiniButton onClick={() => setBpm(Math.min(240, bpm + 5))}>
+        <Plus className="size-3" />
+      </HeaderMiniButton>
     </div>
   );
 }

@@ -227,14 +227,26 @@ function FingerDots({ chordInfo, mirrored }: { chordInfo: ChordShape; mirrored: 
   });
 }
 
+function hasFingerDot(fret: ChordShape["frets"][number]) {
+  return fret !== "x" && fret !== 0;
+}
+
+function isCoveredByBarre(chordInfo: ChordShape, fret: number, stringIndex: number) {
+  const barre = chordInfo.barre;
+  return Boolean(
+    barre &&
+      fret === barre.fret &&
+      stringIndex >= barre.from &&
+      stringIndex <= barre.to,
+  );
+}
+
 function shouldRenderFingerDot(
   chordInfo: ChordShape,
   fret: ChordShape["frets"][number],
   stringIndex: number,
 ) {
-  if (fret === "x" || fret === 0) return false;
-  if (!chordInfo.barre) return true;
-  return fret !== chordInfo.barre.fret || stringIndex < chordInfo.barre.from || stringIndex > chordInfo.barre.to;
+  return hasFingerDot(fret) && !isCoveredByBarre(chordInfo, fret as number, stringIndex);
 }
 
 function StringNames({ labels }: { labels: string[] }) {

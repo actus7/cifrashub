@@ -28,37 +28,47 @@ type IosInstallStepProps = {
 };
 
 export function InstallAppBanner() {
-  const { canPrompt, isIos, isInstalled, promptInstall } = usePwaInstall();
-  const [dismissed, setDismissed] = useState(
-    () => typeof window === "undefined" || localStorage.getItem(DISMISSED_KEY) === "1",
-  );
+  const installState = usePwaInstall();
+  const [dismissed, setDismissed] = useState(isInstallDismissed);
   const [iosDialogOpen, setIosDialogOpen] = useState(false);
 
-  const dismiss = () => {
-    localStorage.setItem(DISMISSED_KEY, "1");
-    setDismissed(true);
-  };
-
-  const handleInstall = async () => {
-    await promptInstall();
-    dismiss();
-  };
-
-  const visible = !isInstalled && !dismissed && (canPrompt || isIos);
-
-  if (!visible) return null;
+  if (!shouldShowInstallBanner(installState, dismissed)) return null;
 
   return (
     <>
       <InstallPromptCard
-        isIos={isIos}
-        onDismiss={dismiss}
-        onInstall={handleInstall}
+        isIos={installState.isIos}
+        onDismiss={() => dismissInstallBanner(setDismissed)}
+        onInstall={() => handleInstall(installState.promptInstall, setDismissed)}
         onOpenIosGuide={() => setIosDialogOpen(true)}
       />
       <IosInstallDialog open={iosDialogOpen} onOpenChange={setIosDialogOpen} />
     </>
   );
+}
+
+function isInstallDismissed() {
+  return typeof window === "undefined" || localStorage.getItem(DISMISSED_KEY) === "1";
+}
+
+function shouldShowInstallBanner(
+  installState: ReturnType<typeof usePwaInstall>,
+  dismissed: boolean,
+) {
+  return !installState.isInstalled && !dismissed && (installState.canPrompt || installState.isIos);
+}
+
+function dismissInstallBanner(setDismissed: (dismissed: boolean) => void) {
+  localStorage.setItem(DISMISSED_KEY, "1");
+  setDismissed(true);
+}
+
+async function handleInstall(
+  promptInstall: ReturnType<typeof usePwaInstall>["promptInstall"],
+  setDismissed: (dismissed: boolean) => void,
+) {
+  await promptInstall();
+  dismissInstallBanner(setDismissed);
 }
 
 function InstallPromptCard({ isIos, onDismiss, onInstall, onOpenIosGuide }: InstallPromptCardProps) {

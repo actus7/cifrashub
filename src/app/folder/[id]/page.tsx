@@ -11,7 +11,86 @@ import { enrichStoredSongWithYoutube } from "@/hooks/use-song-loader";
 import { cloudAddSongToFolder, cloudRemoveSongFromFolder } from "@/lib/storage";
 import { arrangementKey } from "@/lib/stored-song-key";
 import { useSession } from "@/hooks/use-session";
-import type { SearchResultSong, StoredSong } from "@/lib/types";
+import type { Folder, SearchResultSong, StoredSong } from "@/lib/types";
+
+async function removeCloudFolderSongs(
+  folderId: string,
+  keys: Set<string>,
+  folders: Folder[],
+) {
+  let nextFolders = folders;
+  for (const key of keys) {
+    try {
+      const { folders: next } = await cloudRemoveSongFromFolder(folderId, key);
+      nextFolders = next;
+    } catch (error) {
+      console.error(`Failed to remove song ${key} from cloud:`, error);
+    }
+  }
+  return nextFolders;
+}
+
+function removeLocalFolderSongs(
+  folders: Folder[],
+  folderId: string,
+  keys: Set<string>,
+) {
+  return folders.map((f) => {
+    if (f.id !== folderId) return f;
+    return {
+      ...f,
+      songs: f.songs.filter((s) => !keys.has(arrangementKey(s))),
+    };
+  });
+}
+
+async function songFromSearchResult(res: SearchResultSong, songId: string) {
+  const html = await fetchChordsHtml(res.artistSlug, res.slug);
+  const song = processHtmlAndExtract(
+    html,
+    songId,
+    res.title,
+    res.artistName,
+    res.artistSlug,
+    res.slug,
+  );
+  return enrichStoredSongWithYoutube(song);
+}
+
+function addLocalSongToFolder(folders: Folder[], folderId: string, song: StoredSong) {
+  const songKey = arrangementKey(song);
+  return folders.map((f) => {
+    if (f.id !== folderId || f.songs.some((s) => arrangementKey(s) === songKey)) return f;
+    return { ...f, songs: [song, ...f.songs] };
+  });
+}
+
+type AddFolderSongArgs = {
+  folderId: string;
+  folders: Folder[];
+  isCloud: boolean;
+  notifyCloudMutation: () => void;
+  setFolders: (folders: Folder[]) => void;
+  song: StoredSong;
+};
+
+async function applyAddedFolderSong({
+  folderId,
+  folders,
+  isCloud,
+  notifyCloudMutation,
+  setFolders,
+  song,
+}: AddFolderSongArgs) {
+  if (isCloud) {
+    const { folders: next } = await cloudAddSongToFolder(folderId, song);
+    setFolders(next);
+    notifyCloudMutation();
+    return;
+  }
+
+  setFolders(addLocalSongToFolder(folders, folderId, song));
+}
 
 export default function FolderPage() {
   const params = useParams();
@@ -40,31 +119,15 @@ export default function FolderPage() {
     setFolderAddPendingKey(songId);
     setFolderError(null);
     try {
-      const html = await fetchChordsHtml(res.artistSlug, res.slug);
-      let newSong = processHtmlAndExtract(
-        html,
-        songId,
-        res.title,
-        res.artistName,
-        res.artistSlug,
-        res.slug,
-      );
-      newSong = await enrichStoredSongWithYoutube(newSong);
-
-      if (isCloud) {
-        const { folders: next } = await cloudAddSongToFolder(folderId, newSong);
-        setFolders(next);
-        notifyCloudMutation();
-      } else {
-        const updated = folders.map((f) => {
-          if (f.id === folderId && !f.songs.some((s) => arrangementKey(s) === arrangementKey(newSong))) {
-            return { ...f, songs: [newSong, ...f.songs] };
-          }
-          return f;
-        });
-        setFolders(updated);
-        // We should also save locally but the effect in SyncProvider handles it or we call hook action
-      }
+      const song = await songFromSearchResult(res, songId);
+      await applyAddedFolderSong({
+        folderId,
+        folders,
+        isCloud,
+        notifyCloudMutation,
+        setFolders,
+        song,
+      });
       setFolderSearchQuery("");
     } catch (err) {
       setFolderError(err instanceof Error ? err.message : "Problema de rede ao importar cifra.");
@@ -77,26 +140,11 @@ export default function FolderPage() {
     if (!folderId || songs.length === 0) return;
     const keys = new Set(songs.map((song) => arrangementKey(song)));
     if (isCloud) {
-      let nextFolders = folders;
-      for (const key of keys) {
-        try {
-          const { folders: next } = await cloudRemoveSongFromFolder(folderId, key);
-          nextFolders = next;
-        } catch (error) {
-          console.error(`Failed to remove song ${key} from cloud:`, error);
-        }
-      }
+      const nextFolders = await removeCloudFolderSongs(folderId, keys, folders);
       setFolders(nextFolders);
       notifyCloudMutation();
     } else {
-      const updated = folders.map((f) => {
-        if (f.id !== folderId) return f;
-        return {
-          ...f,
-          songs: f.songs.filter((s) => !keys.has(arrangementKey(s))),
-        };
-      });
-      setFolders(updated);
+      setFolders(removeLocalFolderSongs(folders, folderId, keys));
     }
   };
 
