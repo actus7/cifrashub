@@ -1,8 +1,6 @@
 "use client";
 
-import { fetchChordsHtml } from "@/lib/fetch-proxy";
-import { processHtmlAndExtract } from "@/lib/parser";
-import type { SearchResultSong, StoredSong } from "@/lib/types";
+import type { StoredSong } from "@/lib/types";
 
 /**
  * O `youtubeId` fica em `<script>` na página principal. No browser, fetch direto ao
@@ -33,22 +31,4 @@ export async function enrichStoredSongWithYoutube(
   }
 
   return youtubeId ? { ...song, youtubeId } : song;
-}
-
-export async function loadSongFromRemote(
-  res: Pick<SearchResultSong, "title" | "artistName" | "artistSlug" | "slug">,
-  signal?: AbortSignal,
-): Promise<StoredSong> {
-  const songId = `${res.artistSlug}-${res.slug}`;
-  const html = await fetchChordsHtml(res.artistSlug, res.slug, signal);
-  signal?.throwIfAborted();
-  const song = processHtmlAndExtract(
-    html,
-    songId,
-    res.title,
-    res.artistName,
-    res.artistSlug,
-    res.slug,
-  );
-  return enrichStoredSongWithYoutube(song, signal);
 }

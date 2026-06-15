@@ -101,7 +101,7 @@ export default function SongPage() {
     f.songs.some((s) => s.artistSlug === currentSong.artistSlug && s.slug === currentSong.slug)
   ) : false;
 
-  const onToggleSongInFolder = async (folderId: string) => {
+  const onToggleSongInFolder = useCallback(async (folderId: string) => {
     const isSaved = folders.some((f) =>
       f.id === folderId &&
       f.songs.some((s) => s.artistSlug === currentSong?.artistSlug && s.slug === currentSong?.slug)
@@ -139,14 +139,14 @@ export default function SongPage() {
       saveFolders(next);
       setFolders(next);
     }
-  };
+  }, [currentSong, folders, isCloud, notifyCloudMutation, setFolders]);
 
-  const onCreateFolderFromSave = async (e: React.FormEvent) => {
+  const onCreateFolderFromSave = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFolderName.trim()) return;
     await doCreateFolder(newFolderName.trim());
     setNewFolderName("");
-  };
+  }, [doCreateFolder, newFolderName]);
 
   const youtubeEmbedUrl = currentSong?.youtubeId ? `https://www.youtube.com/embed/${currentSong.youtubeId}` : null;
 

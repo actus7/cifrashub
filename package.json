@@ -67,6 +67,7 @@
   "knip": {
     "entry": [
       "scripts/migrate.cjs",
+      "scripts/merge-duplicate-favoritos.ts",
       "public/sw.js"
     ],
     "ignoreIssues": {

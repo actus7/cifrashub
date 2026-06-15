@@ -123,7 +123,7 @@ export interface LocalSetlistStored {
   }>;
 }
 
-export interface ChordBarre {
+interface ChordBarre {
   fret: number;
   from: number;
   to: number;
