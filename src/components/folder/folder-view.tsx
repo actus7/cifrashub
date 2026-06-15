@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   AlertTriangle,
   Bookmark,
+  CheckSquare,
   ChevronLeft,
   Folder,
   Trash2,
@@ -38,6 +39,7 @@ type FolderViewProps = {
   onDeleteFolder: (folderId: string) => void;
   onOpenSong: (song: StoredSong) => void;
   onRemoveSongFromFolder: (song: StoredSong) => void;
+  onRemoveSongsFromFolder: (songs: StoredSong[]) => Promise<void> | void;
 };
 
 export function FolderView({
@@ -52,8 +54,37 @@ export function FolderView({
   onDeleteFolder,
   onOpenSong,
   onRemoveSongFromFolder,
+  onRemoveSongsFromFolder,
 }: FolderViewProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteSongsDialogOpen, setDeleteSongsDialogOpen] = useState(false);
+  const [selectedSongKeys, setSelectedSongKeys] = useState<Set<string>>(new Set());
+
+  const selectedSongs = folder.songs.filter((song) => selectedSongKeys.has(arrangementKey(song)));
+  const selectionMode = selectedSongKeys.size > 0;
+
+  const clearSelection = () => setSelectedSongKeys(new Set());
+  const toggleSongSelection = (song: StoredSong) => {
+    const key = arrangementKey(song);
+    setSelectedSongKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+  const selectSong = (song: StoredSong) => {
+    const key = arrangementKey(song);
+    setSelectedSongKeys((current) => new Set(current).add(key));
+  };
+  const confirmRemoveSelectedSongs = async () => {
+    await onRemoveSongsFromFolder(selectedSongs);
+    clearSelection();
+    setDeleteSongsDialogOpen(false);
+  };
 
   return (
     <div className="flex min-h-screen flex-col selection:bg-primary/30">
@@ -127,6 +158,30 @@ export function FolderView({
           onAddSong={onAddSongToFolder}
         />
 
+        {selectionMode && (
+          <div className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-background/95 p-3 shadow-sm backdrop-blur animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <CheckSquare className="size-4 text-primary" />
+              {selectedSongKeys.size} selecionada{selectedSongKeys.size === 1 ? "" : "s"}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={clearSelection}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="gap-2"
+                onClick={() => setDeleteSongsDialogOpen(true)}
+              >
+                <Trash2 className="size-4" />
+                Excluir
+              </Button>
+            </div>
+          </div>
+        )}
+
         {folder.songs.length === 0 ? (
           <div className="py-10 text-center text-muted-foreground">
             <Bookmark className="mx-auto mb-4 size-12 opacity-20" />
@@ -141,8 +196,12 @@ export function FolderView({
               <FolderSongCard
                 key={arrangementKey(song)}
                 song={song}
+                selected={selectedSongKeys.has(arrangementKey(song))}
+                selectionMode={selectionMode}
                 onOpen={() => onOpenSong(song)}
                 onRemove={() => onRemoveSongFromFolder(song)}
+                onToggleSelect={() => toggleSongSelection(song)}
+                onLongPressSelect={() => selectSong(song)}
               />
             ))}
           </div>
@@ -164,6 +223,25 @@ export function FolderView({
               onClick={() => onDeleteFolder(folder.id)}
             >
               Apagar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deleteSongsDialogOpen} onOpenChange={setDeleteSongsDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Excluir {selectedSongKeys.size} cifra{selectedSongKeys.size === 1 ? "" : "s"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              As cifras selecionadas serão removidas desta pasta. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveSelectedSongs}>
+              Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

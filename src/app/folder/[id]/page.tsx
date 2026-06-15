@@ -73,25 +73,33 @@ export default function FolderPage() {
     }
   };
 
-  const onRemoveSongFromFolder = async (song: StoredSong) => {
-    if (!folderId) return;
-    const ak = arrangementKey(song);
+  const onRemoveSongsFromFolder = async (songs: StoredSong[]) => {
+    if (!folderId || songs.length === 0) return;
+    const keys = new Set(songs.map((song) => arrangementKey(song)));
     if (isCloud) {
       try {
-        const { folders: next } = await cloudRemoveSongFromFolder(folderId, ak);
-        setFolders(next);
+        let nextFolders = folders;
+        for (const key of keys) {
+          const { folders: next } = await cloudRemoveSongFromFolder(folderId, key);
+          nextFolders = next;
+        }
+        setFolders(nextFolders);
         notifyCloudMutation();
       } catch {}
     } else {
-       const updated = folders.map((f) => {
-          if (f.id !== folderId) return f;
-          return {
-            ...f,
-            songs: f.songs.filter((s) => arrangementKey(s) !== ak),
-          };
-       });
-       setFolders(updated);
+      const updated = folders.map((f) => {
+        if (f.id !== folderId) return f;
+        return {
+          ...f,
+          songs: f.songs.filter((s) => !keys.has(arrangementKey(s))),
+        };
+      });
+      setFolders(updated);
     }
+  };
+
+  const onRemoveSongFromFolder = async (song: StoredSong) => {
+    await onRemoveSongsFromFolder([song]);
   };
 
   const onOpenSong = (song: StoredSong) => {
@@ -116,6 +124,7 @@ export default function FolderPage() {
       onDeleteFolder={doDelete}
       onOpenSong={onOpenSong}
       onRemoveSongFromFolder={onRemoveSongFromFolder}
+      onRemoveSongsFromFolder={onRemoveSongsFromFolder}
     />
   );
 }
