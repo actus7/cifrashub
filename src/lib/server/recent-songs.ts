@@ -11,7 +11,8 @@ export function dedupeSongsByArrangement(
 ): StoredSong[] {
   const seen = new Set<string>();
   return songs.filter((song) => {
-    if (options.requireId && !song?.id) return false;
+    if (!song) return false;
+    if (options.requireId && !song.id) return false;
     const key = arrangementKey(song);
     if (seen.has(key)) return false;
     seen.add(key);

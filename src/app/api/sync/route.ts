@@ -123,7 +123,7 @@ function collectSongsForFolder(
     const existing = state.existingByKey.get(key);
 
     if (existing) {
-      state.toUpdate.push({ id: existing.id, song });
+      if (existing.id) state.toUpdate.push({ id: existing.id, song });
       continue;
     }
 

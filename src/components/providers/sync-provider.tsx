@@ -22,7 +22,6 @@ import { cloudSyncSignalKey } from "@/lib/sync-signal-key";
 
 const CLOUD_SYNC_POLL_MS = 15_000;
 
-type SyncStatus = "loading" | "authenticated" | "unauthenticated";
 type CloudSnapshot = { folders?: Folder[]; recentes?: StoredSong[] };
 type LibrarySetters = {
   setFolders: (folders: Folder[]) => void;
@@ -31,13 +30,12 @@ type LibrarySetters = {
   setSetlistSummaries: (setlists: SetlistSummary[]) => void;
   setLibraryLoaded: (loaded: boolean) => void;
 };
-type SyncEffectOptions = LibrarySetters & {
+type CloudSyncContext = {
   applyCloudLibrarySnapshot: (payload: CloudSnapshot) => void;
-  status: SyncStatus;
-  userId: string | null;
-};
-
-type CloudSyncContext = Pick<SyncEffectOptions, "applyCloudLibrarySnapshot" | "setFolders" | "setRecentes" | "setSetlistSummaries" | "userId"> & {
+  setFolders: (folders: Folder[]) => void;
+  setRecentes: (songs: StoredSong[]) => void;
+  setSetlistSummaries: (setlists: SetlistSummary[]) => void;
+  userId: string;
   cancelled: () => boolean;
 };
 
@@ -93,7 +91,7 @@ async function loadInitialCloudLibrary(isFirstSync: boolean, ctx: CloudSyncConte
     });
     if (ctx.cancelled()) return;
     ctx.applyCloudLibrarySnapshot(merged);
-    localStorage.setItem(cloudSyncDoneKey(ctx.userId!), "1");
+    localStorage.setItem(cloudSyncDoneKey(ctx.userId), "1");
     return;
   }
 
@@ -127,7 +125,7 @@ async function performSyncOrFetch(isFirstSync: boolean, ctx: CloudSyncContext) {
 }
 
 async function runInitialCloudSync(ctx: CloudSyncContext) {
-  const key = cloudSyncDoneKey(ctx.userId!);
+  const key = cloudSyncDoneKey(ctx.userId);
   const alreadyDone = typeof window !== "undefined" && localStorage.getItem(key) === "1";
 
   try {

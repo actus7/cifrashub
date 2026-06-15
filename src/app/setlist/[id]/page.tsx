@@ -65,8 +65,8 @@ export default function SetlistPage() {
       return { ...s, items: updateItems(s.items) };
     });
     saveLocalSetlists(updated);
-    const found = updated.find(x => x.id === setId)!;
-    setDetail(buildLocalSetlistDetail(found, folders, recentes));
+    const found = updated.find(x => x.id === setId);
+    if (found) setDetail(buildLocalSetlistDetail(found, folders, recentes));
   };
 
   const onAddItem = async (arrangementId: string) => {

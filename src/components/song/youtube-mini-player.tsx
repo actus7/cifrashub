@@ -145,8 +145,13 @@ function useYoutubeFallbackSearch({
   setFallbackLoading: (loading: boolean) => void;
   songId: string;
 }) {
+  const onVideoResolvedRef = useRef(onVideoResolved);
   useEffect(() => {
-    if (embedUrl || isParsing || !onVideoResolved) return;
+    onVideoResolvedRef.current = onVideoResolved;
+  }, [onVideoResolved]);
+
+  useEffect(() => {
+    if (embedUrl || isParsing || !onVideoResolvedRef.current) return;
 
     let cancelled = false;
     setFallbackLoading(true);
@@ -155,7 +160,7 @@ function useYoutubeFallbackSearch({
     void resolveYoutubeFallback(fallbackSearchQuery)
       .then((videoId) => {
         if (cancelled) return;
-        if (videoId) onVideoResolved(videoId);
+        if (videoId) onVideoResolvedRef.current?.(videoId);
         else setFallbackFailed(true);
       })
       .catch(() => {
@@ -168,7 +173,7 @@ function useYoutubeFallbackSearch({
     return () => {
       cancelled = true;
     };
-  }, [embedUrl, isParsing, fallbackSearchQuery, songId, retryToken, onVideoResolved, setFallbackFailed, setFallbackLoading]);
+  }, [embedUrl, isParsing, fallbackSearchQuery, songId, retryToken, setFallbackFailed, setFallbackLoading]);
 }
 
 async function resolveYoutubeFallback(query: string) {
