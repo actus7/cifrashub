@@ -14,7 +14,7 @@ import {
 } from "@/lib/storage";
 import { buildLocalSetlistDetail } from "@/lib/setlist-local";
 import { useSession } from "@/hooks/use-session";
-import type { SetlistDetailView, StoredSong } from "@/lib/types";
+import type { LocalSetlistStored, SetlistDetailView, StoredSong } from "@/lib/types";
 
 export default function SetlistPage() {
   const params = useParams();
@@ -56,26 +56,29 @@ export default function SetlistPage() {
     loadSetlist();
   }, [loadSetlist, status]);
 
+  const updateLocalSetlist = (
+    updateItems: (items: LocalSetlistStored["items"]) => LocalSetlistStored["items"],
+  ) => {
+    const all = loadLocalSetlists() ?? [];
+    const updated = all.map(s => {
+      if (s.id !== setId) return s;
+      return { ...s, items: updateItems(s.items) };
+    });
+    saveLocalSetlists(updated);
+    const found = updated.find(x => x.id === setId);
+    if (found) setDetail(buildLocalSetlistDetail(found, folders, recentes));
+  };
+
   const onAddItem = async (arrangementId: string) => {
     if (!detail) return;
     if (isCloud) {
       const d = await cloudAddSetlistItem(setId, arrangementId, null);
       setDetail(d);
     } else {
-      const all = loadLocalSetlists() ?? [];
-      const updated = all.map(s => {
-        if (s.id !== setId) return s;
-        return {
-          ...s,
-          items: [
-            ...s.items,
-            { itemId: Date.now().toString(), arrangementId, position: s.items.length, notes: null }
-          ]
-        };
-      });
-      saveLocalSetlists(updated);
-      const found = updated.find(x => x.id === setId)!;
-      setDetail(buildLocalSetlistDetail(found, folders, recentes));
+      updateLocalSetlist((items) => [
+        ...items,
+        { itemId: Date.now().toString(), arrangementId, position: items.length, notes: null },
+      ]);
     }
   };
 
@@ -85,14 +88,7 @@ export default function SetlistPage() {
        const d = await cloudRemoveSetlistItem(setId, itemId);
        setDetail(d);
     } else {
-       const all = loadLocalSetlists() ?? [];
-       const updated = all.map(s => {
-           if (s.id !== setId) return s;
-           return { ...s, items: s.items.filter(i => i.itemId !== itemId) };
-       });
-       saveLocalSetlists(updated);
-       const found = updated.find(x => x.id === setId)!;
-       setDetail(buildLocalSetlistDetail(found, folders, recentes));
+       updateLocalSetlist((items) => items.filter(i => i.itemId !== itemId));
     }
   };
 
@@ -117,18 +113,10 @@ export default function SetlistPage() {
        const d = await cloudReorderSetlistItems(setId, orderedItemIds);
        setDetail(d);
     } else {
-        const all = loadLocalSetlists() ?? [];
-        const updated = all.map(s => {
-            if (s.id !== setId) return s;
-            const sItems = s.items.map(it => {
-                 const p = patches.find(p => p.itemId === it.itemId);
-                 return p ? { ...it, position: p.position } : it;
-            });
-            return { ...s, items: sItems };
-        });
-        saveLocalSetlists(updated);
-        const found = updated.find(x => x.id === setId)!;
-        setDetail(buildLocalSetlistDetail(found, folders, recentes));
+        updateLocalSetlist((items) => items.map(it => {
+          const p = patches.find(p => p.itemId === it.itemId);
+          return p ? { ...it, position: p.position } : it;
+        }));
     }
   };
 

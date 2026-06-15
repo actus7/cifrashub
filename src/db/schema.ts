@@ -12,6 +12,13 @@ import {
 } from "drizzle-orm/pg-core";
 import type { Section, StoredSongUiPrefs } from "@/lib/types";
 
+const positionColumn = () => integer("position").notNull().default(0);
+
+const timestampColumns = () => ({
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+});
+
 export const users = pgTable("user", {
   id: text("id")
     .primaryKey()
@@ -78,12 +85,7 @@ export const userFolders = pgTable(
     title: text("title").notNull(),
     position: integer("position").notNull().default(0),
     isDefault: boolean("is_default").notNull().default(false),
-    createdAt: timestamp("created_at", { mode: "date" })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .notNull()
-      .defaultNow(),
+    ...timestampColumns(),
   },
 );
 
@@ -95,12 +97,7 @@ export const cachedCifras = pgTable(
     slug: text("slug").notNull(),
     sourceUrl: text("source_url").notNull(),
     html: text("html").notNull(),
-    createdAt: timestamp("created_at", { mode: "date" })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .notNull()
-      .defaultNow(),
+    ...timestampColumns(),
   },
   (t) => ({
     uqCachedCifraSource: uniqueIndex("uq_cached_cifra_source").on(t.artistSlug, t.slug),
@@ -133,13 +130,8 @@ export const userSongs = pgTable(
     capo: integer("capo").notNull().default(0),
     uiPrefs: jsonb("ui_prefs").$type<StoredSongUiPrefs | null>(),
     isRecent: boolean("is_recent").notNull().default(false),
-    position: integer("position").notNull().default(0),
-    createdAt: timestamp("created_at", { mode: "date" })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .notNull()
-      .defaultNow(),
+    position: positionColumn(),
+    ...timestampColumns(),
   },
   (t) => ({
     uqFolderArrangement: uniqueIndex("uq_user_song_folder_arr")
@@ -158,9 +150,8 @@ export const userSetlists = pgTable("user_setlist", {
   userId: uuid("user_id").notNull(),
   title: text("title").notNull(),
   description: text("description"),
-  position: integer("position").notNull().default(0),
-  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+  position: positionColumn(),
+  ...timestampColumns(),
 });
 
 export const userSetlistItems = pgTable(
@@ -172,7 +163,7 @@ export const userSetlistItems = pgTable(
     setlistId: text("setlist_id")
       .notNull()
       .references(() => userSetlists.id, { onDelete: "cascade" }),
-    position: integer("position").notNull().default(0),
+    position: positionColumn(),
     arrangementId: text("arrangement_id").notNull(),
     notes: text("notes"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

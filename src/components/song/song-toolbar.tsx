@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   ArrowLeftRight,
   ArrowUpDown,
@@ -18,22 +19,29 @@ import { getRelativeKeyToggle, transposeRootNote } from "@/lib/music";
 import type { Section } from "@/lib/types";
 import { useSongViewContext } from "./song-context";
 
-/** Extrai a raiz do primeiro acorde encontrado nos dados da cifra. */
 function firstChordRoot(songData: Section[]): string | undefined {
   for (const section of songData) {
-    for (const line of section.content) {
-      for (const block of line) {
-        if (block.chord) {
-          const m = block.chord.match(/^([A-G][#b]?)/);
-          if (m) return m[1];
-        }
-      }
-    }
+    const root = firstSectionChordRoot(section);
+    if (root) return root;
   }
   return undefined;
 }
 
-// ─── Shared primitive buttons ─────────────────────────────────────────────────
+function firstSectionChordRoot(section: Section) {
+  for (const line of section.content) {
+    const root = firstLineChordRoot(line);
+    if (root) return root;
+  }
+  return undefined;
+}
+
+function firstLineChordRoot(line: Section["content"][number]) {
+  for (const block of line) {
+    const root = block.chord?.match(/^([A-G][#b]?)/)?.[1];
+    if (root) return root;
+  }
+  return undefined;
+}
 
 function ToolbarButton({
   active,
@@ -45,7 +53,7 @@ function ToolbarButton({
   active: boolean;
   onClick: () => void;
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
 }) {
   return (
@@ -75,7 +83,7 @@ function ExpandButton({
   disabled,
 }: {
   onClick: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
   title?: string;
   ariaLabel?: string;
   disabled?: boolean;
@@ -99,7 +107,6 @@ function ExpandButton({
   );
 }
 
-/** Agrupa o botão principal com o painel flutuante à esquerda (desktop) */
 function ToolbarPopoverGroup({
   open,
   setExpanded,
@@ -108,8 +115,8 @@ function ToolbarPopoverGroup({
 }: {
   open: boolean;
   setExpanded: (v: string | null) => void;
-  popoverContent?: React.ReactNode;
-  children: React.ReactNode;
+  popoverContent?: ReactNode;
+  children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -124,10 +131,7 @@ function ToolbarPopoverGroup({
   }, [open, setExpanded]);
 
   return (
-    <div
-      ref={ref}
-      className="relative flex items-center justify-end"
-    >
+    <div ref={ref} className="relative flex items-center justify-end">
       {popoverContent && (
         <div
           className={cn(
@@ -145,174 +149,255 @@ function ToolbarPopoverGroup({
   );
 }
 
-// ─── Desktop toolbar (botões fixos, sempre visíveis) ─────────────────────────
-
 export const SongToolbar = memo(function SongToolbar() {
-  const {
-    zenMode,
-    showTabs, setShowTabs,
-    tone, setTone,
-    capo, setCapo,
-    simplified, setSimplified,
-    fontSizeOffset, setFontSizeOffset,
-    columns, setColumns,
-    spacingOffset, setSpacingOffset,
-    mirrored, setMirrored,
-    currentSong,
-    songData,
-  } = useSongViewContext();
-
+  const { zenMode } = useSongViewContext();
   const [expanded, setExpanded] = useState<string | null>(null);
 
   if (zenMode) return null;
 
-  const toggleMenu = (m: string) => setExpanded((prev) => (prev === m ? null : m));
-
-  const fontScale = Math.round((1 + fontSizeOffset / 16) * 100);
-  const writtenKey = currentSong.cifraWrittenKey;
-  const displayKey = writtenKey ?? currentSong.cifraSoundingKey ?? firstChordRoot(songData);
-  const toneLabel = displayKey
-    ? transposeRootNote(displayKey, tone)
-    : tone === 0
-      ? "—"
-      : tone > 0
-        ? `+${tone}`
-        : `${tone}`;
-
-  const relToggle = writtenKey ? getRelativeKeyToggle(writtenKey, tone) : null;
+  const toggleMenu = (menu: string) => setExpanded((prev) => (prev === menu ? null : menu));
 
   return (
     <div className="no-print fixed right-3 bottom-[calc(max(1rem,env(safe-area-inset-bottom,1rem)))] sm:bottom-auto sm:top-1/2 z-40 sm:-translate-y-1/2 flex flex-col items-end sm:items-center gap-2 sm:right-4">
-
-      {/* ── Grupo 1: Tom & Capo ── */}
-      <ToolbarPopoverGroup
-        open={expanded === "tone"}
-        setExpanded={setExpanded}
-        popoverContent={
-          <>
-            <ExpandButton onClick={() => setTone(tone - 1)}><Minus className="size-3.5" /></ExpandButton>
-            <ExpandButton onClick={() => setTone(tone + 1)}><Plus className="size-3.5" /></ExpandButton>
-            {relToggle && (
-              <>
-                <div className="mx-1 h-5 w-px bg-border/50" />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={relToggle.isAtRelative ? "default" : "outline"}
-                  className="h-9 gap-1.5 rounded-xl px-3 text-[10px] font-bold"
-                  onClick={() => { setTone(relToggle.targetTone); setExpanded(null); }}
-                >
-                  <ArrowLeftRight className="size-3" />
-                  {relToggle.label}
-                </Button>
-              </>
-            )}
-          </>
-        }
-      >
-        <ToolbarButton active={tone !== 0} onClick={() => toggleMenu("tone")} title="Tom" className="flex-col gap-0 p-0">
-          <span className={cn("text-[8px] font-medium leading-none", tone !== 0 ? "text-primary-foreground/70" : "text-muted-foreground")}>Tom</span>
-          <span className="text-xs font-bold leading-none">{toneLabel}</span>
-        </ToolbarButton>
-      </ToolbarPopoverGroup>
-
-      <ToolbarPopoverGroup
-        open={expanded === "capo"}
-        setExpanded={setExpanded}
-        popoverContent={
-          <>
-            <ExpandButton onClick={() => setCapo(Math.max(0, capo - 1))} disabled={capo <= 0}><Minus className="size-3.5" /></ExpandButton>
-            <ExpandButton onClick={() => setCapo(Math.min(12, capo + 1))} disabled={capo >= 12}><Plus className="size-3.5" /></ExpandButton>
-          </>
-        }
-      >
-        <ToolbarButton active={capo !== 0} onClick={() => toggleMenu("capo")} title="Capotraste" className="flex-col gap-0 p-0">
-          {capo !== 0 ? (
-            <>
-              <span className="text-[10px] font-bold leading-none">Cp</span>
-              <span className="text-xs font-bold leading-none">{capo}</span>
-            </>
-          ) : (
-            <>
-              <Magnet className="mb-[1px] size-3" />
-              <span className="text-[10px] font-bold leading-none">Cp</span>
-            </>
-          )}
-        </ToolbarButton>
-      </ToolbarPopoverGroup>
-
-      {/* ── Separador ── */}
-      <div className="my-0.5 h-px w-6 bg-border/40" />
-
-      {/* ── Grupo 2: Fonte & Espaçamento ── */}
-      <ToolbarPopoverGroup
-        open={expanded === "font"}
-        setExpanded={setExpanded}
-        popoverContent={
-          <>
-            <ExpandButton onClick={() => setFontSizeOffset(Math.max(-8, fontSizeOffset - 2))}><Minus className="size-3.5" /></ExpandButton>
-            <ExpandButton onClick={() => setFontSizeOffset(Math.min(24, fontSizeOffset + 2))}><Plus className="size-3.5" /></ExpandButton>
-          </>
-        }
-      >
-        <ToolbarButton active={fontSizeOffset !== 0} onClick={() => toggleMenu("font")} title="Tamanho da fonte" className="flex-col gap-0 p-0">
-          <Type className="size-3" />
-          <span className="mt-[1px] text-[9px] font-bold leading-none">{fontScale}%</span>
-        </ToolbarButton>
-      </ToolbarPopoverGroup>
-
-      <ToolbarPopoverGroup
-        open={expanded === "spacing"}
-        setExpanded={setExpanded}
-        popoverContent={
-          <>
-            <ExpandButton onClick={() => setSpacingOffset(Math.max(-8, spacingOffset - 2))} disabled={spacingOffset <= -8}><Minus className="size-3.5" /></ExpandButton>
-            <ExpandButton onClick={() => setSpacingOffset(Math.min(32, spacingOffset + 2))} disabled={spacingOffset >= 32}><Plus className="size-3.5" /></ExpandButton>
-          </>
-        }
-      >
-        <ToolbarButton active={spacingOffset !== 0} onClick={() => toggleMenu("spacing")} title="Espaçamento entre linhas" className="flex-col gap-0 p-0">
-          {spacingOffset !== 0 ? <span className="text-xs font-bold leading-none">{spacingOffset}</span> : <ArrowUpDown className="size-4" />}
-        </ToolbarButton>
-      </ToolbarPopoverGroup>
-
-      <ToolbarPopoverGroup
-        open={expanded === "columns"}
-        setExpanded={setExpanded}
-        popoverContent={
-          <>
-            <ExpandButton onClick={() => setColumns(Math.max(1, columns - 1))} disabled={columns <= 1}><Minus className="size-3.5" /></ExpandButton>
-            <ExpandButton onClick={() => setColumns(Math.min(6, columns + 1))} disabled={columns >= 6}><Plus className="size-3.5" /></ExpandButton>
-          </>
-        }
-      >
-        <ToolbarButton active={columns > 1} onClick={() => toggleMenu("columns")} title="Colunas em telas grandes" className={cn(columns > 1 && "flex-col gap-0 p-0")}>
-          {columns > 1 ? (
-            <>
-              <Columns2 className="mb-[1px] size-3" />
-              <span className="text-xs font-bold leading-none">{columns}</span>
-            </>
-          ) : <Columns2 className="size-4" />}
-        </ToolbarButton>
-      </ToolbarPopoverGroup>
-
-      {/* ── Separador ── */}
-      <div className="my-0.5 h-px w-6 bg-border/40" />
-
-      {/* ── Grupo 3: Modo de exibição ── */}
-      <ToolbarButton active={showTabs} onClick={() => { setShowTabs(!showTabs); setExpanded(null); }} title={showTabs ? "Ocultar tablaturas" : "Mostrar tablaturas"} className="font-mono text-[10px] font-extrabold tracking-widest">
-        TAB
-      </ToolbarButton>
-
-      <ToolbarButton active={simplified} onClick={() => { setSimplified(!simplified); setExpanded(null); }} title={simplified ? "Mostrar acordes originais" : "Simplificar acordes"}>
-        <Guitar className="size-4" />
-      </ToolbarButton>
-
-      <ToolbarButton active={mirrored} onClick={() => { setMirrored(!mirrored); setExpanded(null); }} title={mirrored ? "Mão direita (padrão)" : "Mão esquerda (canhoto)"}>
-        <FlipHorizontal className="size-4 -scale-x-100" />
-      </ToolbarButton>
+      <ToneControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
+      <CapoControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
+      <ToolbarSeparator />
+      <LayoutControls expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
+      <ToolbarSeparator />
+      <DisplayModeControls setExpanded={setExpanded} />
     </div>
   );
 });
 
+function ToneControl({
+  expanded,
+  setExpanded,
+  toggleMenu,
+}: {
+  expanded: string | null;
+  setExpanded: (v: string | null) => void;
+  toggleMenu: (menu: string) => void;
+}) {
+  const { tone, setTone, currentSong, songData } = useSongViewContext();
+  const writtenKey = currentSong.cifraWrittenKey;
+  const displayKey = writtenKey ?? currentSong.cifraSoundingKey ?? firstChordRoot(songData);
+  const relToggle = writtenKey ? getRelativeKeyToggle(writtenKey, tone) : null;
 
+  return (
+    <ToolbarPopoverGroup
+      open={expanded === "tone"}
+      setExpanded={setExpanded}
+      popoverContent={
+        <>
+          <ExpandButton onClick={() => setTone(tone - 1)}><Minus className="size-3.5" /></ExpandButton>
+          <ExpandButton onClick={() => setTone(tone + 1)}><Plus className="size-3.5" /></ExpandButton>
+          {relToggle && <RelativeToneButton relToggle={relToggle} setTone={setTone} setExpanded={setExpanded} />}
+        </>
+      }
+    >
+      <ToolbarButton active={tone !== 0} onClick={() => toggleMenu("tone")} title="Tom" className="flex-col gap-0 p-0">
+        <span className={cn("text-[8px] font-medium leading-none", tone !== 0 ? "text-primary-foreground/70" : "text-muted-foreground")}>Tom</span>
+        <span className="text-xs font-bold leading-none">{toneLabel(displayKey, tone)}</span>
+      </ToolbarButton>
+    </ToolbarPopoverGroup>
+  );
+}
+
+function RelativeToneButton({
+  relToggle,
+  setTone,
+  setExpanded,
+}: {
+  relToggle: NonNullable<ReturnType<typeof getRelativeKeyToggle>>;
+  setTone: (tone: number) => void;
+  setExpanded: (v: string | null) => void;
+}) {
+  return (
+    <>
+      <div className="mx-1 h-5 w-px bg-border/50" />
+      <Button
+        type="button"
+        size="sm"
+        variant={relToggle.isAtRelative ? "default" : "outline"}
+        className="h-9 gap-1.5 rounded-xl px-3 text-[10px] font-bold"
+        onClick={() => {
+          setTone(relToggle.targetTone);
+          setExpanded(null);
+        }}
+      >
+        <ArrowLeftRight className="size-3" />
+        {relToggle.label}
+      </Button>
+    </>
+  );
+}
+
+function toneLabel(displayKey: string | undefined, tone: number) {
+  if (displayKey) return transposeRootNote(displayKey, tone);
+  if (tone === 0) return "—";
+  return tone > 0 ? `+${tone}` : `${tone}`;
+}
+
+function CapoControl({
+  expanded,
+  setExpanded,
+  toggleMenu,
+}: {
+  expanded: string | null;
+  setExpanded: (v: string | null) => void;
+  toggleMenu: (menu: string) => void;
+}) {
+  const { capo, setCapo } = useSongViewContext();
+
+  return (
+    <ToolbarPopoverGroup
+      open={expanded === "capo"}
+      setExpanded={setExpanded}
+      popoverContent={
+        <>
+          <ExpandButton onClick={() => setCapo(Math.max(0, capo - 1))} disabled={capo <= 0}><Minus className="size-3.5" /></ExpandButton>
+          <ExpandButton onClick={() => setCapo(Math.min(12, capo + 1))} disabled={capo >= 12}><Plus className="size-3.5" /></ExpandButton>
+        </>
+      }
+    >
+      <ToolbarButton active={capo !== 0} onClick={() => toggleMenu("capo")} title="Capotraste" className="flex-col gap-0 p-0">
+        <CapoButtonContent capo={capo} />
+      </ToolbarButton>
+    </ToolbarPopoverGroup>
+  );
+}
+
+function CapoButtonContent({ capo }: { capo: number }) {
+  if (capo !== 0) {
+    return (
+      <>
+        <span className="text-[10px] font-bold leading-none">Cp</span>
+        <span className="text-xs font-bold leading-none">{capo}</span>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Magnet className="mb-[1px] size-3" />
+      <span className="text-[10px] font-bold leading-none">Cp</span>
+    </>
+  );
+}
+
+function LayoutControls({
+  expanded,
+  setExpanded,
+  toggleMenu,
+}: {
+  expanded: string | null;
+  setExpanded: (v: string | null) => void;
+  toggleMenu: (menu: string) => void;
+}) {
+  return (
+    <>
+      <FontControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
+      <SpacingControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
+      <ColumnsControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
+    </>
+  );
+}
+
+function FontControl({ expanded, setExpanded, toggleMenu }: ControlProps) {
+  const { fontSizeOffset, setFontSizeOffset } = useSongViewContext();
+  const fontScale = Math.round((1 + fontSizeOffset / 16) * 100);
+
+  return (
+    <ToolbarPopoverGroup
+      open={expanded === "font"}
+      setExpanded={setExpanded}
+      popoverContent={
+        <>
+          <ExpandButton onClick={() => setFontSizeOffset(Math.max(-8, fontSizeOffset - 2))}><Minus className="size-3.5" /></ExpandButton>
+          <ExpandButton onClick={() => setFontSizeOffset(Math.min(24, fontSizeOffset + 2))}><Plus className="size-3.5" /></ExpandButton>
+        </>
+      }
+    >
+      <ToolbarButton active={fontSizeOffset !== 0} onClick={() => toggleMenu("font")} title="Tamanho da fonte" className="flex-col gap-0 p-0">
+        <Type className="size-3" />
+        <span className="mt-[1px] text-[9px] font-bold leading-none">{fontScale}%</span>
+      </ToolbarButton>
+    </ToolbarPopoverGroup>
+  );
+}
+
+function SpacingControl({ expanded, setExpanded, toggleMenu }: ControlProps) {
+  const { spacingOffset, setSpacingOffset } = useSongViewContext();
+
+  return (
+    <ToolbarPopoverGroup
+      open={expanded === "spacing"}
+      setExpanded={setExpanded}
+      popoverContent={
+        <>
+          <ExpandButton onClick={() => setSpacingOffset(Math.max(-8, spacingOffset - 2))} disabled={spacingOffset <= -8}><Minus className="size-3.5" /></ExpandButton>
+          <ExpandButton onClick={() => setSpacingOffset(Math.min(32, spacingOffset + 2))} disabled={spacingOffset >= 32}><Plus className="size-3.5" /></ExpandButton>
+        </>
+      }
+    >
+      <ToolbarButton active={spacingOffset !== 0} onClick={() => toggleMenu("spacing")} title="Espaçamento entre linhas" className="flex-col gap-0 p-0">
+        {spacingOffset !== 0 ? <span className="text-xs font-bold leading-none">{spacingOffset}</span> : <ArrowUpDown className="size-4" />}
+      </ToolbarButton>
+    </ToolbarPopoverGroup>
+  );
+}
+
+function ColumnsControl({ expanded, setExpanded, toggleMenu }: ControlProps) {
+  const { columns, setColumns } = useSongViewContext();
+
+  return (
+    <ToolbarPopoverGroup
+      open={expanded === "columns"}
+      setExpanded={setExpanded}
+      popoverContent={
+        <>
+          <ExpandButton onClick={() => setColumns(Math.max(1, columns - 1))} disabled={columns <= 1}><Minus className="size-3.5" /></ExpandButton>
+          <ExpandButton onClick={() => setColumns(Math.min(6, columns + 1))} disabled={columns >= 6}><Plus className="size-3.5" /></ExpandButton>
+        </>
+      }
+    >
+      <ToolbarButton active={columns > 1} onClick={() => toggleMenu("columns")} title="Colunas em telas grandes" className={cn(columns > 1 && "flex-col gap-0 p-0")}>
+        {columns > 1 ? (
+          <>
+            <Columns2 className="mb-[1px] size-3" />
+            <span className="text-xs font-bold leading-none">{columns}</span>
+          </>
+        ) : <Columns2 className="size-4" />}
+      </ToolbarButton>
+    </ToolbarPopoverGroup>
+  );
+}
+
+type ControlProps = {
+  expanded: string | null;
+  setExpanded: (v: string | null) => void;
+  toggleMenu: (menu: string) => void;
+};
+
+function DisplayModeControls({ setExpanded }: { setExpanded: (v: string | null) => void }) {
+  const { showTabs, setShowTabs, simplified, setSimplified, mirrored, setMirrored } = useSongViewContext();
+  const close = () => setExpanded(null);
+
+  return (
+    <>
+      <ToolbarButton active={showTabs} onClick={() => { setShowTabs(!showTabs); close(); }} title={showTabs ? "Ocultar tablaturas" : "Mostrar tablaturas"} className="font-mono text-[10px] font-extrabold tracking-widest">
+        TAB
+      </ToolbarButton>
+      <ToolbarButton active={simplified} onClick={() => { setSimplified(!simplified); close(); }} title={simplified ? "Mostrar acordes originais" : "Simplificar acordes"}>
+        <Guitar className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton active={mirrored} onClick={() => { setMirrored(!mirrored); close(); }} title={mirrored ? "Mão direita (padrão)" : "Mão esquerda (canhoto)"}>
+        <FlipHorizontal className="size-4 -scale-x-100" />
+      </ToolbarButton>
+    </>
+  );
+}
+
+function ToolbarSeparator() {
+  return <div className="my-0.5 h-px w-6 bg-border/40" />;
+}

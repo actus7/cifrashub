@@ -7,50 +7,55 @@ import type {
 
 const pendingRequests = new Map<string, Promise<unknown>>();
 
-async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const reqKey = `${init?.method || "GET"}:${path}`;
+const isGetRequest = (init?: RequestInit) => !init?.method || init.method === "GET";
 
-  if ((!init?.method || init.method === "GET") && pendingRequests.has(reqKey)) {
-    return pendingRequests.get(reqKey) as Promise<T>;
+function requestKey(path: string, init?: RequestInit) {
+  return `${init?.method || "GET"}:${path}`;
+}
+
+async function responseErrorMessage(res: Response) {
+  try {
+    const data = (await res.json()) as { error?: string };
+    return data.error ?? res.statusText;
+  } catch {
+    return res.statusText;
   }
+}
+
+async function fetchJson<T>(path: string, init: RequestInit | undefined, signal: AbortSignal) {
+  const res = await fetch(path, {
+    ...init,
+    credentials: "include",
+    cache: "no-store",
+    signal,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers as Record<string, string> | undefined),
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res));
+  }
+
+  return res.json() as Promise<T>;
+}
+
+async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const reqKey = requestKey(path, init);
+  const shouldCache = isGetRequest(init);
+  const pending = shouldCache ? pendingRequests.get(reqKey) : null;
+
+  if (pending) return pending as Promise<T>;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const requestPromise = fetchJson<T>(path, init, controller.signal).finally(() => {
+    clearTimeout(timeoutId);
+    if (shouldCache) pendingRequests.delete(reqKey);
+  });
 
-  const requestPromise = (async () => {
-    try {
-      const res = await fetch(path, {
-        ...init,
-        credentials: "include",
-        cache: "no-store",
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          ...(init?.headers as Record<string, string> | undefined),
-        },
-      });
-      if (!res.ok) {
-        let msg = res.statusText;
-        try {
-          const j = (await res.json()) as { error?: string };
-          if (j.error) msg = j.error;
-        } catch {
-          /* ignore */
-        }
-        throw new Error(msg);
-      }
-      return res.json() as Promise<T>;
-    } finally {
-      clearTimeout(timeoutId);
-      if (!init?.method || init.method === "GET") {
-        pendingRequests.delete(reqKey);
-      }
-    }
-  })();
-
-  if (!init?.method || init.method === "GET") {
-    pendingRequests.set(reqKey, requestPromise);
-  }
+  if (shouldCache) pendingRequests.set(reqKey, requestPromise);
 
   return requestPromise;
 }

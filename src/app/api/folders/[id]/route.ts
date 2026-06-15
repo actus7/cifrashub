@@ -2,56 +2,50 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { userFolders } from "@/db/schema";
-import { requireUserId } from "@/lib/server/api-auth";
-import {
-  assertFolderOwner,
-  loadCloudFoldersAndSongs,
-} from "@/lib/server/cloud-data";
+import { readJsonBody, requireTrimmedText } from "@/lib/server/api-route";
+import { loadCloudFoldersAndSongs } from "@/lib/server/cloud-data";
+import { requireOwnedFolder } from "@/lib/server/folder-route";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
+type OwnedFolderCtx = Awaited<ReturnType<typeof requireOwnedFolder>>;
+type ResolvedFolderCtx = Exclude<OwnedFolderCtx, { response: NextResponse }>;
+
+function folderOwnerWhere(folderCtx: ResolvedFolderCtx) {
+  return and(
+    eq(userFolders.id, folderCtx.folderId),
+    eq(userFolders.userId, folderCtx.userId),
+  );
+}
+
+async function respondWithFolders(userId: string) {
+  const { folders } = await loadCloudFoldersAndSongs(userId);
+  return NextResponse.json({ folders });
+}
+
 export async function PATCH(req: Request, ctx: RouteCtx) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return authResult.error;
+  const folderCtx = await requireOwnedFolder(ctx);
+  if ("response" in folderCtx) return folderCtx.response;
 
-  const { id } = await ctx.params;
-  const folder = await assertFolderOwner(authResult.userId, id);
-  if (!folder) {
-    return NextResponse.json({ error: "Pasta não encontrada" }, { status: 404 });
-  }
-
-  let body: { title?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
-  const title = body.title?.trim();
-  if (!title) {
-    return NextResponse.json({ error: "Título obrigatório" }, { status: 400 });
-  }
+  const json = await readJsonBody<{ title?: string }>(req);
+  if ("response" in json) return json.response;
+  const titleResult = requireTrimmedText(json.body.title, "Título obrigatório");
+  if ("response" in titleResult) return titleResult.response;
+  const title = titleResult.value;
 
   await db
     .update(userFolders)
     .set({ title, updatedAt: new Date() })
-    .where(
-      and(eq(userFolders.id, id), eq(userFolders.userId, authResult.userId)),
-    );
+    .where(folderOwnerWhere(folderCtx));
 
-  const { folders } = await loadCloudFoldersAndSongs(authResult.userId);
-  return NextResponse.json({ folders });
+  return respondWithFolders(folderCtx.userId);
 }
 
 export async function DELETE(_req: Request, ctx: RouteCtx) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return authResult.error;
+  const folderCtx = await requireOwnedFolder(ctx);
+  if ("response" in folderCtx) return folderCtx.response;
 
-  const { id } = await ctx.params;
-  const folder = await assertFolderOwner(authResult.userId, id);
-  if (!folder) {
-    return NextResponse.json({ error: "Pasta não encontrada" }, { status: 404 });
-  }
-  if (folder.isDefault) {
+  if (folderCtx.folder.isDefault) {
     return NextResponse.json(
       { error: "Não é possível excluir a pasta padrão" },
       { status: 400 },
@@ -60,10 +54,7 @@ export async function DELETE(_req: Request, ctx: RouteCtx) {
 
   await db
     .delete(userFolders)
-    .where(
-      and(eq(userFolders.id, id), eq(userFolders.userId, authResult.userId)),
-    );
+    .where(folderOwnerWhere(folderCtx));
 
-  const { folders } = await loadCloudFoldersAndSongs(authResult.userId);
-  return NextResponse.json({ folders });
+  return respondWithFolders(folderCtx.userId);
 }

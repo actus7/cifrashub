@@ -1,0 +1,8 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/config-schema.json",
+  "entry": [
+    "public/sw.js",
+    "scripts/migrate.cjs",
+    "scripts/merge-duplicate-favoritos.ts"
+  ]
+}

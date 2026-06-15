@@ -11,6 +11,31 @@ const ARTIST_SONGS_URL = (query: string) =>
     query,
   )}&limit=120&start=0`;
 
+type SearchDoc = Record<string, unknown>;
+
+function parseSearchSong(doc: SearchDoc): SearchResultSong | null {
+  if (doc.tipo !== "2") return null;
+  return {
+    type: "song",
+    title: String(doc.txt ?? ""),
+    artistName: String(doc.art ?? ""),
+    verified: !!doc.v,
+    artistSlug: String(doc.dns ?? ""),
+    slug: String(doc.url ?? ""),
+  };
+}
+
+function parseSearchResult(doc: SearchDoc): SearchResultSong | SearchResultArtist | null {
+  const song = parseSearchSong(doc);
+  if (song) return song;
+  if (doc.tipo !== "1") return null;
+  return {
+    type: "artist",
+    artistName: String(doc.art ?? doc.txt ?? ""),
+    artistSlug: String(doc.dns ?? ""),
+  };
+}
+
 export async function fetchSongsByArtist(
   artistSlug: string,
   artistName: string,
@@ -23,23 +48,12 @@ export async function fetchSongsByArtist(
     if (!res.ok) continue;
 
     const data = (await res.json()) as {
-      response?: { docs?: Array<Record<string, unknown>> };
+      response?: { docs?: SearchDoc[] };
     };
-    const parsed = (data.response?.docs ?? [])
-      .map((doc) => {
-        if (doc.tipo === "2") {
-          return {
-            type: "song" as const,
-            title: String(doc.txt ?? ""),
-            artistName: String(doc.art ?? ""),
-            verified: !!doc.v,
-            artistSlug: String(doc.dns ?? ""),
-            slug: String(doc.url ?? ""),
-          };
-        }
-        return null;
-      })
-      .filter(Boolean) as SearchResultSong[];
+    const parsed = (data.response?.docs ?? []).flatMap((doc) => {
+      const song = parseSearchSong(doc);
+      return song ? [song] : [];
+    });
 
     merged.push(
       ...parsed.filter((song) =>
@@ -95,30 +109,12 @@ export function useSearchDebounced(
           if (!res.ok) throw new Error("search failed");
           return res.json();
         })
-        .then((data: { response?: { docs?: Array<Record<string, unknown>> } }) => {
+        .then((data: { response?: { docs?: SearchDoc[] } }) => {
           if (controller.signal.aborted) return;
-          const parsed = (data.response?.docs ?? [])
-            .map((doc) => {
-              if (doc.tipo === "2") {
-                return {
-                  type: "song" as const,
-                  title: String(doc.txt ?? ""),
-                  artistName: String(doc.art ?? ""),
-                  verified: !!doc.v,
-                  artistSlug: String(doc.dns ?? ""),
-                  slug: String(doc.url ?? ""),
-                };
-              }
-              if (doc.tipo === "1") {
-                return {
-                  type: "artist" as const,
-                  artistName: String(doc.art ?? doc.txt ?? ""),
-                  artistSlug: String(doc.dns ?? ""),
-                };
-              }
-              return null;
-            })
-            .filter(Boolean) as Array<SearchResultSong | SearchResultArtist>;
+          const parsed = (data.response?.docs ?? []).flatMap((doc) => {
+            const result = parseSearchResult(doc);
+            return result ? [result] : [];
+          });
 
           const songs = parsed.filter((r) => r.type === "song");
           const artists = parsed.filter((r) => r.type === "artist");
