@@ -190,14 +190,3 @@ export async function cloudReorderSetlistItems(
   });
 }
 
-export async function cloudCreateShare(body: {
-  resourceType: "arrangement" | "setlist";
-  arrangementId?: string;
-  setlistId?: string;
-}): Promise<{ token: string; snapshotId: string }> {
-  return apiJson("/api/share", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-

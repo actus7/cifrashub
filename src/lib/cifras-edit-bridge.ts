@@ -5,7 +5,7 @@ import type {
   SearchResultArtist,
 } from "@/lib/types";
 
-export type SongReturnTargetBridge =
+type SongReturnTargetBridge =
   | "home"
   | "folder"
   | "artist"
@@ -48,21 +48,6 @@ export function readEditSnapshot(): CifrasEditSnapshot | null {
   }
 }
 
-export function clearEditSnapshot(): void {
-  sessionStorage.removeItem(SNAPSHOT_KEY);
-}
-
 export function writeEditResult(sections: Section[]): void {
   sessionStorage.setItem(RESULT_KEY, JSON.stringify(sections));
-}
-
-export function readAndClearEditResult(): Section[] | null {
-  const raw = sessionStorage.getItem(RESULT_KEY);
-  sessionStorage.removeItem(RESULT_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as Section[];
-  } catch {
-    return null;
-  }
 }
