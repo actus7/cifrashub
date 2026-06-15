@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 const roots = [
+  path.join(__dirname, "..", "node_modules", "better-auth"),
   path.join(
     __dirname,
     "..",
@@ -35,6 +36,6 @@ for (const root of roots) {
     continue;
   }
 
-  content = `const apiKeyClient = () => ({ id: "api-key", $InferServerPlugin: {} });\n${content.replace("export {", "export { apiKeyClient,")}`;
+  content = `const apiKeyClient = () => ({ id: "api-key", $InferServerPlugin: {} });\n${content.replace(/export\s*\{/, "export { apiKeyClient,")}`;
   fs.writeFileSync(pluginsIndex, content);
 }
