@@ -7,7 +7,13 @@ export async function fetchChordsHtml(
   const res = await fetch(`/api/cifra-html?${params}`, { signal });
 
   if (!res.ok) {
-    throw new Error("Não foi possível carregar a cifra no momento.");
+    try {
+      const data = (await res.json()) as { error?: string };
+      throw new Error(data.error ?? "Não foi possível carregar a cifra no momento.");
+    } catch (error) {
+      if (error instanceof Error) throw error;
+      throw new Error("Não foi possível carregar a cifra no momento.");
+    }
   }
 
   const data = (await res.json()) as { html?: string | null; error?: string };
