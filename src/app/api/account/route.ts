@@ -1,12 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
 import { neonAuth } from "@/lib/auth-server";
-
-const NEON_AUTH_COOKIES = [
-  "__Secure-neon-auth.session_token",
-  "__Secure-neon-auth.local.session_data",
-  "__Secure-neon-auth.session_challange",
-] as const;
+import { clearAuthCookies } from "@/lib/server/auth-cookies";
 
 let sqlClient: ReturnType<typeof neon> | null = null;
 
@@ -22,19 +17,6 @@ function getSqlClient() {
 
   sqlClient = neon(connectionString);
   return sqlClient;
-}
-
-function clearAuthCookies(response: NextResponse) {
-  for (const name of NEON_AUTH_COOKIES) {
-    response.cookies.set(name, "", {
-      expires: new Date(0),
-      maxAge: 0,
-      httpOnly: true,
-      path: "/",
-      sameSite: "lax",
-      secure: true,
-    });
-  }
 }
 
 export async function DELETE() {

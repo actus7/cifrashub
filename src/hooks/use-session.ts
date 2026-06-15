@@ -75,7 +75,16 @@ export async function signOut(options?: { callbackUrl?: string }): Promise<void>
     await authClient.signOut();
   } catch (error) {
     console.error("Sign out failed:", error);
-  } finally {
-    finishSignOut(options?.callbackUrl);
   }
+
+  // authClient.signOut() revokes the session server-side but does not reliably
+  // expire the httpOnly __Secure-neon-auth.* cookies in production, which leaves
+  // the user looking logged in after the reload. Force a server-side clear.
+  try {
+    await fetch("/api/sign-out", { method: "POST", credentials: "include" });
+  } catch (error) {
+    console.error("Session cookie cleanup failed:", error);
+  }
+
+  finishSignOut(options?.callbackUrl);
 }
