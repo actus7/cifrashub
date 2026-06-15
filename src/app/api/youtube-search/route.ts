@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
+import { isValidYoutubeId } from "@/lib/youtube";
 
-const YT_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 const MAX_Q = 180;
 const MIN_Q = 2;
 
@@ -41,13 +41,18 @@ function youtubeSearchUrl(q: string, apiKey: string) {
   return url;
 }
 
-function candidateFromItem(item: YtSearchItem): YoutubeCandidate | null {
+function validVideoId(item: YtSearchItem) {
   const id = item.id?.videoId?.trim();
-  if (!id || !YT_ID_RE.test(id)) return null;
-  return {
-    videoId: id,
-    title: (item.snippet?.title ?? "").trim() || "Vídeo",
-  };
+  return isValidYoutubeId(id) ? id : null;
+}
+
+function candidateTitle(item: YtSearchItem) {
+  return (item.snippet?.title ?? "").trim() || "Vídeo";
+}
+
+function candidateFromItem(item: YtSearchItem): YoutubeCandidate | null {
+  const videoId = validVideoId(item);
+  return videoId ? { videoId, title: candidateTitle(item) } : null;
 }
 
 function candidatesFromResponse(data: YtSearchResponse): YoutubeCandidate[] {
@@ -57,21 +62,55 @@ function candidatesFromResponse(data: YtSearchResponse): YoutubeCandidate[] {
   });
 }
 
-function successResponse(candidates: YoutubeCandidate[]) {
+function successBody(candidates: YoutubeCandidate[]) {
   const first = candidates[0];
-  const body = first
+  return first
     ? {
         videoId: first.videoId,
         title: first.title,
         candidates,
       }
     : { videoId: null as string | null, error: "no_results" as const };
+}
 
-  return NextResponse.json(body, {
+function successResponse(candidates: YoutubeCandidate[]) {
+  return NextResponse.json(successBody(candidates), {
     headers: {
       "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
     },
   });
+}
+
+function youtubeApiKey() {
+  return process.env.YOUTUBE_API_KEY?.trim() || null;
+}
+
+async function fetchYoutubeSearch(q: string, apiKey: string) {
+  const res = await fetch(youtubeSearchUrl(q, apiKey).toString(), {
+    next: { revalidate: 3600 },
+    signal: AbortSignal.timeout(12_000),
+  });
+  const data = (await res.json()) as YtSearchResponse;
+  return { data, res };
+}
+
+function networkErrorResponse(error: unknown) {
+  const message = error instanceof Error ? error.message : "Falha na busca";
+  return jsonError("network", 502, message);
+}
+
+async function youtubeSearchResponse(q: string, apiKey: string) {
+  try {
+    return youtubeSearchResult(await fetchYoutubeSearch(q, apiKey));
+  } catch (error) {
+    return networkErrorResponse(error);
+  }
+}
+
+function youtubeSearchResult({ data, res }: Awaited<ReturnType<typeof fetchYoutubeSearch>>) {
+  return res.ok
+    ? successResponse(candidatesFromResponse(data))
+    : jsonError("youtube_api", 502, data.error?.message ?? res.statusText);
 }
 
 export async function GET(request: Request) {
@@ -79,21 +118,10 @@ export async function GET(request: Request) {
   const q = sanitizeQ(searchParams.get("q"));
   if (!q) return jsonError("invalid_query", 400);
 
-  const apiKey = process.env.YOUTUBE_API_KEY?.trim();
+  const apiKey = youtubeApiKey();
   if (!apiKey) {
     return jsonError("missing_api_key", 503, "YOUTUBE_API_KEY não configurada no servidor.");
   }
 
-  try {
-    const res = await fetch(youtubeSearchUrl(q, apiKey).toString(), {
-      next: { revalidate: 3600 },
-      signal: AbortSignal.timeout(12_000),
-    });
-    const data = (await res.json()) as YtSearchResponse;
-    if (!res.ok) return jsonError("youtube_api", 502, data.error?.message ?? res.statusText);
-    return successResponse(candidatesFromResponse(data));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha na busca";
-    return jsonError("network", 502, message);
-  }
+  return youtubeSearchResponse(q, apiKey);
 }

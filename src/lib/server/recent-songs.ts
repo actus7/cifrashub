@@ -10,14 +10,22 @@ export function dedupeSongsByArrangement(
   options: { requireId?: boolean } = {},
 ): StoredSong[] {
   const seen = new Set<string>();
-  return songs.filter((song) => {
-    if (!song) return false;
-    if (options.requireId && !song.id) return false;
-    const key = arrangementKey(song);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return songs.filter((song) => keepUniqueSong(song, seen, options.requireId));
+}
+
+function keepUniqueSong(
+  song: StoredSong | null | undefined,
+  seen: Set<string>,
+  requireId = false,
+): song is StoredSong {
+  if (!song || (requireId && !song.id)) return false;
+  return addUniqueSongKey(seen, arrangementKey(song));
+}
+
+function addUniqueSongKey(seen: Set<string>, key: string) {
+  if (seen.has(key)) return false;
+  seen.add(key);
+  return true;
 }
 
 export async function clearRecentSongsForUser(userId: string) {

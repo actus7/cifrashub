@@ -34,73 +34,92 @@ type SetlistItemWithSong = {
   song: StoredSong | null;
 };
 
-export async function getSetlistDetail(
-  userId: string,
-  setlistId: string,
-): Promise<{
+type SetlistDetail = {
   id: string;
   title: string;
   description: string | null;
   position: number;
   updatedAt: Date;
   items: SetlistItemWithSong[];
-} | null> {
-  const [sl] = await db
+};
+
+type SetlistItemRow = typeof userSetlistItems.$inferSelect;
+
+type SongRow = typeof userSongs.$inferSelect;
+
+export async function getSetlistDetail(userId: string, setlistId: string): Promise<SetlistDetail | null> {
+  const setlist = await findUserSetlist(userId, setlistId);
+  if (!setlist) return null;
+
+  const items = await setlistItems(setlistId);
+  const songsByArrangement = await setlistSongsByArrangement(userId, items);
+
+  return {
+    id: setlist.id,
+    title: setlist.title,
+    description: setlist.description,
+    position: setlist.position,
+    updatedAt: setlist.updatedAt,
+    items: items.map((item) => setlistItemWithSong(item, songsByArrangement)),
+  };
+}
+
+async function findUserSetlist(userId: string, setlistId: string) {
+  const [setlist] = await db
     .select()
     .from(userSetlists)
     .where(and(eq(userSetlists.id, setlistId), eq(userSetlists.userId, userId)))
     .limit(1);
-  if (!sl) return null;
+  return setlist ?? null;
+}
 
-  const items = await db
+function setlistItems(setlistId: string) {
+  return db
     .select()
     .from(userSetlistItems)
     .where(eq(userSetlistItems.setlistId, setlistId))
     .orderBy(asc(userSetlistItems.position), asc(userSetlistItems.createdAt));
+}
 
-  const neededAids = [...new Set(items.map((it) => it.arrangementId))];
-  const songs =
-    neededAids.length > 0
-      ? await db
-          .select()
-          .from(userSongs)
-          .where(
-            and(
-              eq(userSongs.userId, userId),
-              inArray(userSongs.arrangementId, neededAids),
-            ),
-          )
-      : [];
+async function setlistSongsByArrangement(userId: string, items: SetlistItemRow[]) {
+  const arrangementIds = [...new Set(items.map((item) => item.arrangementId))];
+  const rows = arrangementIds.length > 0 ? await setlistSongRows(userId, arrangementIds) : [];
+  return groupSongsByArrangement(rows);
+}
 
-  const byArr = new Map<string, (typeof userSongs.$inferSelect)[]>();
-  for (const r of songs) {
-    const k = r.arrangementId;
-    const list = byArr.get(k) ?? [];
-    list.push(r);
-    byArr.set(k, list);
+function setlistSongRows(userId: string, arrangementIds: string[]) {
+  return db
+    .select()
+    .from(userSongs)
+    .where(and(eq(userSongs.userId, userId), inArray(userSongs.arrangementId, arrangementIds)));
+}
+
+function groupSongsByArrangement(rows: SongRow[]) {
+  const byArrangement = new Map<string, SongRow[]>();
+  for (const row of rows) {
+    const list = byArrangement.get(row.arrangementId) ?? [];
+    list.push(row);
+    byArrangement.set(row.arrangementId, list);
   }
+  return byArrangement;
+}
 
-  const itemsOut: SetlistItemWithSong[] = items.map((it) => {
-    const rows = byArr.get(it.arrangementId) ?? [];
-    const row =
-      rows.find((r) => r.folderId !== null) ?? rows.find((r) => r.isRecent) ?? rows[0];
-    return {
-      itemId: it.id,
-      position: it.position,
-      arrangementId: it.arrangementId,
-      notes: it.notes,
-      song: row ? rowToStoredSong(row) : null,
-    };
-  });
-
+function setlistItemWithSong(
+  item: SetlistItemRow,
+  songsByArrangement: Map<string, SongRow[]>,
+): SetlistItemWithSong {
   return {
-    id: sl.id,
-    title: sl.title,
-    description: sl.description,
-    position: sl.position,
-    updatedAt: sl.updatedAt,
-    items: itemsOut,
+    itemId: item.id,
+    position: item.position,
+    arrangementId: item.arrangementId,
+    notes: item.notes,
+    song: preferredSetlistSong(songsByArrangement.get(item.arrangementId) ?? []),
   };
+}
+
+function preferredSetlistSong(rows: SongRow[]): StoredSong | null {
+  const row = rows.find((song) => song.folderId !== null) ?? rows.find((song) => song.isRecent) ?? rows[0];
+  return row ? rowToStoredSong(row) : null;
 }
 
 export async function assertUserOwnsArrangement(

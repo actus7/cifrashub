@@ -8,13 +8,39 @@ import {
   requireTrimmedText,
 } from "@/lib/server/api-route";
 import { loadCloudFoldersAndSongs } from "@/lib/server/cloud-data";
+import { nextPosition } from "@/lib/server/positions";
+
+async function nextFolderPosition(userId: string) {
+  const existing = await db
+    .select()
+    .from(userFolders)
+    .where(eq(userFolders.userId, userId));
+  return nextPosition(existing);
+}
+
+async function createFolder(userId: string, title: string) {
+  const [created] = await db
+    .insert(userFolders)
+    .values({
+      userId,
+      title,
+      position: await nextFolderPosition(userId),
+      isDefault: false,
+    })
+    .returning();
+  return created!;
+}
+
+async function foldersResponse(userId: string, createdId?: string) {
+  const { folders } = await loadCloudFoldersAndSongs(userId);
+  const folder = createdId ? (folders.find((f) => f.id === createdId) ?? null) : undefined;
+  return NextResponse.json(createdId ? { folder, folders } : { folders });
+}
 
 export async function GET() {
   const auth = await requireApiUserId();
   if ("response" in auth) return auth.response;
-
-  const { folders } = await loadCloudFoldersAndSongs(auth.userId);
-  return NextResponse.json({ folders });
+  return foldersResponse(auth.userId);
 }
 
 export async function POST(req: Request) {
@@ -23,30 +49,7 @@ export async function POST(req: Request) {
 
   const titleResult = requireTrimmedText(request.body.title, "Título obrigatório");
   if ("response" in titleResult) return titleResult.response;
-  const title = titleResult.value;
 
-  const existing = await db
-    .select()
-    .from(userFolders)
-    .where(eq(userFolders.userId, request.userId));
-
-  const position =
-    existing.length === 0
-      ? 0
-      : Math.max(...existing.map((f) => f.position)) + 1;
-
-  const [created] = await db
-    .insert(userFolders)
-    .values({
-      userId: request.userId,
-      title,
-      position,
-      isDefault: false,
-    })
-    .returning();
-
-  const { folders } = await loadCloudFoldersAndSongs(request.userId);
-  const folderDto = folders.find((f) => f.id === created!.id);
-
-  return NextResponse.json({ folder: folderDto ?? null, folders });
+  const created = await createFolder(request.userId, titleResult.value);
+  return foldersResponse(request.userId, created.id);
 }

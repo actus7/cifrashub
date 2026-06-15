@@ -187,19 +187,41 @@ function ToneControl({
     <ToolbarPopoverGroup
       open={expanded === "tone"}
       setExpanded={setExpanded}
-      popoverContent={
-        <>
-          <ExpandButton onClick={() => setTone(tone - 1)}><Minus className="size-3.5" /></ExpandButton>
-          <ExpandButton onClick={() => setTone(tone + 1)}><Plus className="size-3.5" /></ExpandButton>
-          {relToggle && <RelativeToneButton relToggle={relToggle} setTone={setTone} setExpanded={setExpanded} />}
-        </>
-      }
+      popoverContent={<TonePopoverContent tone={tone} setTone={setTone} relToggle={relToggle} setExpanded={setExpanded} />}
     >
       <ToolbarButton active={tone !== 0} onClick={() => toggleMenu("tone")} title="Tom" className="flex-col gap-0 p-0">
-        <span className={cn("text-[8px] font-medium leading-none", tone !== 0 ? "text-primary-foreground/70" : "text-muted-foreground")}>Tom</span>
-        <span className="text-xs font-bold leading-none">{toneLabel(displayKey, tone)}</span>
+        <ToneButtonLabel displayKey={displayKey} tone={tone} />
       </ToolbarButton>
     </ToolbarPopoverGroup>
+  );
+}
+
+function TonePopoverContent({
+  tone,
+  setTone,
+  relToggle,
+  setExpanded,
+}: {
+  tone: number;
+  setTone: (tone: number) => void;
+  relToggle: ReturnType<typeof getRelativeKeyToggle> | null;
+  setExpanded: (v: string | null) => void;
+}) {
+  return (
+    <>
+      <ExpandButton onClick={() => setTone(tone - 1)}><Minus className="size-3.5" /></ExpandButton>
+      <ExpandButton onClick={() => setTone(tone + 1)}><Plus className="size-3.5" /></ExpandButton>
+      {relToggle && <RelativeToneButton relToggle={relToggle} setTone={setTone} setExpanded={setExpanded} />}
+    </>
+  );
+}
+
+function ToneButtonLabel({ displayKey, tone }: { displayKey: string | undefined; tone: number }) {
+  return (
+    <>
+      <span className={cn("text-[8px] font-medium leading-none", tone !== 0 ? "text-primary-foreground/70" : "text-muted-foreground")}>Tom</span>
+      <span className="text-xs font-bold leading-none">{toneLabel(displayKey, tone)}</span>
+    </>
   );
 }
 

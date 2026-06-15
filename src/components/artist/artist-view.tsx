@@ -13,6 +13,55 @@ type ArtistViewProps = {
   onOpenSong: (song: SearchResultSong) => void;
 };
 
+type LoadArtistSongsArgs = {
+  artistName: string;
+  artistSlug: string;
+  isCancelled: () => boolean;
+  setError: (error: string | null) => void;
+  setLoading: (loading: boolean) => void;
+  setSongs: (songs: SearchResultSong[]) => void;
+};
+
+async function loadArtistSongs({
+  artistName,
+  artistSlug,
+  isCancelled,
+  setError,
+  setLoading,
+  setSongs,
+}: LoadArtistSongsArgs) {
+  setLoading(true);
+  setError(null);
+  const result = await fetchArtistSongsResult(artistSlug, artistName);
+  if (isCancelled()) return;
+  applyArtistLoadResult(result, setSongs, setError);
+  setLoading(false);
+}
+
+type ArtistSongsResult =
+  | { songs: SearchResultSong[]; error?: never }
+  | { songs?: never; error: string };
+
+async function fetchArtistSongsResult(
+  artistSlug: string,
+  artistName: string,
+): Promise<ArtistSongsResult> {
+  try {
+    return { songs: await fetchSongsByArtist(artistSlug, artistName) };
+  } catch {
+    return { error: "Não foi possível carregar as músicas do artista." };
+  }
+}
+
+function applyArtistLoadResult(
+  result: ArtistSongsResult,
+  setSongs: (songs: SearchResultSong[]) => void,
+  setError: (error: string | null) => void,
+) {
+  setSongs(result.songs ?? []);
+  setError(result.error ?? null);
+}
+
 export function ArtistView({
   artistName,
   artistSlug,
@@ -25,21 +74,14 @@ export function ArtistView({
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const list = await fetchSongsByArtist(artistSlug, artistName);
-        if (!cancelled) setSongs(list);
-      } catch {
-        if (!cancelled) {
-          setSongs([]);
-          setError("Não foi possível carregar as músicas do artista.");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+    void loadArtistSongs({
+      artistName,
+      artistSlug,
+      isCancelled: () => cancelled,
+      setError,
+      setLoading,
+      setSongs,
+    });
 
     return () => {
       cancelled = true;

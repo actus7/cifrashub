@@ -8,32 +8,40 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 type PwaInstallState = {
-  /** Android/Chrome: native install prompt is available */
   canPrompt: boolean;
-  /** iOS Safari: manual "Add to Home Screen" flow needed */
   isIos: boolean;
-  /** Already running as standalone PWA */
   isInstalled: boolean;
   promptInstall: () => Promise<void>;
 };
 
+function isStandaloneDisplay() {
+  return window.matchMedia("(display-mode: standalone)").matches;
+}
+
+function isNavigatorStandalone() {
+  return (navigator as { standalone?: boolean }).standalone === true;
+}
+
 function getIsInstalled() {
   if (typeof window === "undefined") return false;
+  return isStandaloneDisplay() || isNavigatorStandalone();
+}
+
+function isIosDevice() {
   return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (navigator as { standalone?: boolean }).standalone === true
+    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
   );
+}
+
+function isSafariOnIos() {
+  const ua = navigator.userAgent;
+  return /Safari/.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua);
 }
 
 function getIsIos(standalone: boolean) {
   if (typeof window === "undefined") return false;
-  const ua = navigator.userAgent;
-  const isIosDevice =
-    /iPhone|iPad|iPod/.test(ua) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  // Chrome/Firefox on iOS use CriOS/FxiOS — they don't support Add to Home Screen via banner
-  const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua);
-  return isIosDevice && isSafari && !standalone;
+  return isIosDevice() && isSafariOnIos() && !standalone;
 }
 
 export function usePwaInstall(): PwaInstallState {

@@ -6,6 +6,7 @@ import type { StoredSong } from "@/lib/types";
 import { readJsonBody } from "@/lib/server/api-route";
 import { loadCloudFoldersAndSongs } from "@/lib/server/cloud-data";
 import { requireOwnedFolder } from "@/lib/server/folder-route";
+import { nextPosition } from "@/lib/server/positions";
 import {
   resolveArrangementId,
   sourceArtistSlugForRow,
@@ -50,7 +51,7 @@ async function nextFolderSongPosition(folderCtx: ResolvedFolderCtx) {
     .from(userSongs)
     .where(and(eq(userSongs.userId, folderCtx.userId), eq(userSongs.folderId, folderCtx.folderId)));
 
-  return rows.length === 0 ? 0 : Math.max(...rows.map((r) => r.position)) + 1;
+  return nextPosition(rows);
 }
 
 async function updateFolderSong(id: string, song: StoredSong) {
@@ -84,6 +85,28 @@ async function insertFolderSong(folderCtx: ResolvedFolderCtx, song: StoredSong) 
   });
 }
 
+function hasStoredSongIdentity(song: StoredSong) {
+  return Boolean(song.id && song.title);
+}
+
+function hasStoredSongContent(song: StoredSong) {
+  return Boolean(song.songData && Array.isArray(song.songData));
+}
+
+function isValidStoredSong(song: StoredSong | null | undefined): song is StoredSong {
+  if (!song) return false;
+  return hasStoredSongIdentity(song) && hasStoredSongContent(song);
+}
+
+async function upsertFolderSong(folderCtx: ResolvedFolderCtx, song: StoredSong) {
+  const existingId = await existingSongId(folderCtx, resolveArrangementId(song));
+  if (existingId) {
+    await updateFolderSong(existingId, song);
+    return;
+  }
+  await insertFolderSong(folderCtx, song);
+}
+
 export async function GET(_req: Request, ctx: RouteCtx) {
   const folderCtx = await requireOwnedFolder(ctx);
   if ("response" in folderCtx) return folderCtx.response;
@@ -101,23 +124,11 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if ("response" in json) return json.response;
   const body = json.body;
 
-  if (
-    !body?.id ||
-    !body.title ||
-    !body.songData ||
-    !Array.isArray(body.songData)
-  ) {
+  if (!isValidStoredSong(body)) {
     return NextResponse.json({ error: "Dados da música inválidos" }, { status: 400 });
   }
 
-  const existingId = await existingSongId(folderCtx, resolveArrangementId(body));
-
-  if (existingId) {
-    await updateFolderSong(existingId, body);
-  } else {
-    await insertFolderSong(folderCtx, body);
-  }
-
+  await upsertFolderSong(folderCtx, body);
   return respondWithFolders(folderCtx.userId);
 }
 

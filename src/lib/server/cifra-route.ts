@@ -2,16 +2,24 @@ import { NextResponse } from "next/server";
 
 const SLUG_SEGMENT_RE = /^[a-z0-9-]{1,120}$/i;
 
+function slugParam(searchParams: URLSearchParams, key: string) {
+  return searchParams.get(key)?.trim() ?? "";
+}
+
+function validSlugPair(artistSlug: string, slug: string) {
+  return SLUG_SEGMENT_RE.test(artistSlug) && SLUG_SEGMENT_RE.test(slug);
+}
+
+function invalidSlugParams() {
+  return { response: NextResponse.json({ error: "Parâmetros inválidos" }, { status: 400 }) };
+}
+
 export function readCifraSlugParams(request: Request) {
   const { searchParams } = new URL(request.url);
-  const artistSlug = searchParams.get("artistSlug")?.trim() ?? "";
-  const slug = searchParams.get("slug")?.trim() ?? "";
+  const artistSlug = slugParam(searchParams, "artistSlug");
+  const slug = slugParam(searchParams, "slug");
 
-  if (!SLUG_SEGMENT_RE.test(artistSlug) || !SLUG_SEGMENT_RE.test(slug)) {
-    return { response: NextResponse.json({ error: "Parâmetros inválidos" }, { status: 400 }) };
-  }
-
-  return { artistSlug, slug };
+  return validSlugPair(artistSlug, slug) ? { artistSlug, slug } : invalidSlugParams();
 }
 
 export const cifraClubHeaders = {

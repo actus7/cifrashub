@@ -78,38 +78,80 @@ async function fetchCifraClubHtml(url: string): Promise<string | null> {
   }
 }
 
-export async function GET(request: Request) {
-  const params = readCifraSlugParams(request);
-  if ("response" in params) {
-    return NextResponse.json({ html: null, error: "Parâmetros inválidos" }, { status: 400 });
-  }
-  const { artistSlug, slug } = params;
-
-  const urlsToTry = [
+function cifraClubUrls(artistSlug: string, slug: string) {
+  return [
     `https://www.cifraclub.com.br/${artistSlug}/${slug}/imprimir.html`,
     `https://www.cifraclub.com.br/${artistSlug}/${slug}/`,
   ];
+}
+
+async function fetchFreshCifra(artistSlug: string, slug: string) {
+  for (const url of cifraClubUrls(artistSlug, slug)) {
+    const html = await fetchCifraClubHtml(url);
+    if (html) return { html, url };
+  }
+  return null;
+}
+
+function invalidParamsResponse() {
+  return NextResponse.json({ html: null, error: "Parâmetros inválidos" }, { status: 400 });
+}
+
+function unavailableResponse() {
+  return NextResponse.json(
+    { html: null, error: "Cifra Club não retornou a cifra." },
+    { status: 502 },
+  );
+}
+
+function htmlResponse(html: string) {
+  return NextResponse.json({ html });
+}
+
+async function freshCifraResponse(artistSlug: string, slug: string) {
+  const fresh = await fetchFreshCifra(artistSlug, slug);
+  if (!fresh) return null;
+
+  await saveCachedHtml(artistSlug, slug, fresh.url, fresh.html);
+  return htmlResponse(fresh.html);
+}
+
+async function cachedCifraResponse(artistSlug: string, slug: string) {
+  const cached = await findCachedCifra(artistSlug, slug);
+  if (shouldUseCachedCifra(cached)) return htmlResponse(cached.html);
+
+  // A network/upstream failure must not throw away an available stale cache:
+  // fall back to it instead of bubbling up a 502.
+  try {
+    const fresh = await freshCifraResponse(artistSlug, slug);
+    if (fresh) return fresh;
+  } catch (e) {
+    console.error("Erro ao buscar cifra fresca, usando fallback:", e);
+  }
+
+  return fallbackCifraResponse(cached);
+}
+
+function shouldUseCachedCifra(cached: CachedCifra | null): cached is CachedCifra {
+  return Boolean(cached && isCacheFresh(cached));
+}
+
+function fallbackCifraResponse(cached: CachedCifra | null) {
+  return cached ? htmlResponse(cached.html) : unavailableResponse();
+}
+
+function fetchErrorResponse(e: unknown) {
+  const message = e instanceof Error ? e.message : "Falha ao buscar cifra";
+  return NextResponse.json({ html: null, error: message }, { status: 502 });
+}
+
+export async function GET(request: Request) {
+  const params = readCifraSlugParams(request);
+  if ("response" in params) return invalidParamsResponse();
 
   try {
-    const cached = await findCachedCifra(artistSlug, slug);
-    if (cached && isCacheFresh(cached)) return NextResponse.json({ html: cached.html });
-
-    for (const url of urlsToTry) {
-      const html = await fetchCifraClubHtml(url);
-      if (html) {
-        await saveCachedHtml(artistSlug, slug, url, html);
-        return NextResponse.json({ html });
-      }
-    }
-
-    if (cached) return NextResponse.json({ html: cached.html });
-
-    return NextResponse.json(
-      { html: null, error: "Cifra Club não retornou a cifra." },
-      { status: 502 },
-    );
+    return await cachedCifraResponse(params.artistSlug, params.slug);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Falha ao buscar cifra";
-    return NextResponse.json({ html: null, error: message }, { status: 502 });
+    return fetchErrorResponse(e);
   }
 }

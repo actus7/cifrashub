@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { memo, useEffect, useRef, useState } from "react";
 import { Loader2, X } from "lucide-react";
+import { isValidYoutubeId } from "@/lib/youtube";
 
 type YoutubeMiniPlayerProps = {
   open: boolean;
@@ -76,7 +77,7 @@ function YoutubeMiniPlayerContent({
     songId,
   });
 
-  const shouldSearch = Boolean(onVideoResolved) && !embedUrl && !isParsing;
+  const shouldSearch = shouldSearchYoutubeFallback({ embedUrl, isParsing, onVideoResolved });
 
   return (
     <MiniPlayerPanel
@@ -93,6 +94,18 @@ function YoutubeMiniPlayerContent({
       showSearchSpinner={shouldSearch && (!fallbackFailed || fallbackLoading)}
     />
   );
+}
+
+function shouldSearchYoutubeFallback({
+  embedUrl,
+  isParsing,
+  onVideoResolved,
+}: {
+  embedUrl: string | null;
+  isParsing: boolean;
+  onVideoResolved?: (videoId: string) => void;
+}) {
+  return Boolean(onVideoResolved) && !embedUrl && !isParsing;
 }
 
 function useMiniPlayerDrag({
@@ -180,7 +193,7 @@ async function resolveYoutubeFallback(query: string) {
   const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(query)}`);
   const data = (await res.json()) as { videoId?: string | null };
   const id = typeof data.videoId === "string" ? data.videoId.trim() : "";
-  return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+  return isValidYoutubeId(id) ? id : null;
 }
 
 function startMiniPlayerDrag(

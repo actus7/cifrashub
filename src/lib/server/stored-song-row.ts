@@ -12,15 +12,21 @@ export function youtubeIdForRow(s: Pick<StoredSong, "youtubeId">): string | null
   return isValidYoutubeId(v) ? v : null;
 }
 
+const UI_PREF_KEYS = [
+  "simplified",
+  "showTabs",
+  "mirrored",
+  "fontSizeOffset",
+  "columns",
+  "spacingOffset",
+] as const satisfies ReadonlyArray<keyof StoredSongUiPrefs>;
+
 function uiPrefsFromStored(s: StoredSong): StoredSongUiPrefs | null {
-  const u: StoredSongUiPrefs = {};
-  if (s.simplified !== undefined) u.simplified = s.simplified;
-  if (s.showTabs !== undefined) u.showTabs = s.showTabs;
-  if (s.mirrored !== undefined) u.mirrored = s.mirrored;
-  if (s.fontSizeOffset !== undefined) u.fontSizeOffset = s.fontSizeOffset;
-  if (s.columns !== undefined) u.columns = s.columns;
-  if (s.spacingOffset !== undefined) u.spacingOffset = s.spacingOffset;
-  return Object.keys(u).length > 0 ? u : null;
+  const entries = UI_PREF_KEYS
+    .map(key => [key, s[key]] as const)
+    .filter((entry): entry is readonly [keyof StoredSongUiPrefs, NonNullable<typeof entry[1]>] => entry[1] !== undefined);
+
+  return entries.length > 0 ? Object.fromEntries(entries) as StoredSongUiPrefs : null;
 }
 
 export function toneCapoUiFromStored(s: StoredSong): {

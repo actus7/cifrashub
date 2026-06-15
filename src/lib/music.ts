@@ -70,46 +70,72 @@ function isMinorKey(key: string): boolean {
  * Calcula estado do toggle relativo maior/menor.
  * Retorna o tom destino e os labels para o botão.
  */
+function normalizeSemitone(value: number): number {
+  return ((value % 12) + 12) % 12;
+}
+
+function relativeBackLabel(writtenKey: string, minor: boolean): string {
+  const root = transposeRootNote(writtenKey, 0);
+  return minor ? `Voltar p/ Menor (${root}m)` : `Voltar p/ Maior (${root})`;
+}
+
+function relativeTargetLabel(targetNote: string, minor: boolean): string {
+  return minor ? `Relativo Maior (${targetNote})` : `Relativo Menor (${targetNote}m)`;
+}
+
+function relativeOffset(minor: boolean) {
+  return minor ? 3 : -3;
+}
+
+function relativeToggleLabel(writtenKey: string, minor: boolean, isAtRelative: boolean, targetNote: string) {
+  return isAtRelative
+    ? relativeBackLabel(writtenKey, minor)
+    : relativeTargetLabel(targetNote, minor);
+}
+
 export function getRelativeKeyToggle(
   writtenKey: string,
   tone: number,
 ): { targetTone: number; isAtRelative: boolean; label: string } {
   const minor = isMinorKey(writtenKey);
-  const relativeOffset = minor ? 3 : -3;
-  const normalizedTone = ((tone % 12) + 12) % 12;
-  const isAtRelative = normalizedTone === ((relativeOffset % 12) + 12) % 12;
-
-  const targetTone = isAtRelative ? 0 : relativeOffset;
+  const offset = relativeOffset(minor);
+  const isAtRelative = normalizeSemitone(tone) === normalizeSemitone(offset);
+  const targetTone = isAtRelative ? 0 : offset;
   const currentKey = transposeRootNote(writtenKey, isAtRelative ? 0 : tone);
-  const targetNote = transposeRootNote(currentKey, isAtRelative ? -relativeOffset : relativeOffset);
+  const targetNote = transposeRootNote(currentKey, isAtRelative ? -offset : offset);
 
-  const label = isAtRelative
-    ? minor
-      ? `Voltar p/ Menor (${transposeRootNote(writtenKey, 0)}m)`
-      : `Voltar p/ Maior (${transposeRootNote(writtenKey, 0)})`
-    : minor
-      ? `Relativo Maior (${targetNote})`
-      : `Relativo Menor (${targetNote}m)`;
-
-  return { targetTone, isAtRelative, label };
+  return {
+    targetTone,
+    isAtRelative,
+    label: relativeToggleLabel(writtenKey, minor, isAtRelative, targetNote),
+  };
 }
 
 export function simplifyChord(chord: string): string {
-  if (!chord) return "";
-  const simple = chord.split("/")[0] ?? "";
-  const match = simple.match(/^([A-G][#b]?m?)/);
-  return match?.[1] ?? simple;
+  const simple = baseChord(chord);
+  return simple ? simplifiedChordName(simple) : "";
 }
+
+function baseChord(chord: string) {
+  return chord.split("/")[0] ?? "";
+}
+
+function simplifiedChordName(chord: string) {
+  return chord.match(/^([A-G][#b]?m?)/)?.[1] ?? chord;
+}
+
+const SECTION_MATCHERS: Array<[RegExp, SectionType]> = [
+  [/intro/, "intro"],
+  [/pre.?refr[aã]o|pre.?chorus/, "pre-chorus"],
+  [/vers[oõ]|parte|estrofe/, "verse"],
+  [/refr[aã]o|chorus/, "chorus"],
+  [/ponte|bridge/, "bridge"],
+  [/tab\b/, "tab"],
+  [/solo/, "solo"],
+  [/final|outro/, "outro"],
+];
 
 export function classifySection(label: string): SectionType {
   const lower = label.toLowerCase();
-  if (/intro/.test(lower)) return "intro";
-  if (/pre.?refr[aã]o|pre.?chorus/.test(lower)) return "pre-chorus";
-  if (/vers[oõ]|parte|estrofe/.test(lower)) return "verse";
-  if (/refr[aã]o|chorus/.test(lower)) return "chorus";
-  if (/ponte|bridge/.test(lower)) return "bridge";
-  if (/tab\b/.test(lower)) return "tab";
-  if (/solo/.test(lower)) return "solo";
-  if (/final|outro/.test(lower)) return "outro";
-  return "verse";
+  return SECTION_MATCHERS.find(([pattern]) => pattern.test(lower))?.[1] ?? "verse";
 }

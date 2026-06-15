@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { userFolders, userSongs } from "@/db/schema";
 import type { Folder, StoredSong } from "@/lib/types";
 import { requireApiUserJson } from "@/lib/server/api-route";
+import { nextPosition } from "@/lib/server/positions";
 import {
   ensureDefaultFolder,
   loadCloudFoldersAndSongs,
@@ -41,41 +42,71 @@ type SongSyncState = {
   toInsert: SongInsert[];
 };
 
+function songFolderKey(folderId: string | null, arrangementId: string) {
+  return `${folderId ?? ""}|${arrangementId}`;
+}
+
+function updateMaxFolderPosition(maxPosByFolder: Map<string, number>, row: CloudSongRow) {
+  if (!row.folderId) return;
+  const current = maxPosByFolder.get(row.folderId) ?? -1;
+  if (row.position > current) maxPosByFolder.set(row.folderId, row.position);
+}
+
 async function resolveFolderId(
   userId: string,
   localFolder: Folder,
   cloudFolders: CloudFolderRow[],
 ): Promise<string> {
-  const isDefaultLocal =
-    localFolder.isDefault ||
-    localFolder.id === "default" ||
-    localFolder.title === "Favoritos";
+  const isDefaultLocal = isDefaultFolder(localFolder);
+  const existing = existingCloudFolder(localFolder, cloudFolders, isDefaultLocal);
+  if (existing) return existing.id;
 
-  if (isDefaultLocal) {
-    const def = cloudFolders.find((f) => f.isDefault || f.title === "Favoritos");
-    if (def) return def.id;
-  }
+  const created = await createCloudFolder(userId, localFolder, cloudFolders, isDefaultLocal);
+  cloudFolders.push(created);
+  return created.id;
+}
 
-  const byName = cloudFolders.find((f) => f.title === localFolder.title);
-  if (byName) return byName.id;
+function isDefaultFolder(folder: Folder): boolean {
+  return folder.isDefault || folder.id === "default" || folder.title === "Favoritos";
+}
 
-  const position =
-    cloudFolders.length === 0
-      ? 0
-      : Math.max(...cloudFolders.map((f) => f.position)) + 1;
+function existingCloudFolder(
+  localFolder: Folder,
+  cloudFolders: CloudFolderRow[],
+  isDefaultLocal: boolean,
+): CloudFolderRow | undefined {
+  return defaultCloudFolder(cloudFolders, isDefaultLocal) ?? namedCloudFolder(cloudFolders, localFolder.title);
+}
 
+function defaultCloudFolder(
+  cloudFolders: CloudFolderRow[],
+  isDefaultLocal: boolean,
+): CloudFolderRow | undefined {
+  if (!isDefaultLocal) return undefined;
+  return cloudFolders.find((f) => f.isDefault || f.title === "Favoritos");
+}
+
+function namedCloudFolder(cloudFolders: CloudFolderRow[], title: string): CloudFolderRow | undefined {
+  return cloudFolders.find((f) => f.title === title);
+}
+
+async function createCloudFolder(
+  userId: string,
+  localFolder: Folder,
+  cloudFolders: CloudFolderRow[],
+  isDefaultLocal: boolean,
+): Promise<CloudFolderRow> {
   const [created] = await db
     .insert(userFolders)
     .values({
       userId,
       title: localFolder.title,
-      position,
+      position: nextPosition(cloudFolders),
       isDefault: isDefaultLocal,
     })
     .returning();
 
-  cloudFolders.push(created!);
-  return created!.id;
+  return created!;
 }
 
 function createSongSyncState(allCloudSongs: CloudSongRow[]): SongSyncState {
@@ -87,11 +118,8 @@ function createSongSyncState(allCloudSongs: CloudSongRow[]): SongSyncState {
   };
 
   for (const row of allCloudSongs) {
-    state.existingByKey.set(`${row.folderId ?? ""}|${row.arrangementId}`, row);
-    if (row.folderId) {
-      const current = state.maxPosByFolder.get(row.folderId) ?? -1;
-      if (row.position > current) state.maxPosByFolder.set(row.folderId, row.position);
-    }
+    state.existingByKey.set(songFolderKey(row.folderId, row.arrangementId), row);
+    updateMaxFolderPosition(state.maxPosByFolder, row);
   }
 
   return state;
@@ -119,18 +147,25 @@ function collectSongsForFolder(
 
   for (const song of dedupeSongsByArrangement(songs)) {
     const aid = resolveArrangementId(song);
-    const key = `${folderId}|${aid}`;
+    const key = songFolderKey(folderId, aid);
     const existing = state.existingByKey.get(key);
 
-    if (existing) {
-      if (existing.id) state.toUpdate.push({ id: existing.id, song });
-      continue;
-    }
+    if (syncExistingSong(state, existing, song)) continue;
 
     state.toInsert.push(buildStoredSongRow(userId, folderId, song, nextPos, false));
     nextPos++;
     state.existingByKey.set(key, {} as CloudSongRow);
   }
+}
+
+function syncExistingSong(
+  state: SongSyncState,
+  existing: CloudSongRow | undefined,
+  song: StoredSong,
+) {
+  if (!existing) return false;
+  if (existing.id) state.toUpdate.push({ id: existing.id, song });
+  return true;
 }
 
 function updateStoredSongRow({ id, song }: SongUpdate) {
@@ -167,38 +202,40 @@ async function mergeRecentSongs(userId: string, localRecentes: StoredSong[]) {
   await replaceRecentSongsForUser(userId, mergedRecentes);
 }
 
+async function syncUserLibrary(userId: string, body: SyncBody) {
+  await ensureDefaultFolder(userId);
+
+  const cloudFolderRows = await cloudFoldersForUser(userId);
+  const songSync = createSongSyncState(await cloudSongsForUser(userId));
+
+  await collectFolderSongs(userId, body.folders ?? [], cloudFolderRows, songSync);
+  await persistSongSync(songSync);
+  await mergeRecentSongs(userId, dedupeSongsByArrangement(body.recentes ?? []));
+}
+
+function cloudFoldersForUser(userId: string) {
+  return db
+    .select()
+    .from(userFolders)
+    .where(eq(userFolders.userId, userId));
+}
+
+function cloudSongsForUser(userId: string) {
+  return db
+    .select()
+    .from(userSongs)
+    .where(eq(userSongs.userId, userId));
+}
+
+async function persistSongSync(songSync: SongSyncState) {
+  await Promise.all(songSync.toUpdate.map(updateStoredSongRow));
+  if (songSync.toInsert.length > 0) await db.insert(userSongs).values(songSync.toInsert);
+}
+
 export async function POST(req: Request) {
   const request = await requireApiUserJson<SyncBody>(req);
   if ("response" in request) return request.response;
-  const body = request.body;
+  await syncUserLibrary(request.userId, request.body);
 
-  await ensureDefaultFolder(request.userId);
-
-  const localFolders = body.folders ?? [];
-  const localRecentes = dedupeSongsByArrangement(body.recentes ?? []);
-
-  // 1. Carrega estado cloud em uma única query
-  const cloudFolderRows = await db
-    .select()
-    .from(userFolders)
-    .where(eq(userFolders.userId, request.userId));
-
-  const allCloudSongs = await db
-    .select()
-    .from(userSongs)
-    .where(eq(userSongs.userId, request.userId));
-
-  const songSync = createSongSyncState(allCloudSongs);
-  await collectFolderSongs(request.userId, localFolders, cloudFolderRows, songSync);
-
-  await Promise.all(songSync.toUpdate.map(updateStoredSongRow));
-
-  if (songSync.toInsert.length > 0) {
-    await db.insert(userSongs).values(songSync.toInsert);
-  }
-
-  await mergeRecentSongs(request.userId, localRecentes);
-
-  const payload = await loadCloudFoldersAndSongs(request.userId);
-  return NextResponse.json(payload);
+  return NextResponse.json(await loadCloudFoldersAndSongs(request.userId));
 }

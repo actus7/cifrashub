@@ -84,20 +84,30 @@ async function buildSharePayload(userId: string, body: ShareRequestBody) {
 
 async function arrangementSharePayload(userId: string, arrangementId: string | undefined) {
   const aid = arrangementId?.trim();
-  if (!aid) {
-    return { response: NextResponse.json({ error: "arrangementId obrigatório" }, { status: 400 }) };
-  }
+  if (!aid) return shareError("arrangementId obrigatório", 400);
 
-  const rows = await db
+  const row = preferredArrangementRow(await arrangementRows(userId, aid));
+  if (!row) return shareError("Cifra não encontrada", 404);
+
+  return arrangementPayload(row);
+}
+
+function shareError(error: string, status: number) {
+  return { response: NextResponse.json({ error }, { status }) };
+}
+
+function arrangementRows(userId: string, aid: string) {
+  return db
     .select()
     .from(userSongs)
     .where(and(eq(userSongs.userId, userId), eq(userSongs.arrangementId, aid)));
-  const row = rows.find((r) => r.folderId !== null) ?? rows.find((r) => r.isRecent) ?? rows[0];
+}
 
-  if (!row) {
-    return { response: NextResponse.json({ error: "Cifra não encontrada" }, { status: 404 }) };
-  }
+function preferredArrangementRow(rows: Array<typeof userSongs.$inferSelect>) {
+  return rows.find((row) => row.folderId !== null) ?? rows.find((row) => row.isRecent) ?? rows[0];
+}
 
+function arrangementPayload(row: typeof userSongs.$inferSelect) {
   return {
     resourceType: "arrangement" as const,
     payload: { type: "arrangement", song: rowToStoredSong(row) } satisfies ShareSnapshotPayload,
