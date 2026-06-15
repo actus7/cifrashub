@@ -46,6 +46,14 @@ function useLoadedSong(artistSlug: string | undefined, slug: string | undefined)
   // overwrite the state with the wrong song.
   const lastRequestedRef = useRef("");
 
+  const applyResult = useCallback((result: LoadSongResult) => {
+    if (isLoadSongError(result)) {
+      setError(result.error);
+    } else {
+      applyLoadedSong(result.song, setCurrentSong, setSongData, resetPlayer, addToRecentesRef.current);
+    }
+  }, [resetPlayer]);
+
   const load = useCallback(async () => {
     if (!artistSlug || !slug) return;
     const requestKey = `${artistSlug}/${slug}`;
@@ -54,16 +62,12 @@ function useLoadedSong(artistSlug: string | undefined, slug: string | undefined)
     setError(null);
 
     const result = await loadSongResult(artistSlug, slug);
+    // Ignore a result that a newer navigation has already superseded.
     if (lastRequestedRef.current !== requestKey) return;
 
-    if (isLoadSongError(result)) {
-      setError(result.error);
-    } else {
-      applyLoadedSong(result.song, setCurrentSong, setSongData, resetPlayer, addToRecentesRef.current);
-    }
-
+    applyResult(result);
     setIsLoading(false);
-  }, [artistSlug, resetPlayer, slug]);
+  }, [applyResult, artistSlug, slug]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
