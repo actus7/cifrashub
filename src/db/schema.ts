@@ -87,6 +87,26 @@ export const userFolders = pgTable(
   },
 );
 
+export const cachedCifras = pgTable(
+  "cached_cifra",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    artistSlug: text("artist_slug").notNull(),
+    slug: text("slug").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    html: text("html").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    uqCachedCifraSource: uniqueIndex("uq_cached_cifra_source").on(t.artistSlug, t.slug),
+  }),
+);
+
 export const userSongs = pgTable(
   "user_song",
   {
