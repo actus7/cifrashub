@@ -81,7 +81,12 @@ export async function signOut(options?: { callbackUrl?: string }): Promise<void>
   // expire the httpOnly __Secure-neon-auth.* cookies in production, which leaves
   // the user looking logged in after the reload. Force a server-side clear.
   try {
-    await fetch("/api/sign-out", { method: "POST", credentials: "include" });
+    // Bounded so a slow/unreachable endpoint can't hang the logout flow.
+    await fetch("/api/sign-out", {
+      method: "POST",
+      credentials: "include",
+      signal: AbortSignal.timeout(3000),
+    });
   } catch (error) {
     console.error("Session cookie cleanup failed:", error);
   }
