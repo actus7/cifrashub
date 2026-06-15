@@ -77,15 +77,17 @@ export default function FolderPage() {
     if (!folderId || songs.length === 0) return;
     const keys = new Set(songs.map((song) => arrangementKey(song)));
     if (isCloud) {
-      try {
-        let nextFolders = folders;
-        for (const key of keys) {
+      let nextFolders = folders;
+      for (const key of keys) {
+        try {
           const { folders: next } = await cloudRemoveSongFromFolder(folderId, key);
           nextFolders = next;
+        } catch (error) {
+          console.error(`Failed to remove song ${key} from cloud:`, error);
         }
-        setFolders(nextFolders);
-        notifyCloudMutation();
-      } catch {}
+      }
+      setFolders(nextFolders);
+      notifyCloudMutation();
     } else {
       const updated = folders.map((f) => {
         if (f.id !== folderId) return f;

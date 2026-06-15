@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Check, Music, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,19 +26,23 @@ export function FolderSongCard({
   onToggleSelect,
   onLongPressSelect,
 }: FolderSongCardProps) {
-  const longPressTimerRef = useRef<number | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current === null) return;
-    window.clearTimeout(longPressTimerRef.current);
+    clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = null;
   };
+
+  useEffect(() => {
+    return () => clearLongPressTimer();
+  }, []);
 
   const handlePointerDown = () => {
     longPressTriggeredRef.current = false;
     clearLongPressTimer();
-    longPressTimerRef.current = window.setTimeout(() => {
+    longPressTimerRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true;
       onLongPressSelect();
     }, 450);
