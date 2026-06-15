@@ -2,8 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { cachedCifras } from "@/db/schema";
+import { cifraClubHeaders, readCifraSlugParams } from "@/lib/server/cifra-route";
 
-const SLUG_SEGMENT_RE = /^[a-z0-9-]{1,120}$/i;
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 
 type CachedCifra = {
@@ -64,12 +64,7 @@ async function saveCachedHtml(
 async function fetchCifraClubHtml(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-      },
+      headers: cifraClubHeaders,
       cache: "no-store",
       signal: AbortSignal.timeout(25_000),
     });
@@ -84,13 +79,11 @@ async function fetchCifraClubHtml(url: string): Promise<string | null> {
 }
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const artistSlug = searchParams.get("artistSlug")?.trim() ?? "";
-  const slug = searchParams.get("slug")?.trim() ?? "";
-
-  if (!SLUG_SEGMENT_RE.test(artistSlug) || !SLUG_SEGMENT_RE.test(slug)) {
+  const params = readCifraSlugParams(request);
+  if ("response" in params) {
     return NextResponse.json({ html: null, error: "Parâmetros inválidos" }, { status: 400 });
   }
+  const { artistSlug, slug } = params;
 
   const urlsToTry = [
     `https://www.cifraclub.com.br/${artistSlug}/${slug}/imprimir.html`,

@@ -16,40 +16,138 @@ import {
   cloudAddSetlistItem,
 } from "@/lib/storage";
 import { useLibraryStore } from "@/store/use-library-store";
-import type { LocalSetlistStored, Folder, StoredSong } from "@/lib/types";
+import type { LocalSetlistStored, Folder, StoredSong, SetlistSummary } from "@/lib/types";
 import { localSetlistsToSummaries } from "@/lib/setlist-local";
 import { cloudSyncSignalKey } from "@/lib/sync-signal-key";
 
 const CLOUD_SYNC_POLL_MS = 15_000;
+
+type SyncStatus = "loading" | "authenticated" | "unauthenticated";
+type CloudSnapshot = { folders?: Folder[]; recentes?: StoredSong[] };
+type LibrarySetters = {
+  setFolders: (folders: Folder[]) => void;
+  setRecentes: (songs: StoredSong[]) => void;
+  setLocalSetlistsRaw: (setlists: LocalSetlistStored[]) => void;
+  setSetlistSummaries: (setlists: SetlistSummary[]) => void;
+  setLibraryLoaded: (loaded: boolean) => void;
+};
+type SyncEffectOptions = LibrarySetters & {
+  applyCloudLibrarySnapshot: (payload: CloudSnapshot) => void;
+  status: SyncStatus;
+  userId: string | null;
+};
+
+type CloudSyncContext = Pick<SyncEffectOptions, "applyCloudLibrarySnapshot" | "setFolders" | "setRecentes" | "setSetlistSummaries" | "userId"> & {
+  cancelled: () => boolean;
+};
+
+async function migrateGuestSetlist(sl: LocalSetlistStored) {
+  const { setlist } = await cloudCreateSetlist(sl.title, sl.description ?? null);
+
+  for (const item of sl.items) {
+    try {
+      await cloudAddSetlistItem(setlist.id, item.arrangementId, item.notes ?? null);
+    } catch {
+      /* arranjo não está na biblioteca */
+    }
+  }
+}
 
 async function migrateGuestSetlistsProgressive(
   guest: LocalSetlistStored[],
   save: (next: LocalSetlistStored[]) => void,
 ) {
   let remaining = [...guest];
+
   for (const sl of guest) {
     try {
-      const { setlist } = await cloudCreateSetlist(
-        sl.title,
-        sl.description ?? null,
-      );
-      for (const it of sl.items) {
-        try {
-          await cloudAddSetlistItem(
-            setlist.id,
-            it.arrangementId,
-            it.notes ?? null,
-          );
-        } catch {
-          /* arranjo não está na biblioteca */
-        }
-      }
+      await migrateGuestSetlist(sl);
       remaining = remaining.filter((x) => x.id !== sl.id);
       save(remaining);
     } catch {
       break;
     }
   }
+}
+
+function loadLocalLibrary(setters: LibrarySetters) {
+  const folders = loadFolders();
+  const recentes = loadRecentes();
+  const setlists = loadLocalSetlists();
+
+  if (folders !== null) setters.setFolders(folders.length > 0 ? folders : DEFAULT_FOLDERS);
+  if (recentes !== null) setters.setRecentes(recentes);
+  if (setlists !== null) {
+    setters.setLocalSetlistsRaw(setlists);
+    setters.setSetlistSummaries(localSetlistsToSummaries(setlists));
+  }
+
+  setters.setLibraryLoaded(true);
+}
+
+async function loadInitialCloudLibrary(isFirstSync: boolean, ctx: CloudSyncContext) {
+  if (isFirstSync) {
+    const merged = await cloudSync({
+      folders: loadFoldersPayload(),
+      recentes: loadRecentes() ?? [],
+    });
+    if (ctx.cancelled()) return;
+    ctx.applyCloudLibrarySnapshot(merged);
+    localStorage.setItem(cloudSyncDoneKey(ctx.userId!), "1");
+    return;
+  }
+
+  const library = await cloudFetchLibrary();
+  if (!ctx.cancelled()) ctx.applyCloudLibrarySnapshot(library);
+}
+
+function loadFoldersPayload() {
+  const folders = loadFolders();
+  return folders && folders.length > 0 ? folders : DEFAULT_FOLDERS;
+}
+
+async function loadCloudSetlists(ctx: CloudSyncContext) {
+  try {
+    const setlists = await cloudFetchSetlists();
+    if (!ctx.cancelled()) ctx.setSetlistSummaries(setlists.setlists);
+  } catch {
+    if (!ctx.cancelled()) ctx.setSetlistSummaries([]);
+  }
+}
+
+async function performSyncOrFetch(isFirstSync: boolean, ctx: CloudSyncContext) {
+  await loadInitialCloudLibrary(isFirstSync, ctx);
+
+  const guestSetlists = loadLocalSetlists();
+  if (guestSetlists?.length) {
+    await migrateGuestSetlistsProgressive(guestSetlists, saveLocalSetlists);
+  }
+
+  await loadCloudSetlists(ctx);
+}
+
+async function runInitialCloudSync(ctx: CloudSyncContext) {
+  const key = cloudSyncDoneKey(ctx.userId!);
+  const alreadyDone = typeof window !== "undefined" && localStorage.getItem(key) === "1";
+
+  try {
+    await performSyncOrFetch(!alreadyDone, ctx);
+  } catch {
+    try {
+      await performSyncOrFetch(false, ctx);
+    } catch {
+      loadLocalLibraryFallback(ctx);
+    }
+  }
+}
+
+function loadLocalLibraryFallback(ctx: CloudSyncContext) {
+  const folders = loadFolders();
+  const recentes = loadRecentes();
+
+  if (ctx.cancelled()) return;
+  if (folders !== null) ctx.setFolders(folders.length > 0 ? folders : DEFAULT_FOLDERS);
+  if (recentes !== null) ctx.setRecentes(recentes);
 }
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
@@ -65,7 +163,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const setLibraryLoaded = useLibraryStore((s) => s.setLibraryLoaded);
 
   const applyCloudLibrarySnapshot = useCallback(
-    (payload: { folders?: Folder[]; recentes?: StoredSong[] }) => {
+    (payload: CloudSnapshot) => {
       setFolders(
         payload.folders && payload.folders.length > 0 ? payload.folders : DEFAULT_FOLDERS,
       );
@@ -94,77 +192,36 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
   /** Carrega localStorage ou nuvem/sync na primeira vez */
   useEffect(() => {
+    const setters = {
+      setFolders,
+      setRecentes,
+      setLocalSetlistsRaw,
+      setSetlistSummaries,
+      setLibraryLoaded,
+    };
+
     if (status === "loading") return;
 
     if (status === "unauthenticated") {
-      const f = loadFolders();
-      const r = loadRecentes();
-      const sl = loadLocalSetlists();
-      if (f !== null) setFolders(f.length > 0 ? f : DEFAULT_FOLDERS);
-      if (r !== null) setRecentes(r);
-      if (sl !== null) {
-        setLocalSetlistsRaw(sl);
-        setSetlistSummaries(localSetlistsToSummaries(sl));
-      }
-      setLibraryLoaded(true);
+      loadLocalLibrary(setters);
       return;
     }
 
     if (!userId) return;
 
     let cancelled = false;
-
-    const performSyncOrFetch = async (isFirstSync: boolean) => {
-      if (isFirstSync) {
-        const localF = loadFolders();
-        const localR = loadRecentes();
-        const foldersPayload =
-          localF && localF.length > 0 ? localF : DEFAULT_FOLDERS;
-        const merged = await cloudSync({
-          folders: foldersPayload,
-          recentes: localR ?? [],
-        });
-        if (cancelled) return;
-        applyCloudLibrarySnapshot(merged);
-        localStorage.setItem(cloudSyncDoneKey(userId), "1");
-      } else {
-        const lib = await cloudFetchLibrary();
-        if (cancelled) return;
-        applyCloudLibrarySnapshot(lib);
-      }
-
-      const guestSetlists = loadLocalSetlists();
-      if (guestSetlists?.length) {
-        await migrateGuestSetlistsProgressive(guestSetlists, saveLocalSetlists);
-      }
-
-      try {
-        const sl = await cloudFetchSetlists();
-        if (!cancelled) setSetlistSummaries(sl.setlists);
-      } catch {
-        if (!cancelled) setSetlistSummaries([]);
-      }
+    const ctx = {
+      applyCloudLibrarySnapshot,
+      cancelled: () => cancelled,
+      setFolders,
+      setRecentes,
+      setSetlistSummaries,
+      userId,
     };
 
-    void (async () => {
-      const key = cloudSyncDoneKey(userId);
-      const alreadyDone = typeof window !== "undefined" && localStorage.getItem(key) === "1";
-
-      try {
-        await performSyncOrFetch(!alreadyDone);
-      } catch {
-        try {
-          await performSyncOrFetch(false); // retry as fetch only
-        } catch {
-          const f = loadFolders();
-          const r = loadRecentes();
-          if (cancelled) return;
-          if (f !== null) setFolders(f.length > 0 ? f : DEFAULT_FOLDERS);
-          if (r !== null) setRecentes(r);
-        }
-      }
+    void runInitialCloudSync(ctx).finally(() => {
       if (!cancelled) setLibraryLoaded(true);
-    })();
+    });
 
     return () => {
       cancelled = true;

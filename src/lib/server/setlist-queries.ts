@@ -116,3 +116,15 @@ export async function assertUserOwnsArrangement(
     .limit(1);
   return Boolean(row);
 }
+
+export async function assertUserOwnsSetlist(
+  userId: string,
+  setlistId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: userSetlists.id })
+    .from(userSetlists)
+    .where(and(eq(userSetlists.id, setlistId), eq(userSetlists.userId, userId)))
+    .limit(1);
+  return Boolean(row);
+}

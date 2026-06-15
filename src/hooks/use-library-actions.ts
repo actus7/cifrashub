@@ -80,6 +80,26 @@ export function useLibraryActions() {
     [folders, isCloud, notifyCloudMutation, setFolders],
   );
 
+  const syncRecentes = useCallback(
+    (next: StoredSong[], errorMessage: string) => {
+      if (isCloud) {
+        void cloudSaveRecentes(next)
+          .then(({ recentes: synced }) => {
+            setRecentes(synced);
+            notifyCloudMutation();
+          })
+          .catch((error) => {
+            console.error(errorMessage, error);
+            saveRecentes(next);
+          });
+      } else {
+        saveRecentes(next);
+      }
+      setRecentes(next);
+    },
+    [isCloud, notifyCloudMutation, setRecentes],
+  );
+
   const clearAllRecentes = useCallback(() => {
     setRecentes([]);
     if (isCloud) {
@@ -101,22 +121,9 @@ export function useLibraryActions() {
     (song: StoredSong) => {
       const ak = arrangementKey(song);
       const next = recentes.filter((s) => arrangementKey(s) !== ak);
-      if (isCloud) {
-        void cloudSaveRecentes(next)
-          .then(({ recentes: synced }) => {
-            setRecentes(synced);
-            notifyCloudMutation();
-          })
-          .catch((error) => {
-            console.error("Failed to remove from recentes in cloud", error);
-            saveRecentes(next);
-          });
-      } else {
-        saveRecentes(next);
-      }
-      setRecentes(next);
+      syncRecentes(next, "Failed to remove from recentes in cloud");
     },
-    [recentes, isCloud, notifyCloudMutation, setRecentes],
+    [recentes, syncRecentes],
   );
 
   const addToRecentes = useCallback(
@@ -126,22 +133,9 @@ export function useLibraryActions() {
         songObj,
         ...recentes.filter((s) => arrangementKey(s) !== k),
       ].slice(0, 15);
-      if (isCloud) {
-        void cloudSaveRecentes(next)
-          .then(({ recentes: synced }) => {
-            setRecentes(synced);
-            notifyCloudMutation();
-          })
-          .catch((error) => {
-            console.error("Failed to add to recentes in cloud", error);
-            saveRecentes(next);
-          });
-      } else {
-        saveRecentes(next);
-      }
-      setRecentes(next);
+      syncRecentes(next, "Failed to add to recentes in cloud");
     },
-    [recentes, isCloud, notifyCloudMutation, setRecentes],
+    [recentes, syncRecentes],
   );
 
   return {

@@ -1,45 +1,51 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { userSetlistItems, userSetlists } from "@/db/schema";
+import { userSetlistItems } from "@/db/schema";
 import { requireUserId } from "@/lib/server/api-auth";
+import { readJsonBody } from "@/lib/server/api-route";
 import {
   assertUserOwnsArrangement,
+  assertUserOwnsSetlist,
   getSetlistDetail,
 } from "@/lib/server/setlist-queries";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
-async function assertSetlistOwner(userId: string, setlistId: string) {
-  const [row] = await db
-    .select({ id: userSetlists.id })
-    .from(userSetlists)
-    .where(and(eq(userSetlists.id, setlistId), eq(userSetlists.userId, userId)))
-    .limit(1);
-  return row;
+async function requireOwnedSetlist(ctx: RouteCtx) {
+  const authResult = await requireUserId();
+  if ("error" in authResult) return { error: authResult.error };
+
+  const { id: setlistId } = await ctx.params;
+  const ownsSetlist = await assertUserOwnsSetlist(authResult.userId, setlistId);
+  if (!ownsSetlist) {
+    return {
+      error: NextResponse.json({ error: "Setlist não encontrada" }, { status: 404 }),
+    };
+  }
+
+  return { userId: authResult.userId, setlistId };
+}
+
+async function requireOwnedSetlistJson<T>(req: Request, ctx: RouteCtx) {
+  const setlist = await requireOwnedSetlist(ctx);
+  if ("error" in setlist) return { error: setlist.error };
+
+  const json = await readJsonBody<T>(req);
+  if ("response" in json) return { error: json.response };
+
+  return { setlist, body: json.body };
 }
 
 export async function POST(req: Request, ctx: RouteCtx) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return authResult.error;
-
-  const { id: setlistId } = await ctx.params;
-  const owner = await assertSetlistOwner(authResult.userId, setlistId);
-  if (!owner) {
-    return NextResponse.json({ error: "Setlist não encontrada" }, { status: 404 });
-  }
-
-  let body: { arrangementId?: string; notes?: string | null };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
+  const request = await requireOwnedSetlistJson<{ arrangementId?: string; notes?: string | null }>(req, ctx);
+  if ("error" in request) return request.error;
+  const { body, setlist } = request;
   const aid = body.arrangementId?.trim();
   if (!aid) {
     return NextResponse.json({ error: "arrangementId obrigatório" }, { status: 400 });
   }
-  const ok = await assertUserOwnsArrangement(authResult.userId, aid);
+  const ok = await assertUserOwnsArrangement(setlist.userId, aid);
   if (!ok) {
     return NextResponse.json(
       { error: "Arranjo não encontrado na sua biblioteca" },
@@ -50,20 +56,20 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const current = await db
     .select()
     .from(userSetlistItems)
-    .where(eq(userSetlistItems.setlistId, setlistId));
+    .where(eq(userSetlistItems.setlistId, setlist.setlistId));
   const position =
     current.length === 0
       ? 0
       : Math.max(...current.map((r) => r.position)) + 1;
 
   await db.insert(userSetlistItems).values({
-    setlistId,
+    setlistId: setlist.setlistId,
     arrangementId: aid,
     position,
     notes: body.notes?.trim() || null,
   });
 
-  const detail = await getSetlistDetail(authResult.userId, setlistId);
+  const detail = await getSetlistDetail(setlist.userId, setlist.setlistId);
   return NextResponse.json(detail);
 }
 
@@ -91,21 +97,9 @@ async function batchUpdatePositions(
 }
 
 export async function PATCH(req: Request, ctx: RouteCtx) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return authResult.error;
-
-  const { id: setlistId } = await ctx.params;
-  const owner = await assertSetlistOwner(authResult.userId, setlistId);
-  if (!owner) {
-    return NextResponse.json({ error: "Setlist não encontrada" }, { status: 404 });
-  }
-
-  let body: { orderedItemIds?: string[] };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
+  const request = await requireOwnedSetlistJson<{ orderedItemIds?: string[] }>(req, ctx);
+  if ("error" in request) return request.error;
+  const { body, setlist } = request;
   const order = body.orderedItemIds;
   if (!Array.isArray(order) || !order.every((x) => typeof x === "string")) {
     return NextResponse.json({ error: "orderedItemIds inválido" }, { status: 400 });
@@ -114,7 +108,7 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
   const items = await db
     .select()
     .from(userSetlistItems)
-    .where(eq(userSetlistItems.setlistId, setlistId));
+    .where(eq(userSetlistItems.setlistId, setlist.setlistId));
   const idSet = new Set(items.map((i) => i.id));
   if (order.length !== items.length || !order.every((id) => idSet.has(id))) {
     return NextResponse.json(
@@ -123,21 +117,15 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
     );
   }
 
-  await batchUpdatePositions(setlistId, order);
+  await batchUpdatePositions(setlist.setlistId, order);
 
-  const detail = await getSetlistDetail(authResult.userId, setlistId);
+  const detail = await getSetlistDetail(setlist.userId, setlist.setlistId);
   return NextResponse.json(detail);
 }
 
 export async function DELETE(req: Request, ctx: RouteCtx) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return authResult.error;
-
-  const { id: setlistId } = await ctx.params;
-  const owner = await assertSetlistOwner(authResult.userId, setlistId);
-  if (!owner) {
-    return NextResponse.json({ error: "Setlist não encontrada" }, { status: 404 });
-  }
+  const setlist = await requireOwnedSetlist(ctx);
+  if ("error" in setlist) return setlist.error;
 
   const { searchParams } = new URL(req.url);
   const itemId = searchParams.get("itemId");
@@ -149,7 +137,7 @@ export async function DELETE(req: Request, ctx: RouteCtx) {
     .delete(userSetlistItems)
     .where(
       and(
-        eq(userSetlistItems.setlistId, setlistId),
+        eq(userSetlistItems.setlistId, setlist.setlistId),
         eq(userSetlistItems.id, itemId),
       ),
     );
@@ -158,14 +146,14 @@ export async function DELETE(req: Request, ctx: RouteCtx) {
   const remaining = await db
     .select({ id: userSetlistItems.id })
     .from(userSetlistItems)
-    .where(eq(userSetlistItems.setlistId, setlistId))
+    .where(eq(userSetlistItems.setlistId, setlist.setlistId))
     .orderBy(asc(userSetlistItems.position), asc(userSetlistItems.createdAt));
 
   await batchUpdatePositions(
-    setlistId,
+    setlist.setlistId,
     remaining.map((r) => r.id),
   );
 
-  const detail = await getSetlistDetail(authResult.userId, setlistId);
+  const detail = await getSetlistDetail(setlist.userId, setlist.setlistId);
   return NextResponse.json(detail);
 }

@@ -25,8 +25,6 @@ import { cn } from "@/lib/utils";
 import type { CurrentSongMeta } from "@/lib/types";
 import { useSongViewContext } from "./song-context";
 
-// ─── CifraClubMeta ────────────────────────────────────────────────────────────
-
 export function CifraClubMeta({
   song,
   tone = 0,
@@ -38,36 +36,8 @@ export function CifraClubMeta({
   capo?: number;
   className?: string;
 }) {
-  const hasStaticMeta =
-    Boolean(song.cifraSoundingKey) ||
-    Boolean(song.cifraWrittenKey) ||
-    song.cifraCapo !== undefined;
-
-  const tomOriginalLine = (() => {
-    if (song.cifraWrittenKey) return `Tom original: ${song.cifraWrittenKey}`;
-    if (song.cifraSoundingKey) return `Tom original: ${song.cifraSoundingKey}`;
-    return null;
-  })();
-
-  const tomLine = (() => {
-    if (song.cifraWrittenKey) {
-      const forma = transposeRootNote(song.cifraWrittenKey, tone);
-      const soando = transposeRootNote(song.cifraWrittenKey, tone + capo);
-      if (forma === soando) return `Tom: ${forma}`;
-      return `Tom: ${soando} (forma dos acordes em ${forma})`;
-    }
-    if (song.cifraSoundingKey) {
-      return `Tom: ${transposeRootNote(song.cifraSoundingKey, tone)}`;
-    }
-    return null;
-  })();
-
-  const capoLine = capo > 0 ? `Capotraste na ${capo}ª casa` : null;
-
-  if (!hasStaticMeta && capo === 0 && tone === 0 && !tomOriginalLine && !tomLine && !capoLine) {
-    return null;
-  }
-  if (!tomOriginalLine && !tomLine && !capoLine) return null;
+  const lines = cifraClubMetaLines(song, tone, capo);
+  if (lines.length === 0) return null;
 
   return (
     <div
@@ -76,252 +46,325 @@ export function CifraClubMeta({
         className,
       )}
     >
-      {tomOriginalLine ? <p className="text-balance">{tomOriginalLine}</p> : null}
-      {tomLine ? <p className="text-balance">{tomLine}</p> : null}
-      {capoLine ? <p>{capoLine}</p> : null}
+      {lines.map((line) => (
+        <p key={line} className="text-balance">
+          {line}
+        </p>
+      ))}
     </div>
   );
 }
 
-// ─── SongHeader ───────────────────────────────────────────────────────────────
-
 type SongHeaderProps = {
-  /**
-   * Botões extra antes do Bookmark (ex.: botão de editar cifra).
-   * Mantido como prop pois é injetado pelo SongView.
-   */
   extraActions?: ReactNode;
 };
 
-/**
- * Header da view de cifra.
- * Botão de configurações (⚙) REMOVIDO — agora está na SongToolbar lateral.
- * Lê tudo do SongViewContext — apenas `extraActions` como prop.
- */
-export function SongHeader({ extraActions }: SongHeaderProps) {
-  const {
-    currentSong,
-    zenMode,
-    onBack,
-    onOpenVideo,
-    onOpenArtistSongs,
-    onToggleZen,
-    onPrint,
-    isSavedInAnyFolder,
-    setSaveModalOpen,
-    onShareArrangement,
-    shareArrangementDisabled,
-    onOpenSongEditor,
-    isParsing,
-    parseError,
-    autoScroll, setAutoScroll,
-    scrollSpeed, setScrollSpeed,
-    metronomeActive, setMetronomeActive,
-    bpm, setBpm,
-    tone,
-    capo,
-  } = useSongViewContext();
+type IconActionButtonProps = {
+  title: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  className?: string;
+  children: ReactNode;
+};
 
+export function SongHeader({ extraActions }: SongHeaderProps) {
+  const { zenMode } = useSongViewContext();
   if (zenMode) return null;
 
   return (
     <header className="no-print sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-xl backdrop-saturate-150">
       <div className="flex items-center justify-between px-3 py-3 sm:px-4">
-
-        {/* ─── Lado esquerdo: voltar + título ─── */}
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="-ml-1 shrink-0 rounded-xl text-muted-foreground"
-            onClick={onBack}
-            aria-label="Voltar"
-          >
-            <ChevronLeft className="size-5" />
-          </Button>
-
-          {/* Mobile: título compacto */}
-          <div className="min-w-0 flex-1 sm:hidden">
-            <p className="truncate text-sm font-semibold leading-tight text-foreground">
-              {currentSong.title}
-            </p>
-            <p className="truncate text-[11px] text-muted-foreground">
-              {currentSong.artist}
-            </p>
-          </div>
-
-          {/* Desktop: título + artista + meta */}
-          <div className="hidden min-w-0 flex-1 items-start gap-3 sm:flex md:gap-5">
-            <div className="min-w-0 w-fit max-w-[min(32rem,calc(100%-9rem))]">
-              <h1 className="truncate text-sm leading-tight font-semibold text-foreground">
-                {currentSong.title}
-              </h1>
-              <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                <h2 className="min-w-0 truncate text-[11px] text-muted-foreground">
-                  {currentSong.artist}
-                </h2>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 shrink-0 rounded-md px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-                  onClick={onOpenArtistSongs}
-                  title="Ver todas as músicas do artista"
-                >
-                  <ListMusic className="mr-1 size-3" />
-                  Músicas
-                </Button>
-              </div>
-            </div>
-            <CifraClubMeta
-              song={currentSong}
-              tone={tone}
-              capo={capo}
-              className="shrink-0 text-balance sm:max-w-[min(240px,36vw)] sm:pt-0.5"
-            />
-          </div>
-        </div>
-
-        {/* ─── Lado direito: ações ─── */}
-        <div className="flex items-center gap-0.5 sm:gap-1">
-
-          {/* ── Playback: Auto-scroll ── */}
-          <div className="flex items-center">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "rounded-xl",
-                autoScroll ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => setAutoScroll(!autoScroll)}
-              title={autoScroll ? "Parar rolagem" : "Rolagem automática"}
-              aria-label={autoScroll ? "Parar rolagem" : "Rolagem automática"}
-            >
-              {autoScroll ? <Pause className="size-[18px]" fill="currentColor" /> : <Play className="ml-0.5 size-[18px]" fill="currentColor" />}
-            </Button>
-            {autoScroll && (
-              <div className="hidden items-center gap-0.5 sm:flex">
-                <Button type="button" variant="ghost" size="icon" className="size-7 rounded-lg text-muted-foreground" onClick={() => setScrollSpeed(Math.max(1, scrollSpeed - 1))} disabled={scrollSpeed <= 1}><Rewind className="size-3" /></Button>
-                <span className="min-w-[1.5rem] text-center text-[10px] font-bold text-primary">{scrollSpeed}x</span>
-                <Button type="button" variant="ghost" size="icon" className="size-7 rounded-lg text-muted-foreground" onClick={() => setScrollSpeed(Math.min(5, scrollSpeed + 1))} disabled={scrollSpeed >= 5}><FastForward className="size-3" /></Button>
-              </div>
-            )}
-          </div>
-
-          {/* ── Playback: Metrônomo ── */}
-          <div className="flex items-center">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "rounded-xl",
-                metronomeActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => setMetronomeActive(!metronomeActive)}
-              title={metronomeActive ? "Parar metrônomo" : "Metrônomo"}
-              aria-label={metronomeActive ? "Parar metrônomo" : "Metrônomo"}
-            >
-              {metronomeActive ? <span className="text-[11px] font-bold">{bpm}</span> : <Timer className="size-[18px]" />}
-            </Button>
-            {metronomeActive && (
-              <div className="hidden items-center gap-0.5 sm:flex">
-                <Button type="button" variant="ghost" size="icon" className="size-7 rounded-lg text-muted-foreground" onClick={() => setBpm(Math.max(40, bpm - 5))}><Minus className="size-3" /></Button>
-                <Button type="button" variant="ghost" size="icon" className="size-7 rounded-lg text-muted-foreground" onClick={() => setBpm(Math.min(240, bpm + 5))}><Plus className="size-3" /></Button>
-              </div>
-            )}
-          </div>
-
-          {/* ── Separador visual ── */}
-          <div className="mx-0.5 hidden h-5 w-px bg-border/50 sm:block" />
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="rounded-xl text-muted-foreground hover:text-foreground"
-            onClick={onOpenVideo}
-            title="Abrir mini player no YouTube"
-            aria-label="Abrir mini player no YouTube"
-          >
-            <MonitorPlay className="size-[18px]" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="rounded-xl text-muted-foreground hover:text-foreground"
-            onClick={onToggleZen}
-            title="Modo palco (Zen)"
-            aria-label="Activar modo palco"
-          >
-            <Maximize className="size-[18px]" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="hidden rounded-xl text-muted-foreground hover:text-foreground sm:flex"
-            onClick={onPrint}
-            title="Imprimir / PDF"
-            aria-label="Imprimir cifra"
-          >
-            <Printer className="size-[18px]" />
-          </Button>
-          {onShareArrangement ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="rounded-xl text-muted-foreground hover:text-foreground disabled:opacity-40"
-              title="Copiar link de compartilhamento"
-              aria-label="Copiar link de compartilhamento"
-              disabled={shareArrangementDisabled}
-              onClick={onShareArrangement}
-            >
-              <Link2 className="size-[18px]" />
-            </Button>
-          ) : null}
-          {onOpenSongEditor && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="rounded-xl text-muted-foreground hover:text-foreground disabled:opacity-40"
-              disabled={isParsing || Boolean(parseError)}
-              onClick={onOpenSongEditor}
-              title="Editar cifra"
-              aria-label="Editar cifra"
-            >
-              <FileEdit className="size-[18px]" />
-            </Button>
-          )}
-          {extraActions}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "rounded-xl",
-              isSavedInAnyFolder
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setSaveModalOpen(true)}
-            title={isSavedInAnyFolder ? "Salvo em pasta" : "Salvar em pasta"}
-            aria-label={isSavedInAnyFolder ? "Salvo em pasta" : "Salvar em pasta"}
-          >
-            <Bookmark
-              className="size-[18px]"
-              fill={isSavedInAnyFolder ? "currentColor" : "none"}
-            />
-          </Button>
-          <AuthHeaderControl className="ml-0.5 sm:ml-1" />
-        </div>
+        <SongHeaderTitle />
+        <SongHeaderActions extraActions={extraActions} />
       </div>
     </header>
+  );
+}
+
+function cifraClubMetaLines(song: CurrentSongMeta, tone: number, capo: number) {
+  const lines = [originalKeyLine(song), currentKeyLine(song, tone, capo), capoLine(capo)].filter(
+    (line): line is string => Boolean(line),
+  );
+  const hasStaticMeta = Boolean(song.cifraSoundingKey) || Boolean(song.cifraWrittenKey) || song.cifraCapo !== undefined;
+  return hasStaticMeta || capo !== 0 || tone !== 0 ? lines : [];
+}
+
+function originalKeyLine(song: CurrentSongMeta) {
+  const key = song.cifraWrittenKey ?? song.cifraSoundingKey;
+  return key ? `Tom original: ${key}` : null;
+}
+
+function currentKeyLine(song: CurrentSongMeta, tone: number, capo: number) {
+  if (song.cifraWrittenKey) return writtenKeyLine(song.cifraWrittenKey, tone, capo);
+  if (song.cifraSoundingKey) return `Tom: ${transposeRootNote(song.cifraSoundingKey, tone)}`;
+  return null;
+}
+
+function writtenKeyLine(key: string, tone: number, capo: number) {
+  const forma = transposeRootNote(key, tone);
+  const soando = transposeRootNote(key, tone + capo);
+  return forma === soando ? `Tom: ${forma}` : `Tom: ${soando} (forma dos acordes em ${forma})`;
+}
+
+function capoLine(capo: number) {
+  return capo > 0 ? `Capotraste na ${capo}ª casa` : null;
+}
+
+function SongHeaderTitle() {
+  const { currentSong, onBack, onOpenArtistSongs, tone, capo } = useSongViewContext();
+
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-2">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="-ml-1 shrink-0 rounded-xl text-muted-foreground"
+        onClick={onBack}
+        aria-label="Voltar"
+      >
+        <ChevronLeft className="size-5" />
+      </Button>
+      <MobileSongTitle song={currentSong} />
+      <DesktopSongTitle
+        song={currentSong}
+        tone={tone}
+        capo={capo}
+        onOpenArtistSongs={onOpenArtistSongs}
+      />
+    </div>
+  );
+}
+
+function MobileSongTitle({ song }: { song: CurrentSongMeta }) {
+  return (
+    <div className="min-w-0 flex-1 sm:hidden">
+      <p className="truncate text-sm font-semibold leading-tight text-foreground">{song.title}</p>
+      <p className="truncate text-[11px] text-muted-foreground">{song.artist}</p>
+    </div>
+  );
+}
+
+function DesktopSongTitle({
+  song,
+  tone,
+  capo,
+  onOpenArtistSongs,
+}: {
+  song: CurrentSongMeta;
+  tone: number;
+  capo: number;
+  onOpenArtistSongs: () => void;
+}) {
+  return (
+    <div className="hidden min-w-0 flex-1 items-start gap-3 sm:flex md:gap-5">
+      <div className="min-w-0 w-fit max-w-[min(32rem,calc(100%-9rem))]">
+        <h1 className="truncate text-sm leading-tight font-semibold text-foreground">{song.title}</h1>
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+          <h2 className="min-w-0 truncate text-[11px] text-muted-foreground">{song.artist}</h2>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 shrink-0 rounded-md px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+            onClick={onOpenArtistSongs}
+            title="Ver todas as músicas do artista"
+          >
+            <ListMusic className="mr-1 size-3" />
+            Músicas
+          </Button>
+        </div>
+      </div>
+      <CifraClubMeta
+        song={song}
+        tone={tone}
+        capo={capo}
+        className="shrink-0 text-balance sm:max-w-[min(240px,36vw)] sm:pt-0.5"
+      />
+    </div>
+  );
+}
+
+function SongHeaderActions({ extraActions }: SongHeaderProps) {
+  return (
+    <div className="flex items-center gap-0.5 sm:gap-1">
+      <AutoScrollHeaderControl />
+      <MetronomeHeaderControl />
+      <div className="mx-0.5 hidden h-5 w-px bg-border/50 sm:block" />
+      <StaticHeaderActions />
+      {extraActions}
+      <SaveHeaderAction />
+      <AuthHeaderControl className="ml-0.5 sm:ml-1" />
+    </div>
+  );
+}
+
+function AutoScrollHeaderControl() {
+  const { autoScroll, setAutoScroll, scrollSpeed, setScrollSpeed } = useSongViewContext();
+
+  return (
+    <div className="flex items-center">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "rounded-xl",
+          autoScroll ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+        )}
+        onClick={() => setAutoScroll(!autoScroll)}
+        title={autoScroll ? "Parar rolagem" : "Rolagem automática"}
+        aria-label={autoScroll ? "Parar rolagem" : "Rolagem automática"}
+      >
+        {autoScroll ? (
+          <Pause className="size-[18px]" fill="currentColor" />
+        ) : (
+          <Play className="ml-0.5 size-[18px]" fill="currentColor" />
+        )}
+      </Button>
+      {autoScroll && (
+        <div className="hidden items-center gap-0.5 sm:flex">
+          <HeaderMiniButton onClick={() => setScrollSpeed(Math.max(1, scrollSpeed - 1))} disabled={scrollSpeed <= 1}>
+            <Rewind className="size-3" />
+          </HeaderMiniButton>
+          <span className="min-w-[1.5rem] text-center text-[10px] font-bold text-primary">{scrollSpeed}x</span>
+          <HeaderMiniButton onClick={() => setScrollSpeed(Math.min(5, scrollSpeed + 1))} disabled={scrollSpeed >= 5}>
+            <FastForward className="size-3" />
+          </HeaderMiniButton>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetronomeHeaderControl() {
+  const { metronomeActive, setMetronomeActive, bpm, setBpm } = useSongViewContext();
+
+  return (
+    <div className="flex items-center">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "rounded-xl",
+          metronomeActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+        )}
+        onClick={() => setMetronomeActive(!metronomeActive)}
+        title={metronomeActive ? "Parar metrônomo" : "Metrônomo"}
+        aria-label={metronomeActive ? "Parar metrônomo" : "Metrônomo"}
+      >
+        {metronomeActive ? <span className="text-[11px] font-bold">{bpm}</span> : <Timer className="size-[18px]" />}
+      </Button>
+      {metronomeActive && (
+        <div className="hidden items-center gap-0.5 sm:flex">
+          <HeaderMiniButton onClick={() => setBpm(Math.max(40, bpm - 5))}>
+            <Minus className="size-3" />
+          </HeaderMiniButton>
+          <HeaderMiniButton onClick={() => setBpm(Math.min(240, bpm + 5))}>
+            <Plus className="size-3" />
+          </HeaderMiniButton>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HeaderMiniButton({
+  onClick,
+  disabled,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="size-7 rounded-lg text-muted-foreground"
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function StaticHeaderActions() {
+  const {
+    onOpenVideo,
+    onToggleZen,
+    onPrint,
+    onShareArrangement,
+    shareArrangementDisabled,
+    onOpenSongEditor,
+    isParsing,
+    parseError,
+  } = useSongViewContext();
+
+  return (
+    <>
+      <IconActionButton title="Abrir mini player no YouTube" onClick={onOpenVideo}>
+        <MonitorPlay className="size-[18px]" />
+      </IconActionButton>
+      <IconActionButton title="Modo palco (Zen)" onClick={onToggleZen}>
+        <Maximize className="size-[18px]" />
+      </IconActionButton>
+      <IconActionButton title="Imprimir / PDF" onClick={onPrint} className="hidden sm:flex">
+        <Printer className="size-[18px]" />
+      </IconActionButton>
+      {onShareArrangement ? (
+        <IconActionButton title="Copiar link de compartilhamento" onClick={onShareArrangement} disabled={shareArrangementDisabled}>
+          <Link2 className="size-[18px]" />
+        </IconActionButton>
+      ) : null}
+      {onOpenSongEditor ? (
+        <IconActionButton title="Editar cifra" onClick={onOpenSongEditor} disabled={isParsing || Boolean(parseError)}>
+          <FileEdit className="size-[18px]" />
+        </IconActionButton>
+      ) : null}
+    </>
+  );
+}
+
+function IconActionButton({ title, onClick, disabled, className, children }: IconActionButtonProps) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className={cn("rounded-xl text-muted-foreground hover:text-foreground disabled:opacity-40", className)}
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function SaveHeaderAction() {
+  const { isSavedInAnyFolder, setSaveModalOpen } = useSongViewContext();
+  const title = isSavedInAnyFolder ? "Salvo em pasta" : "Salvar em pasta";
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className={cn(
+        "rounded-xl",
+        isSavedInAnyFolder ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+      )}
+      onClick={() => setSaveModalOpen(true)}
+      title={title}
+      aria-label={title}
+    >
+      <Bookmark className="size-[18px]" fill={isSavedInAnyFolder ? "currentColor" : "none"} />
+    </Button>
   );
 }

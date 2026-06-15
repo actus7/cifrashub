@@ -1,4 +1,9 @@
 import type { StoredSong, StoredSongUiPrefs } from "@/lib/types";
+import {
+  resolveArrangementId,
+  sourceArtistSlugForRow,
+  sourceSlugForRow,
+} from "@/lib/server/song-persist";
 import { isValidYoutubeId } from "@/lib/youtube";
 
 /** ID válido para embed ou `null` (não persiste string inválida no banco). */
@@ -27,5 +32,34 @@ export function toneCapoUiFromStored(s: StoredSong): {
     tone: s.tone ?? 0,
     capo: s.capo ?? 0,
     uiPrefs: uiPrefsFromStored(s),
+  };
+}
+
+export function buildStoredSongRow(
+  userId: string,
+  folderId: string | null,
+  song: StoredSong,
+  position: number,
+  isRecent: boolean,
+) {
+  const row = toneCapoUiFromStored(song);
+  return {
+    userId,
+    folderId,
+    songId: song.id,
+    arrangementId: resolveArrangementId(song),
+    sourceArtistSlug: sourceArtistSlugForRow(song),
+    sourceSlug: sourceSlugForRow(song),
+    title: song.title,
+    artist: song.artist,
+    artistSlug: song.artistSlug,
+    slug: song.slug,
+    youtubeId: youtubeIdForRow(song),
+    songData: song.songData,
+    tone: row.tone,
+    capo: row.capo,
+    uiPrefs: row.uiPrefs,
+    isRecent,
+    position,
   };
 }

@@ -3,107 +3,36 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { shareSnapshots, shareTokens, userSongs } from "@/db/schema";
 import { requireUserId } from "@/lib/server/api-auth";
+import { requireApiUserJson } from "@/lib/server/api-route";
 import { rowToStoredSong } from "@/lib/server/cloud-data";
 import { getSetlistDetail } from "@/lib/server/setlist-queries";
 import type { ShareSnapshotPayload } from "@/lib/share-payload";
+
+type ShareRequestBody = {
+  resourceType?: string;
+  arrangementId?: string;
+  setlistId?: string;
+};
 
 const MAX_SHARE_SETLIST_ITEMS = 50;
 const MAX_SHARES_PER_HOUR = 30;
 
 export async function POST(req: Request) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return authResult.error;
+  const request = await requireApiUserJson<ShareRequestBody>(req);
+  if ("response" in request) return request.response;
 
-  // Rate limit: max shares per hour per user
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  const recentShares = await db
-    .select({ id: shareSnapshots.id })
-    .from(shareSnapshots)
-    .where(
-      and(
-        eq(shareSnapshots.createdByUserId, authResult.userId),
-        gt(shareSnapshots.createdAt, oneHourAgo),
-      ),
-    );
-  if (recentShares.length >= MAX_SHARES_PER_HOUR) {
-    return NextResponse.json(
-      { error: "Limite de compartilhamentos por hora atingido. Tente novamente mais tarde." },
-      { status: 429 },
-    );
-  }
+  const limitResponse = await shareRateLimitResponse(request.userId);
+  if (limitResponse) return limitResponse;
 
-  let body: {
-    resourceType?: string;
-    arrangementId?: string;
-    setlistId?: string;
-  };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
-
-  const resourceType = body.resourceType;
-  if (resourceType !== "arrangement" && resourceType !== "setlist") {
-    return NextResponse.json({ error: "resourceType inválido" }, { status: 400 });
-  }
-
-  let payload: ShareSnapshotPayload;
-
-  if (resourceType === "arrangement") {
-    const aid = body.arrangementId?.trim();
-    if (!aid) {
-      return NextResponse.json(
-        { error: "arrangementId obrigatório" },
-        { status: 400 },
-      );
-    }
-    const rows = await db
-      .select()
-      .from(userSongs)
-      .where(
-        and(eq(userSongs.userId, authResult.userId), eq(userSongs.arrangementId, aid)),
-      );
-    const row =
-      rows.find((r) => r.folderId !== null) ?? rows.find((r) => r.isRecent) ?? rows[0];
-    if (!row) {
-      return NextResponse.json({ error: "Cifra não encontrada" }, { status: 404 });
-    }
-    payload = { type: "arrangement", song: rowToStoredSong(row) };
-  } else {
-    const sid = body.setlistId?.trim();
-    if (!sid) {
-      return NextResponse.json({ error: "setlistId obrigatório" }, { status: 400 });
-    }
-    const detail = await getSetlistDetail(authResult.userId, sid);
-    if (!detail) {
-      return NextResponse.json({ error: "Setlist não encontrada" }, { status: 404 });
-    }
-    if (detail.items.length > MAX_SHARE_SETLIST_ITEMS) {
-      return NextResponse.json(
-        { error: `Setlist excede o limite de ${MAX_SHARE_SETLIST_ITEMS} itens para compartilhamento.` },
-        { status: 400 },
-      );
-    }
-    payload = {
-      type: "setlist",
-      title: detail.title,
-      description: detail.description,
-      items: detail.items.map((it) => ({
-        position: it.position,
-        arrangementId: it.arrangementId,
-        notes: it.notes,
-        song: it.song,
-      })),
-    };
-  }
+  const payloadResult = await buildSharePayload(request.userId, request.body);
+  if ("response" in payloadResult) return payloadResult.response;
 
   const [snapshot] = await db
     .insert(shareSnapshots)
     .values({
-      resourceType,
-      payload,
-      createdByUserId: authResult.userId,
+      resourceType: payloadResult.resourceType,
+      payload: payloadResult.payload,
+      createdByUserId: request.userId,
     })
     .returning();
 
@@ -119,6 +48,96 @@ export async function POST(req: Request) {
     token: tokenRow!.token,
     snapshotId: snapshot!.id,
   });
+}
+
+async function shareRateLimitResponse(userId: string) {
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const recentShares = await db
+    .select({ id: shareSnapshots.id })
+    .from(shareSnapshots)
+    .where(
+      and(
+        eq(shareSnapshots.createdByUserId, userId),
+        gt(shareSnapshots.createdAt, oneHourAgo),
+      ),
+    );
+
+  if (recentShares.length < MAX_SHARES_PER_HOUR) return null;
+
+  return NextResponse.json(
+    { error: "Limite de compartilhamentos por hora atingido. Tente novamente mais tarde." },
+    { status: 429 },
+  );
+}
+
+async function buildSharePayload(userId: string, body: ShareRequestBody) {
+  if (body.resourceType === "arrangement") {
+    return arrangementSharePayload(userId, body.arrangementId);
+  }
+
+  if (body.resourceType === "setlist") {
+    return setlistSharePayload(userId, body.setlistId);
+  }
+
+  return { response: NextResponse.json({ error: "resourceType inválido" }, { status: 400 }) };
+}
+
+async function arrangementSharePayload(userId: string, arrangementId: string | undefined) {
+  const aid = arrangementId?.trim();
+  if (!aid) {
+    return { response: NextResponse.json({ error: "arrangementId obrigatório" }, { status: 400 }) };
+  }
+
+  const rows = await db
+    .select()
+    .from(userSongs)
+    .where(and(eq(userSongs.userId, userId), eq(userSongs.arrangementId, aid)));
+  const row = rows.find((r) => r.folderId !== null) ?? rows.find((r) => r.isRecent) ?? rows[0];
+
+  if (!row) {
+    return { response: NextResponse.json({ error: "Cifra não encontrada" }, { status: 404 }) };
+  }
+
+  return {
+    resourceType: "arrangement" as const,
+    payload: { type: "arrangement", song: rowToStoredSong(row) } satisfies ShareSnapshotPayload,
+  };
+}
+
+async function setlistSharePayload(userId: string, setlistId: string | undefined) {
+  const sid = setlistId?.trim();
+  if (!sid) {
+    return { response: NextResponse.json({ error: "setlistId obrigatório" }, { status: 400 }) };
+  }
+
+  const detail = await getSetlistDetail(userId, sid);
+  if (!detail) {
+    return { response: NextResponse.json({ error: "Setlist não encontrada" }, { status: 404 }) };
+  }
+
+  if (detail.items.length > MAX_SHARE_SETLIST_ITEMS) {
+    return {
+      response: NextResponse.json(
+        { error: `Setlist excede o limite de ${MAX_SHARE_SETLIST_ITEMS} itens para compartilhamento.` },
+        { status: 400 },
+      ),
+    };
+  }
+
+  return {
+    resourceType: "setlist" as const,
+    payload: {
+      type: "setlist",
+      title: detail.title,
+      description: detail.description,
+      items: detail.items.map((it) => ({
+        position: it.position,
+        arrangementId: it.arrangementId,
+        notes: it.notes,
+        song: it.song,
+      })),
+    } satisfies ShareSnapshotPayload,
+  };
 }
 
 export async function DELETE(req: Request) {

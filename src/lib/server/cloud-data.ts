@@ -3,7 +3,40 @@ import { db } from "@/db";
 import { userFolders, userSongs } from "@/db/schema";
 import type { Folder, StoredSong } from "@/lib/types";
 
-export function rowToStoredSong(row: typeof userSongs.$inferSelect): StoredSong {
+type SongRow = typeof userSongs.$inferSelect;
+
+type UiPrefs = NonNullable<SongRow["uiPrefs"]>;
+
+const uiPrefKeys = [
+  "simplified",
+  "showTabs",
+  "mirrored",
+  "fontSizeOffset",
+  "columns",
+  "spacingOffset",
+] as const satisfies ReadonlyArray<keyof UiPrefs>;
+
+function optionalSongFields(row: SongRow): Partial<StoredSong> {
+  return Object.fromEntries(
+    [
+      ["sourceArtistSlug", row.sourceArtistSlug],
+      ["sourceSlug", row.sourceSlug],
+      ["youtubeId", row.youtubeId],
+    ].filter((entry): entry is [string, string] => Boolean(entry[1])),
+  ) as Partial<StoredSong>;
+}
+
+function storedUiPrefs(uiPrefs: SongRow["uiPrefs"]): Partial<StoredSong> {
+  if (!uiPrefs) return {};
+
+  return Object.fromEntries(
+    uiPrefKeys
+      .map((key) => [key, uiPrefs[key]] as const)
+      .filter((entry) => entry[1] !== undefined),
+  ) as Partial<StoredSong>;
+}
+
+export function rowToStoredSong(row: SongRow): StoredSong {
   return {
     id: row.songId,
     arrangementId: row.arrangementId,
@@ -11,22 +44,11 @@ export function rowToStoredSong(row: typeof userSongs.$inferSelect): StoredSong 
     artist: row.artist,
     artistSlug: row.artistSlug,
     slug: row.slug,
-    ...(row.sourceArtistSlug ? { sourceArtistSlug: row.sourceArtistSlug } : {}),
-    ...(row.sourceSlug ? { sourceSlug: row.sourceSlug } : {}),
-    ...(row.youtubeId ? { youtubeId: row.youtubeId } : {}),
+    ...optionalSongFields(row),
     songData: row.songData,
     tone: row.tone,
     capo: row.capo,
-    ...(row.uiPrefs
-      ? {
-          ...(row.uiPrefs.simplified !== undefined ? { simplified: row.uiPrefs.simplified } : {}),
-          ...(row.uiPrefs.showTabs !== undefined ? { showTabs: row.uiPrefs.showTabs } : {}),
-          ...(row.uiPrefs.mirrored !== undefined ? { mirrored: row.uiPrefs.mirrored } : {}),
-          ...(row.uiPrefs.fontSizeOffset !== undefined ? { fontSizeOffset: row.uiPrefs.fontSizeOffset } : {}),
-          ...(row.uiPrefs.columns !== undefined ? { columns: row.uiPrefs.columns } : {}),
-          ...(row.uiPrefs.spacingOffset !== undefined ? { spacingOffset: row.uiPrefs.spacingOffset } : {}),
-        }
-      : {}),
+    ...storedUiPrefs(row.uiPrefs),
   };
 }
 

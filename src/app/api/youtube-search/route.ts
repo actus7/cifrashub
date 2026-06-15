@@ -14,6 +14,8 @@ type YtSearchResponse = {
   error?: { message?: string };
 };
 
+type YoutubeCandidate = { videoId: string; title: string };
+
 function sanitizeQ(raw: string | null): string | null {
   if (raw == null) return null;
   const t = raw.trim().replace(/\s+/g, " ");
@@ -21,28 +23,14 @@ function sanitizeQ(raw: string | null): string | null {
   return t;
 }
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const q = sanitizeQ(searchParams.get("q"));
-  if (!q) {
-    return NextResponse.json(
-      { videoId: null as string | null, error: "invalid_query" },
-      { status: 400 },
-    );
-  }
+function jsonError(error: string, status: number, message?: string) {
+  return NextResponse.json(
+    { videoId: null as string | null, error, ...(message ? { message } : {}) },
+    { status },
+  );
+}
 
-  const apiKey = process.env.YOUTUBE_API_KEY?.trim();
-  if (!apiKey) {
-    return NextResponse.json(
-      {
-        videoId: null as string | null,
-        error: "missing_api_key",
-        message: "YOUTUBE_API_KEY não configurada no servidor.",
-      },
-      { status: 503 },
-    );
-  }
-
+function youtubeSearchUrl(q: string, apiKey: string) {
   const url = new URL("https://www.googleapis.com/youtube/v3/search");
   url.searchParams.set("part", "snippet");
   url.searchParams.set("type", "video");
@@ -50,54 +38,62 @@ export async function GET(request: Request) {
   url.searchParams.set("videoEmbeddable", "true");
   url.searchParams.set("q", q);
   url.searchParams.set("key", apiKey);
+  return url;
+}
+
+function candidateFromItem(item: YtSearchItem): YoutubeCandidate | null {
+  const id = item.id?.videoId?.trim();
+  if (!id || !YT_ID_RE.test(id)) return null;
+  return {
+    videoId: id,
+    title: (item.snippet?.title ?? "").trim() || "Vídeo",
+  };
+}
+
+function candidatesFromResponse(data: YtSearchResponse): YoutubeCandidate[] {
+  return (data.items ?? []).flatMap((item) => {
+    const candidate = candidateFromItem(item);
+    return candidate ? [candidate] : [];
+  });
+}
+
+function successResponse(candidates: YoutubeCandidate[]) {
+  const first = candidates[0];
+  const body = first
+    ? {
+        videoId: first.videoId,
+        title: first.title,
+        candidates,
+      }
+    : { videoId: null as string | null, error: "no_results" as const };
+
+  return NextResponse.json(body, {
+    headers: {
+      "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+    },
+  });
+}
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const q = sanitizeQ(searchParams.get("q"));
+  if (!q) return jsonError("invalid_query", 400);
+
+  const apiKey = process.env.YOUTUBE_API_KEY?.trim();
+  if (!apiKey) {
+    return jsonError("missing_api_key", 503, "YOUTUBE_API_KEY não configurada no servidor.");
+  }
 
   try {
-    const res = await fetch(url.toString(), {
+    const res = await fetch(youtubeSearchUrl(q, apiKey).toString(), {
       next: { revalidate: 3600 },
       signal: AbortSignal.timeout(12_000),
     });
-
     const data = (await res.json()) as YtSearchResponse;
-
-    if (!res.ok) {
-      const msg = data.error?.message ?? res.statusText;
-      return NextResponse.json(
-        { videoId: null as string | null, error: "youtube_api", message: msg },
-        { status: 502 },
-      );
-    }
-
-    const items = data.items ?? [];
-    const candidates: { videoId: string; title: string }[] = [];
-    for (const it of items) {
-      const id = it.id?.videoId?.trim();
-      if (id && YT_ID_RE.test(id)) {
-        candidates.push({
-          videoId: id,
-          title: (it.snippet?.title ?? "").trim() || "Vídeo",
-        });
-      }
-    }
-
-    const first = candidates[0];
-    const body = first
-      ? {
-          videoId: first.videoId,
-          title: first.title,
-          candidates,
-        }
-      : { videoId: null as string | null, error: "no_results" as const };
-
-    return NextResponse.json(body, {
-      headers: {
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
-      },
-    });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Falha na busca";
-    return NextResponse.json(
-      { videoId: null as string | null, error: "network", message },
-      { status: 502 },
-    );
+    if (!res.ok) return jsonError("youtube_api", 502, data.error?.message ?? res.statusText);
+    return successResponse(candidatesFromResponse(data));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha na busca";
+    return jsonError("network", 502, message);
   }
 }

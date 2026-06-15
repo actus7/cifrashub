@@ -22,104 +22,121 @@ const MIGRATION_PHASES = {
   post: ["add-user-fk-cascade.sql"],
 };
 
+function createSqlSplitState() {
+  return {
+    statements: [],
+    start: 0,
+    inSingleQuote: false,
+    inDoubleQuote: false,
+    inLineComment: false,
+    inBlockComment: false,
+    dollarTag: null,
+  };
+}
+
+function hasSqlContent(statement) {
+  return statement.replace(/^\s*--.*$/gm, "").trim().length > 0;
+}
+
+function pushSqlStatement(state, sqlText, end) {
+  const statement = sqlText.slice(state.start, end).trim();
+  if (hasSqlContent(statement)) state.statements.push(statement);
+  state.start = end + 1;
+}
+
+function readDollarTag(sqlText, index) {
+  return sqlText.slice(index).match(/^\$[A-Za-z0-9_]*\$/)?.[0] ?? null;
+}
+
+function advanceCommentState(state, ch, next) {
+  if (state.inLineComment) {
+    if (ch === "\n") state.inLineComment = false;
+    return 0;
+  }
+
+  if (!state.inBlockComment) return null;
+  if (ch === "*" && next === "/") {
+    state.inBlockComment = false;
+    return 1;
+  }
+  return 0;
+}
+
+function advanceQuotedState(state, sqlText, index, ch, next) {
+  if (state.dollarTag) {
+    if (sqlText.startsWith(state.dollarTag, index)) {
+      const skip = state.dollarTag.length - 1;
+      state.dollarTag = null;
+      return skip;
+    }
+    return 0;
+  }
+
+  if (state.inSingleQuote) {
+    if (ch === "'" && next === "'") return 1;
+    if (ch === "'") state.inSingleQuote = false;
+    return 0;
+  }
+
+  if (state.inDoubleQuote) {
+    if (ch === '"' && next === '"') return 1;
+    if (ch === '"') state.inDoubleQuote = false;
+    return 0;
+  }
+
+  return null;
+}
+
+function enterSqlState(state, sqlText, index, ch, next) {
+  if (ch === "-" && next === "-") {
+    state.inLineComment = true;
+    return 1;
+  }
+  if (ch === "/" && next === "*") {
+    state.inBlockComment = true;
+    return 1;
+  }
+  if (ch === "'") {
+    state.inSingleQuote = true;
+    return 0;
+  }
+  if (ch === '"') {
+    state.inDoubleQuote = true;
+    return 0;
+  }
+  if (ch !== "$") return null;
+
+  const tag = readDollarTag(sqlText, index);
+  if (!tag) return null;
+  state.dollarTag = tag;
+  return tag.length - 1;
+}
+
+function advanceSqlSplitter(state, sqlText, index) {
+  const ch = sqlText[index];
+  const next = sqlText[index + 1];
+  const commentSkip = advanceCommentState(state, ch, next);
+  if (commentSkip !== null) return commentSkip;
+
+  const quotedSkip = advanceQuotedState(state, sqlText, index, ch, next);
+  if (quotedSkip !== null) return quotedSkip;
+
+  const enterSkip = enterSqlState(state, sqlText, index, ch, next);
+  if (enterSkip !== null) return enterSkip;
+
+  if (ch === ";") pushSqlStatement(state, sqlText, index);
+  return 0;
+}
+
 function splitSqlStatements(sqlText) {
-  const statements = [];
-  let start = 0;
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inLineComment = false;
-  let inBlockComment = false;
-  let dollarTag = null;
+  const state = createSqlSplitState();
 
   for (let i = 0; i < sqlText.length; i++) {
-    const ch = sqlText[i];
-    const next = sqlText[i + 1];
-
-    if (inLineComment) {
-      if (ch === "\n") inLineComment = false;
-      continue;
-    }
-
-    if (inBlockComment) {
-      if (ch === "*" && next === "/") {
-        inBlockComment = false;
-        i++;
-      }
-      continue;
-    }
-
-    if (dollarTag) {
-      if (sqlText.startsWith(dollarTag, i)) {
-        i += dollarTag.length - 1;
-        dollarTag = null;
-      }
-      continue;
-    }
-
-    if (inSingleQuote) {
-      if (ch === "'" && next === "'") {
-        i++;
-      } else if (ch === "'") {
-        inSingleQuote = false;
-      }
-      continue;
-    }
-
-    if (inDoubleQuote) {
-      if (ch === '"' && next === '"') {
-        i++;
-      } else if (ch === '"') {
-        inDoubleQuote = false;
-      }
-      continue;
-    }
-
-    if (ch === "-" && next === "-") {
-      inLineComment = true;
-      i++;
-      continue;
-    }
-
-    if (ch === "/" && next === "*") {
-      inBlockComment = true;
-      i++;
-      continue;
-    }
-
-    if (ch === "'") {
-      inSingleQuote = true;
-      continue;
-    }
-
-    if (ch === '"') {
-      inDoubleQuote = true;
-      continue;
-    }
-
-    if (ch === "$") {
-      const match = sqlText.slice(i).match(/^\$[A-Za-z0-9_]*\$/);
-      if (match) {
-        dollarTag = match[0];
-        i += dollarTag.length - 1;
-        continue;
-      }
-    }
-
-    if (ch === ";") {
-      const stmt = sqlText.slice(start, i).trim();
-      if (stmt.replace(/^\s*--.*$/gm, "").trim().length > 0) {
-        statements.push(stmt);
-      }
-      start = i + 1;
-    }
+    i += advanceSqlSplitter(state, sqlText, i);
   }
 
-  const tail = sqlText.slice(start).trim();
-  if (tail.replace(/^\s*--.*$/gm, "").trim().length > 0) {
-    statements.push(tail);
-  }
-
-  return statements;
+  pushSqlStatement(state, sqlText, sqlText.length);
+  return state.statements;
 }
 
 async function runMigrationFile(sql, fileName) {
