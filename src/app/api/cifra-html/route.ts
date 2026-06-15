@@ -120,7 +120,16 @@ async function cachedCifraResponse(artistSlug: string, slug: string) {
   const cached = await findCachedCifra(artistSlug, slug);
   if (shouldUseCachedCifra(cached)) return htmlResponse(cached.html);
 
-  return (await freshCifraResponse(artistSlug, slug)) ?? fallbackCifraResponse(cached);
+  // A network/upstream failure must not throw away an available stale cache:
+  // fall back to it instead of bubbling up a 502.
+  try {
+    const fresh = await freshCifraResponse(artistSlug, slug);
+    if (fresh) return fresh;
+  } catch (e) {
+    console.error("Erro ao buscar cifra fresca, usando fallback:", e);
+  }
+
+  return fallbackCifraResponse(cached);
 }
 
 function shouldUseCachedCifra(cached: CachedCifra | null): cached is CachedCifra {

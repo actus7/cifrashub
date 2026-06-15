@@ -41,12 +41,21 @@ function useLoadedSong(artistSlug: string | undefined, slug: string | undefined)
     addToRecentesRef.current = addToRecentes;
   }, [addToRecentes]);
 
+  // Guards against a stale fetch winning: when the user navigates between songs
+  // quickly, multiple load()s race and the last to resolve would otherwise
+  // overwrite the state with the wrong song.
+  const lastRequestedRef = useRef("");
+
   const load = useCallback(async () => {
     if (!artistSlug || !slug) return;
+    const requestKey = `${artistSlug}/${slug}`;
+    lastRequestedRef.current = requestKey;
     setIsLoading(true);
     setError(null);
 
     const result = await loadSongResult(artistSlug, slug);
+    if (lastRequestedRef.current !== requestKey) return;
+
     if (isLoadSongError(result)) {
       setError(result.error);
     } else {

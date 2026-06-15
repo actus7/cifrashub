@@ -48,3 +48,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local review scratch files (diff dumps)
+*.diff
+/diff*.txt
+/d_parsers.txt

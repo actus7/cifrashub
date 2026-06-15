@@ -144,7 +144,9 @@ async function validItemOrder(setlistId: string, orderedItemIds: string[] | unde
 
 function hasExactItemOrder(order: string[], itemIds: string[]) {
   const idSet = new Set(itemIds);
-  return order.length === itemIds.length && order.every((id) => idSet.has(id));
+  // delete() so a duplicated id in `order` fails on its second occurrence —
+  // length match alone would accept ['A','A'] for items ['A','B'].
+  return order.length === itemIds.length && order.every((id) => idSet.delete(id));
 }
 
 export async function DELETE(req: Request, ctx: RouteCtx) {
