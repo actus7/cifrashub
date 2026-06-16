@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SongView } from "@/components/song/song-view";
 import { SongViewProvider, type SongViewContextValue } from "@/components/song/song-context";
@@ -13,8 +13,9 @@ import { SongPageSkeleton } from "@/components/song/song-page-skeleton";
 import { SongPageError } from "@/components/song/song-page-error";
 import { useLibraryActions } from "@/hooks/use-library-actions";
 import { useSession } from "@/hooks/use-session";
-import { cloudAddSongToFolder, cloudRemoveSongFromFolder, saveFolders } from "@/lib/storage";
+import { cloudAddSongToFolder, cloudRemoveSongFromFolder, saveFolders, saveRecentes } from "@/lib/storage";
 import { writeEditSnapshot } from "@/lib/cifras-edit-bridge";
+import { songIdentityKey } from "@/lib/stored-song-key";
 
 function useSongParams() {
   const params = useParams();
@@ -25,21 +26,35 @@ function useSongParams() {
 }
 
 function useLoadedSong(artistSlug: string | undefined, slug: string | undefined) {
+  const searchParams = useSearchParams();
+  const folderId = searchParams.get("folderId");
+  const arrangementId = searchParams.get("arrangementId");
   const [currentSong, setCurrentSong] = useState<StoredSong | null>(null);
   const [songData, setSongData] = useState<Section[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const resetPlayer = usePlayerStore((s) => s.reset);
+  const applySongPrefs = usePlayerStore((s) => s.applySongPrefs);
   const { addToRecentes } = useLibraryActions();
+  const folders = useLibraryStore((s) => s.folders);
+  const recentes = useLibraryStore((s) => s.recentes);
+  const libraryLoaded = useLibraryStore((s) => s.libraryLoaded);
 
   // addToRecentes changes identity whenever the recentes store changes, and
   // load() itself mutates that store. Keep it in a ref so load's identity (and
   // thus the load effect below) only depends on the song being viewed —
   // otherwise loading a song retriggers the effect in an infinite fetch loop.
   const addToRecentesRef = useRef(addToRecentes);
+  const foldersRef = useRef(folders);
+  const recentesRef = useRef(recentes);
+  const folderIdRef = useRef(folderId);
+  const arrangementIdRef = useRef(arrangementId);
   useEffect(() => {
     addToRecentesRef.current = addToRecentes;
-  }, [addToRecentes]);
+    foldersRef.current = folders;
+    recentesRef.current = recentes;
+    folderIdRef.current = folderId;
+    arrangementIdRef.current = arrangementId;
+  }, [addToRecentes, arrangementId, folderId, folders, recentes]);
 
   // Guards against a stale fetch winning: when the user navigates between songs
   // quickly, multiple load()s race and the last to resolve would otherwise
@@ -50,12 +65,13 @@ function useLoadedSong(artistSlug: string | undefined, slug: string | undefined)
     if (isLoadSongError(result)) {
       setError(result.error);
     } else {
-      applyLoadedSong(result.song, setCurrentSong, setSongData, resetPlayer, addToRecentesRef.current);
+      const savedSong = findSavedSong(result.song, foldersRef.current, recentesRef.current, folderIdRef.current, arrangementIdRef.current);
+      applyLoadedSong({ ...result.song, ...savedSong, songData: result.song.songData }, setCurrentSong, setSongData, applySongPrefs, addToRecentesRef.current);
     }
-  }, [resetPlayer]);
+  }, [applySongPrefs]);
 
   const load = useCallback(async () => {
-    if (!artistSlug || !slug) return;
+    if (!artistSlug || !slug || !libraryLoaded) return;
     const requestKey = `${artistSlug}/${slug}`;
     lastRequestedRef.current = requestKey;
     setIsLoading(true);
@@ -67,7 +83,7 @@ function useLoadedSong(artistSlug: string | undefined, slug: string | undefined)
 
     applyResult(result);
     setIsLoading(false);
-  }, [applyResult, artistSlug, slug]);
+  }, [applyResult, artistSlug, libraryLoaded, slug]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -78,6 +94,35 @@ function useLoadedSong(artistSlug: string | undefined, slug: string | undefined)
   }, [load]);
 
   return { currentSong, setCurrentSong, songData, isLoading, error, load };
+}
+
+function findSavedSong(
+  song: StoredSong,
+  folders: ReturnType<typeof useLibraryStore.getState>["folders"],
+  recentes: StoredSong[],
+  folderId: string | null,
+  arrangementId: string | null,
+) {
+  if (folderId) {
+    const fromFolder = folders
+      .find((folder) => folder.id === folderId)
+      ?.songs.find((saved) => savedSongMatches(saved, song, arrangementId));
+    if (fromFolder) return fromFolder;
+  }
+
+  const remainingFolders = folderId ? folders.filter((folder) => folder.id !== folderId) : folders;
+  const fromFolders = remainingFolders
+    .flatMap((folder) => folder.songs)
+    .find((saved) => savedSongMatches(saved, song, arrangementId));
+  if (fromFolders) return fromFolders;
+
+  return recentes.find((saved) => savedSongMatches(saved, song, arrangementId));
+}
+
+function savedSongMatches(saved: StoredSong, song: StoredSong, arrangementId: string | null) {
+  const sameSong = songIdentityKey(saved) === songIdentityKey(song);
+  if (arrangementId && (saved.arrangementId === arrangementId || saved.id === arrangementId)) return sameSong;
+  return sameSong;
 }
 
 type LoadSongResult = { song: StoredSong } | { error: Error };
@@ -99,14 +144,30 @@ function applyLoadedSong(
   song: StoredSong,
   setCurrentSong: (song: StoredSong) => void,
   setSongData: (data: Section[]) => void,
-  resetPlayer: () => void,
+  applySongPrefs: (song: StoredSong) => void,
   addToRecentes: (song: StoredSong) => void,
 ) {
   setCurrentSong(song);
   setSongData(song.songData);
-  resetPlayer();
+  applySongPrefs(song);
   addToRecentes(song);
 }
+
+type PersistedPlayerPrefs = Pick<StoredSong,
+  | "tone"
+  | "capo"
+  | "simplified"
+  | "showTabs"
+  | "mirrored"
+  | "fontSizeOffset"
+  | "columns"
+  | "spacingOffset"
+  | "zenMode"
+  | "autoScroll"
+  | "scrollSpeed"
+  | "metronomeActive"
+  | "bpm"
+>;
 
 function usePlayerContextState() {
   return {
@@ -147,6 +208,106 @@ function usePlayerContextState() {
 
 function songMatches(a: StoredSong | null | undefined, b: StoredSong | null) {
   return Boolean(a && b && a.artistSlug === b.artistSlug && a.slug === b.slug);
+}
+
+function withPlayerPrefs(song: StoredSong, prefs: PersistedPlayerPrefs): StoredSong {
+  return { ...song, ...prefs };
+}
+
+function arePrefsEqual(song: StoredSong, prefs: PersistedPlayerPrefs) {
+  return (
+    (song.tone ?? 0) === prefs.tone &&
+    (song.capo ?? 0) === prefs.capo &&
+    (song.simplified ?? false) === prefs.simplified &&
+    (song.showTabs ?? true) === prefs.showTabs &&
+    (song.mirrored ?? false) === prefs.mirrored &&
+    (song.fontSizeOffset ?? 0) === prefs.fontSizeOffset &&
+    (song.columns ?? 1) === prefs.columns &&
+    (song.spacingOffset ?? 0) === prefs.spacingOffset &&
+    (song.zenMode ?? false) === prefs.zenMode &&
+    (song.autoScroll ?? false) === prefs.autoScroll &&
+    (song.scrollSpeed ?? 2) === prefs.scrollSpeed &&
+    (song.metronomeActive ?? false) === prefs.metronomeActive &&
+    (song.bpm ?? 100) === prefs.bpm
+  );
+}
+
+function usePersistCurrentSongPrefs(
+  currentSong: StoredSong | null,
+  setCurrentSong: (updater: (song: StoredSong | null) => StoredSong | null) => void,
+  player: ReturnType<typeof usePlayerContextState>,
+) {
+  const { status } = useSession();
+  const lastPersistKeyRef = useRef("");
+
+  useEffect(() => {
+    if (status !== "unauthenticated" || !currentSong) return;
+
+    const prefs: PersistedPlayerPrefs = {
+      tone: player.tone,
+      capo: player.capo,
+      simplified: player.simplified,
+      showTabs: player.showTabs,
+      mirrored: player.mirrored,
+      fontSizeOffset: player.fontSizeOffset,
+      columns: player.columns,
+      spacingOffset: player.spacingOffset,
+      zenMode: player.zenMode,
+      autoScroll: player.autoScroll,
+      scrollSpeed: player.scrollSpeed,
+      metronomeActive: player.metronomeActive,
+      bpm: player.bpm,
+    };
+    const persistKey = JSON.stringify({ song: songIdentityKey(currentSong), prefs });
+    if (lastPersistKeyRef.current === persistKey) return;
+    lastPersistKeyRef.current = persistKey;
+
+    if (arePrefsEqual(currentSong, prefs)) return;
+
+    const currentKey = songIdentityKey(currentSong);
+    let nextSong: StoredSong = currentSong;
+    setCurrentSong((prev) => {
+      if (!prev) return prev;
+      nextSong = withPlayerPrefs(prev, prefs);
+      return nextSong;
+    });
+
+    const { recentes, folders, setRecentes, setFolders } = useLibraryStore.getState();
+
+    const nextRecentes = [
+      nextSong,
+      ...recentes.filter((song) => songIdentityKey(song) !== currentKey),
+    ].slice(0, 15);
+    saveRecentes(nextRecentes);
+    setRecentes(nextRecentes);
+
+    const isSavedInFolder = folders.some((folder) => folder.songs.some((song) => songIdentityKey(song) === currentKey));
+    if (isSavedInFolder) {
+      const nextFolders = folders.map((folder) => ({
+        ...folder,
+        songs: folder.songs.map((song) => songIdentityKey(song) === currentKey ? withPlayerPrefs(song, prefs) : song),
+      }));
+      saveFolders(nextFolders);
+      setFolders(nextFolders);
+    }
+  }, [
+    currentSong,
+    player.autoScroll,
+    player.bpm,
+    player.capo,
+    player.columns,
+    player.fontSizeOffset,
+    player.metronomeActive,
+    player.mirrored,
+    player.scrollSpeed,
+    player.showTabs,
+    player.simplified,
+    player.spacingOffset,
+    player.tone,
+    player.zenMode,
+    setCurrentSong,
+    status,
+  ]);
 }
 
 function useSongFolderActions(currentSong: StoredSong | null) {
@@ -337,6 +498,7 @@ export default function SongPage() {
   const songState = useLoadedSong(artistSlug, slug);
   const folderState = useSongFolderActions(songState.currentSong);
   const actions = useSongPageActions(songState.currentSong, songState.songData, songState.setCurrentSong);
+  usePersistCurrentSongPrefs(songState.currentSong, songState.setCurrentSong, actions.player);
   const value = useSongContextValue({ currentSong: songState.currentSong, songData: songState.songData, folderState, actions });
 
   if (songState.isLoading) return <SongPageSkeleton />;
