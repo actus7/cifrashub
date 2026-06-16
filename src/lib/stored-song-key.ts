@@ -19,17 +19,24 @@ export function currentSongKey(m: CurrentSongMeta): string {
 export function songIdentityKey(
   s: Pick<StoredSong, "id" | "artistSlug" | "slug">,
 ): string {
-  return s.id?.trim() || `${s.artistSlug}-${s.slug}`;
+  if (!s) return "";
+  return s.id?.trim() || `${s.artistSlug ?? ""}-${s.slug ?? ""}`;
 }
 
-/** Mantém só a entrada mais recente de cada música, preservando a ordem. */
+/**
+ * Mantém só a entrada mais recente de cada música, preservando a ordem.
+ * Defensivo: roda em toda escrita de recentes, com dados que podem vir
+ * malformados do localStorage ou da nuvem.
+ */
 export function dedupeRecentesBySong<T extends Pick<StoredSong, "id" | "artistSlug" | "slug">>(
   songs: T[],
 ): T[] {
+  if (!Array.isArray(songs)) return [];
   const seen = new Set<string>();
   return songs.filter((song) => {
+    if (!song) return false;
     const key = songIdentityKey(song);
-    if (seen.has(key)) return false;
+    if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
   });
