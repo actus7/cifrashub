@@ -8,7 +8,7 @@ import { useState } from "react";
 import { fetchChordsHtml } from "@/lib/fetch-proxy";
 import { processHtmlAndExtract } from "@/lib/parser";
 import { enrichStoredSongWithYoutube } from "@/hooks/use-song-loader";
-import { cloudAddSongToFolder, cloudRemoveSongFromFolder } from "@/lib/storage";
+import { cloudAddSongToFolder, cloudRemoveSongFromFolder, saveFolders } from "@/lib/storage";
 import { arrangementKey } from "@/lib/stored-song-key";
 import { useSession } from "@/hooks/use-session";
 import type { Folder, SearchResultSong, StoredSong } from "@/lib/types";
@@ -89,7 +89,9 @@ async function applyAddedFolderSong({
     return;
   }
 
-  setFolders(addLocalSongToFolder(folders, folderId, song));
+  const next = addLocalSongToFolder(folders, folderId, song);
+  saveFolders(next);
+  setFolders(next);
 }
 
 export default function FolderPage() {
@@ -144,7 +146,9 @@ export default function FolderPage() {
       setFolders(nextFolders);
       notifyCloudMutation();
     } else {
-      setFolders(removeLocalFolderSongs(folders, folderId, keys));
+      const nextFolders = removeLocalFolderSongs(folders, folderId, keys);
+      saveFolders(nextFolders);
+      setFolders(nextFolders);
     }
   };
 
@@ -153,7 +157,11 @@ export default function FolderPage() {
   };
 
   const onOpenSong = (song: StoredSong) => {
-    router.push(`/song/${song.artistSlug}/${song.slug}?folderId=${folderId}`);
+    if (!folderId) return;
+    const params = new URLSearchParams();
+    params.set("folderId", folderId);
+    params.set("arrangementId", arrangementKey(song));
+    router.push(`/song/${song.artistSlug}/${song.slug}?${params.toString()}`);
   };
 
   const doDelete = async (id: string) => {

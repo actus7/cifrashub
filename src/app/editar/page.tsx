@@ -11,6 +11,14 @@ import {
   type CifrasEditSnapshot,
 } from "@/lib/cifras-edit-bridge";
 
+function songUrl(origin: CifrasEditSnapshot["origin"]) {
+  const params = new URLSearchParams();
+  if (origin.folderId) params.set("folderId", origin.folderId);
+  if (origin.arrangementId) params.set("arrangementId", origin.arrangementId);
+  const query = params.toString();
+  return `/song/${origin.artistSlug}/${origin.slug}${query ? `?${query}` : ""}`;
+}
+
 export default function EditarCifraPage() {
   const router = useRouter();
   const [snapshot, setSnapshot] = useState<CifrasEditSnapshot | null | undefined>(
@@ -25,7 +33,7 @@ export default function EditarCifraPage() {
       router.replace("/");
       return;
     }
-     
+
     setSnapshot(s);
   }, [router]);
 
@@ -35,7 +43,8 @@ export default function EditarCifraPage() {
     return null;
   }
 
-  const { currentSong, songData } = snapshot;
+  const { currentSong, songData, origin } = snapshot;
+  const backToSong = () => router.push(songUrl(origin));
 
   return (
     <div className="flex min-h-screen flex-col bg-background print:hidden">
@@ -48,7 +57,7 @@ export default function EditarCifraPage() {
                 variant="ghost"
                 size="icon"
                 className="shrink-0 rounded-xl"
-                onClick={() => router.push("/?edit=cancel")}
+                onClick={backToSong}
                 aria-label="Voltar sem salvar"
               >
                 <ChevronLeft className="size-5" />
@@ -76,10 +85,10 @@ export default function EditarCifraPage() {
           columns: 1,
           spacingOffset: snapshot.display.spacingOffset,
         }}
-        onCancel={() => router.push("/?edit=cancel")}
+        onCancel={backToSong}
         onApply={(next) => {
-          writeEditResult(next);
-          router.push("/?edit=done");
+          writeEditResult(origin, next);
+          backToSong();
         }}
       />
     </div>

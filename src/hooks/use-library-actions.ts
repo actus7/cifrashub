@@ -71,7 +71,7 @@ export function useLibraryActions() {
         }
       } else {
         const newFolder: Folder = {
-          id: Date.now().toString(),
+          id: crypto.randomUUID(),
           title: newFolderName.trim(),
           songs: [],
         };
@@ -116,6 +116,8 @@ export function useLibraryActions() {
   const syncRecentes = useCallback(
     (next: StoredSong[], errorMessage: string) => {
       if (isCloud) {
+        const previous = recentes;
+        setRecentes(next);
         void cloudSaveRecentes(next)
           .then(({ recentes: synced }) => {
             setRecentes(synced);
@@ -123,19 +125,20 @@ export function useLibraryActions() {
           })
           .catch((error) => {
             console.error(errorMessage, error);
-            saveRecentes(next);
+            setRecentes(previous);
           });
       } else {
         saveRecentes(next);
+        setRecentes(next);
       }
-      setRecentes(next);
     },
-    [isCloud, notifyCloudMutation, setRecentes],
+    [isCloud, notifyCloudMutation, recentes, setRecentes],
   );
 
   const clearAllRecentes = useCallback(() => {
-    setRecentes([]);
     if (isCloud) {
+      const previous = recentes;
+      setRecentes([]);
       void cloudClearRecentes()
         .then(({ recentes: synced }) => {
           setRecentes(synced);
@@ -143,12 +146,13 @@ export function useLibraryActions() {
         })
         .catch((error) => {
           console.error("Failed to clear recentes in cloud", error);
-          saveRecentes([]);
+          setRecentes(previous);
         });
     } else {
       saveRecentes([]);
+      setRecentes([]);
     }
-  }, [isCloud, notifyCloudMutation, setRecentes]);
+  }, [isCloud, notifyCloudMutation, recentes, setRecentes]);
 
   const removeFromRecentes = useCallback(
     (song: StoredSong) => {
@@ -161,8 +165,6 @@ export function useLibraryActions() {
 
   const addToRecentes = useCallback(
     (songObj: StoredSong) => {
-      // Dedupe by song (not arrangement): every fetch mints a fresh
-      // arrangementId, so keying on it would re-add the same song each time.
       const k = songIdentityKey(songObj);
       const next = [
         songObj,

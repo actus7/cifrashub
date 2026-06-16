@@ -3,6 +3,7 @@ import type {
   SetlistDetailView,
   SetlistSummary,
   StoredSong,
+  StoredSongUiPrefs,
 } from "./types";
 
 const pendingRequests = new Map<string, Promise<unknown>>();
@@ -192,6 +193,16 @@ export async function cloudReorderSetlistItems(
   return apiJson(`/api/setlists/${encodeURIComponent(setlistId)}/items`, {
     method: "PATCH",
     body: JSON.stringify({ orderedItemIds }),
+  });
+}
+
+export async function cloudUpdateSongPrefs(
+  arrangementId: string,
+  prefs: { tone: number; capo: number; uiPrefs: StoredSongUiPrefs },
+): Promise<{ ok: true }> {
+  return apiJson("/api/songs/prefs", {
+    method: "PATCH",
+    body: JSON.stringify({ arrangementId, ...prefs }),
   });
 }
 

@@ -19,6 +19,11 @@ const UI_PREF_KEYS = [
   "fontSizeOffset",
   "columns",
   "spacingOffset",
+  "zenMode",
+  "autoScroll",
+  "scrollSpeed",
+  "metronomeActive",
+  "bpm",
 ] as const satisfies ReadonlyArray<keyof StoredSongUiPrefs>;
 
 function uiPrefsFromStored(s: StoredSong): StoredSongUiPrefs | null {

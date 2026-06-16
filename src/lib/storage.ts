@@ -1,8 +1,8 @@
 import type { Folder, LocalSetlistStored, StoredSong } from "./types";
 
-const STORAGE_FOLDERS = "cifrashub_folders";
-const STORAGE_RECENTES = "cifrashub_recentes";
-const STORAGE_SETLISTS = "cifrashub_setlists_v1";
+export const STORAGE_FOLDERS = "cifrashub_folders";
+export const STORAGE_RECENTES = "cifrashub_recentes";
+export const STORAGE_SETLISTS = "cifrashub_setlists_v1";
 
 /** Chave por usuário: primeira sincronização local → nuvem já feita. */
 export function cloudSyncDoneKey(userId: string) {
