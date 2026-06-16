@@ -607,7 +607,7 @@ function useSongPageActions(
           artistSlug: currentSong.artistSlug,
           slug: currentSong.slug,
           folderId,
-          arrangementId,
+          arrangementId: arrangementId ?? arrangementKey(currentSong),
         },
         display: {
           tone: ps.tone,
