@@ -14,6 +14,9 @@ import {
   saveLocalSetlists,
   cloudCreateSetlist,
   cloudAddSetlistItem,
+  STORAGE_FOLDERS,
+  STORAGE_RECENTES,
+  STORAGE_SETLISTS,
 } from "@/lib/storage";
 import { useLibraryStore } from "@/store/use-library-store";
 import type { LocalSetlistStored, Folder, StoredSong, SetlistSummary } from "@/lib/types";
@@ -132,8 +135,8 @@ async function loadCloudSetlists(ctx: CloudSyncContext) {
   try {
     const setlists = await cloudFetchSetlists();
     if (!ctx.cancelled()) ctx.setSetlistSummaries(setlists.setlists);
-  } catch {
-    if (!ctx.cancelled()) ctx.setSetlistSummaries([]);
+  } catch (error) {
+    console.error("Failed to load cloud setlists", error);
   }
 }
 
@@ -259,7 +262,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isCloud, applyCloudLibrarySnapshot, setSetlistSummaries]);
 
-  /** Carrega localStorage ou nuvem/sync na primeira vez */
   useEffect(() => {
     const setters = {
       setFolders,
@@ -301,6 +303,21 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     if (!isCloud || !userId || !syncSignalKey) return;
     return createCloudRefreshSubscription(syncSignalKey, refreshCloudState);
   }, [isCloud, userId, syncSignalKey, refreshCloudState]);
+
+  useEffect(() => {
+    if (status !== "unauthenticated") return;
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === STORAGE_FOLDERS) applyLocalFolders({ setFolders }, loadFolders());
+      if (event.key === STORAGE_RECENTES) applyLocalRecentes({ setRecentes }, loadRecentes());
+      if (event.key === STORAGE_SETLISTS) {
+        applyLocalSetlists({ setLocalSetlistsRaw, setSetlistSummaries }, loadLocalSetlists());
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [status, setFolders, setRecentes, setLocalSetlistsRaw, setSetlistSummaries]);
 
   return <>{children}</>;
 }

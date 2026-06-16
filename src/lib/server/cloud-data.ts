@@ -14,6 +14,11 @@ const uiPrefKeys = [
   "fontSizeOffset",
   "columns",
   "spacingOffset",
+  "zenMode",
+  "autoScroll",
+  "scrollSpeed",
+  "metronomeActive",
+  "bpm",
 ] as const satisfies ReadonlyArray<keyof UiPrefs>;
 
 function optionalSongFields(row: SongRow): Partial<StoredSong> {

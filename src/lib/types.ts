@@ -64,6 +64,11 @@ export type StoredSongUiPrefs = {
   fontSizeOffset?: number;
   columns?: number;
   spacingOffset?: number;
+  zenMode?: boolean;
+  autoScroll?: boolean;
+  scrollSpeed?: number;
+  metronomeActive?: boolean;
+  bpm?: number;
 };
 
 export interface StoredSong extends CurrentSongMeta {

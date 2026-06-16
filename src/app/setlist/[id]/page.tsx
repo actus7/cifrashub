@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { arrangementKey } from "@/lib/stored-song-key";
 import { SetlistDetailViewScreen } from "@/components/setlist/setlist-detail-view";
 import { useSession } from "@/hooks/use-session";
 import { buildLocalSetlistDetail } from "@/lib/setlist-local";
@@ -151,7 +152,10 @@ export default function SetlistPage() {
     updateLocalSetlist((items) => localItemsWithPositions(items, patches));
   };
 
-  const onOpenSong = (song: StoredSong) => router.push(`/song/${song.artistSlug}/${song.slug}`);
+  const onOpenSong = (song: StoredSong) => {
+    const params = new URLSearchParams({ arrangementId: arrangementKey(song) });
+    router.push(`/song/${song.artistSlug}/${song.slug}?${params.toString()}`);
+  };
   const onBack = () => router.push("/");
 
   if (loading) return <LoadingState />;

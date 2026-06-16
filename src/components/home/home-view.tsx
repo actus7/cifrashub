@@ -8,6 +8,7 @@ import { AuthHeaderControl } from "@/components/auth/user-menu";
 import { InstallAppBanner } from "@/components/install-app-banner";
 import { SetlistsHomeSection } from "@/components/setlist/setlists-home-section";
 import { useLibraryActions } from "@/hooks/use-library-actions";
+import { arrangementKey } from "@/lib/stored-song-key";
 import { useSearchDebounced } from "@/hooks/use-search";
 import { cloudCreateSetlist, cloudDeleteSetlist } from "@/lib/storage";
 import type { SearchResultArtist, SearchResultSong, StoredSong } from "@/lib/types";
@@ -209,7 +210,10 @@ export function HomeView() {
   const onOpenFolder = (id: string) => router.push(`/folder/${id}`);
   const onSelectSearchResult = (res: SearchResultSong) => router.push(`/song/${res.artistSlug}/${res.slug}`);
   const onSelectArtistResult = (res: SearchResultArtist) => router.push(`/artist/${res.artistSlug}`);
-  const onSelectRecent = (song: StoredSong) => router.push(`/song/${song.artistSlug}/${song.slug}`);
+  const onSelectRecent = (song: StoredSong) => {
+    const params = new URLSearchParams({ arrangementId: arrangementKey(song) });
+    router.push(`/song/${song.artistSlug}/${song.slug}?${params.toString()}`);
+  };
 
   const onCreateSetlist = async (title: string) => {
     try {
