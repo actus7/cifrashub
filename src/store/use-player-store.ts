@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { StoredSong } from "@/lib/types";
 
 interface PlayerState {
   tone: number;
@@ -43,6 +44,7 @@ interface PlayerState {
   setBpm: (bpm: number) => void;
 
   setYoutubeMiniOpen: (open: boolean) => void;
+  applySongPrefs: (song: StoredSong) => void;
   reset: () => void;
 }
 
@@ -88,6 +90,24 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   setBpm: (bpm) => set({ bpm }),
 
   setYoutubeMiniOpen: (youtubeMiniOpen) => set({ youtubeMiniOpen }),
+  applySongPrefs: (song) => set({
+    tone: song.tone ?? 0,
+    capo: song.capo ?? 0,
+    simplified: song.simplified ?? false,
+    activeChord: null,
+    showTabs: song.showTabs ?? true,
+    mirrored: song.mirrored ?? false,
+    fontSizeOffset: song.fontSizeOffset ?? 0,
+    columns: song.columns ?? 1,
+    spacingOffset: song.spacingOffset ?? 0,
+    zenMode: song.zenMode ?? false,
+    autoScroll: song.autoScroll ?? false,
+    scrollSpeed: song.scrollSpeed ?? 2,
+    metronomeActive: song.metronomeActive ?? false,
+    bpm: song.bpm ?? 100,
+    displaySettingsOpen: false,
+    youtubeMiniOpen: false,
+  }),
   reset: () => set({
     tone: 0,
     capo: 0,
