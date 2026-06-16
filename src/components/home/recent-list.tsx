@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { Clock, Music, Trash2 } from "lucide-react";
-import { arrangementKey } from "@/lib/stored-song-key";
+import { songIdentityKey } from "@/lib/stored-song-key";
 import type { StoredSong } from "@/lib/types";
 
 type RecentListProps = {
@@ -60,7 +60,7 @@ export const RecentList = memo(function RecentList({
       <div className="flex flex-col gap-1">
         {recentes.map((song) => (
           <div
-            key={arrangementKey(song)}
+            key={songIdentityKey(song)}
             className="group/item flex w-full items-center gap-1 rounded-xl pr-1 pl-1 transition-colors hover:bg-card/80"
           >
             <button

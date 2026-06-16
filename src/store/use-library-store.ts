@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Folder, StoredSong, SetlistSummary, LocalSetlistStored } from "@/lib/types";
 import { DEFAULT_FOLDERS } from "@/lib/storage";
+import { dedupeRecentesBySong } from "@/lib/stored-song-key";
 
 interface LibraryState {
   folders: Folder[];
@@ -25,7 +26,7 @@ export const useLibraryStore = create<LibraryState>((set) => ({
   libraryLoaded: false,
 
   setFolders: (folders) => set({ folders }),
-  setRecentes: (recentes) => set({ recentes }),
+  setRecentes: (recentes) => set({ recentes: dedupeRecentesBySong(recentes) }),
   setLocalSetlistsRaw: (localSetlistsRaw) => set({ localSetlistsRaw }),
   setSetlistSummaries: (setlistSummaries) => set({ setlistSummaries }),
   setLibraryLoaded: (libraryLoaded) => set({ libraryLoaded }),

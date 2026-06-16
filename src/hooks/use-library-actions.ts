@@ -9,7 +9,7 @@ import {
   saveFolders,
   saveRecentes,
 } from "@/lib/storage";
-import { arrangementKey } from "@/lib/stored-song-key";
+import { songIdentityKey } from "@/lib/stored-song-key";
 import type { Folder, StoredSong } from "@/lib/types";
 import { cloudSyncSignalKey } from "@/lib/sync-signal-key";
 
@@ -152,8 +152,8 @@ export function useLibraryActions() {
 
   const removeFromRecentes = useCallback(
     (song: StoredSong) => {
-      const ak = arrangementKey(song);
-      const next = recentes.filter((s) => arrangementKey(s) !== ak);
+      const k = songIdentityKey(song);
+      const next = recentes.filter((s) => songIdentityKey(s) !== k);
       syncRecentes(next, "Failed to remove from recentes in cloud");
     },
     [recentes, syncRecentes],
@@ -161,10 +161,12 @@ export function useLibraryActions() {
 
   const addToRecentes = useCallback(
     (songObj: StoredSong) => {
-      const k = arrangementKey(songObj);
+      // Dedupe by song (not arrangement): every fetch mints a fresh
+      // arrangementId, so keying on it would re-add the same song each time.
+      const k = songIdentityKey(songObj);
       const next = [
         songObj,
-        ...recentes.filter((s) => arrangementKey(s) !== k),
+        ...recentes.filter((s) => songIdentityKey(s) !== k),
       ].slice(0, 15);
       syncRecentes(next, "Failed to add to recentes in cloud");
     },
