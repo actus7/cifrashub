@@ -1,5 +1,5 @@
 import { classifySection } from "@/lib/music";
-import { parseChordLinePair } from "@/lib/parser";
+import { parseChordLinePair } from "@/lib/parse-chord-line-pair";
 import type { LyricLine, Section, SectionType } from "@/lib/types";
 
 export function cleanSongSections(sections: Section[]): Section[] {

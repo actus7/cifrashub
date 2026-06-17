@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { flattenLibrarySongs } from "@/lib/library-flat";
-import { arrangementKey } from "@/lib/stored-song-key";
+import { arrangementKey } from "@/lib/arrangement-key";
 import type {
   Folder,
   SetlistDetailView,

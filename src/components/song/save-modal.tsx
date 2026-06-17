@@ -11,7 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { arrangementKey, currentSongKey } from "@/lib/stored-song-key";
+import { arrangementKey } from "@/lib/arrangement-key";
+import { currentSongKey } from "@/lib/current-song-key";
 import type { CurrentSongMeta, Folder as FolderType } from "@/lib/types";
 
 type SaveModalProps = {

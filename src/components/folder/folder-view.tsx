@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { FolderSearch } from "./folder-search";
 import { FolderSongCard } from "./folder-song-card";
-import { arrangementKey } from "@/lib/stored-song-key";
+import { arrangementKey } from "@/lib/arrangement-key";
 import type { Folder as FolderType, SearchResultSong, StoredSong } from "@/lib/types";
 
 type FolderViewProps = {

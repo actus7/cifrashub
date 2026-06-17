@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { Clock, Music, Trash2 } from "lucide-react";
-import { songIdentityKey } from "@/lib/stored-song-key";
+import { songIdentityKey } from "@/lib/song-identity-key";
 import type { StoredSong } from "@/lib/types";
 
 type RecentListProps = {

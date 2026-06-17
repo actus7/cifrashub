@@ -8,7 +8,7 @@ import { AuthHeaderControl } from "@/components/auth/user-menu";
 import { InstallAppBanner } from "@/components/install-app-banner";
 import { SetlistsHomeSection } from "@/components/setlist/setlists-home-section";
 import { useLibraryActions } from "@/hooks/use-library-actions";
-import { arrangementKey } from "@/lib/stored-song-key";
+import { arrangementKey } from "@/lib/arrangement-key";
 import { useSearchDebounced } from "@/hooks/use-search";
 import { cloudCreateSetlist, cloudDeleteSetlist } from "@/lib/storage";
 import type { SearchResultArtist, SearchResultSong, StoredSong } from "@/lib/types";

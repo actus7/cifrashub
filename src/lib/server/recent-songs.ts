@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { userSongs } from "@/db/schema";
 import type { StoredSong } from "@/lib/types";
 import { buildStoredSongRow } from "@/lib/server/stored-song-row";
-import { arrangementKey } from "@/lib/stored-song-key";
+import { arrangementKey } from "@/lib/arrangement-key";
 
 export function dedupeSongsByArrangement(
   songs: StoredSong[],

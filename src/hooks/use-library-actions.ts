@@ -9,7 +9,7 @@ import {
   saveFolders,
   saveRecentes,
 } from "@/lib/storage";
-import { songIdentityKey } from "@/lib/stored-song-key";
+import { songIdentityKey } from "@/lib/song-identity-key";
 import type { Folder, StoredSong } from "@/lib/types";
 import { cloudSyncSignalKey } from "@/lib/sync-signal-key";
 
@@ -17,148 +17,123 @@ function isDefaultFolder(folders: Folder[], folderId: string) {
   return folderId === "default" || folders.some((folder) => folder.id === folderId && folder.isDefault);
 }
 
-type DeleteFolderArgs = {
-  deleteCloudFolder: (folderId: string) => Promise<void>;
-  deleteLocalFolder: (folderId: string) => void;
-  folderId: string;
+type CloudState = {
   isCloud: boolean;
+  notifyCloudMutation: () => void;
 };
 
-async function deleteFolder({
-  deleteCloudFolder,
-  deleteLocalFolder,
-  folderId,
-  isCloud,
-}: DeleteFolderArgs) {
-  if (isCloud) {
-    await deleteCloudFolder(folderId);
-    return;
-  }
-
-  deleteLocalFolder(folderId);
-}
-
-export function useLibraryActions() {
+function useCloudState(): CloudState {
   const { data: session, status } = useSession();
-  const isCloud = status === "authenticated";
   const userId = session?.user?.id ?? null;
   const syncSignalKey = userId ? cloudSyncSignalKey(userId) : null;
-
-  const folders = useLibraryStore((s) => s.folders);
-  const setFolders = useLibraryStore((s) => s.setFolders);
-  const recentes = useLibraryStore((s) => s.recentes);
-  const setRecentes = useLibraryStore((s) => s.setRecentes);
 
   const notifyCloudMutation = useCallback(() => {
     if (!syncSignalKey || typeof window === "undefined") return;
     try {
       localStorage.setItem(syncSignalKey, `${Date.now()}`);
     } catch {
-      /* noop */
     }
   }, [syncSignalKey]);
 
+  return { isCloud: status === "authenticated", notifyCloudMutation };
+}
+
+function useFolderActions({ isCloud, notifyCloudMutation }: CloudState) {
+  const folders = useLibraryStore((s) => s.folders);
+  const setFolders = useLibraryStore((s) => s.setFolders);
+
   const doCreateFolder = useCallback(
     async (newFolderName: string) => {
-      if (!newFolderName.trim()) return;
+      const title = newFolderName.trim();
+      if (!title) return;
       if (isCloud) {
-        try {
-          const { folders: next } = await cloudCreateFolder(newFolderName.trim());
-          setFolders(next);
-          notifyCloudMutation();
-        } catch (error) {
-          console.error("Failed to create folder in cloud", error);
-        }
-      } else {
-        const newFolder: Folder = {
-          id: crypto.randomUUID(),
-          title: newFolderName.trim(),
-          songs: [],
-        };
-        const next = [...folders, newFolder];
-        saveFolders(next);
-        setFolders(next);
+        await createCloudFolder(title, setFolders, notifyCloudMutation);
+        return;
       }
+      createLocalFolder(title, folders, setFolders);
     },
     [folders, isCloud, notifyCloudMutation, setFolders],
-  );
-
-  const deleteCloudFolder = useCallback(
-    async (folderId: string) => {
-      try {
-        const { folders: next } = await cloudDeleteFolder(folderId);
-        setFolders(next);
-        notifyCloudMutation();
-      } catch (error) {
-        console.error("Failed to delete folder in cloud", error);
-      }
-    },
-    [notifyCloudMutation, setFolders],
-  );
-
-  const deleteLocalFolder = useCallback(
-    (folderId: string) => {
-      const next = folders.filter((f) => f.id !== folderId);
-      saveFolders(next);
-      setFolders(next);
-    },
-    [folders, setFolders],
   );
 
   const handleDeleteFolder = useCallback(
     async (folderId: string) => {
       if (isDefaultFolder(folders, folderId)) return;
-      await deleteFolder({ deleteCloudFolder, deleteLocalFolder, folderId, isCloud });
+      if (isCloud) {
+        await deleteCloudFolder(folderId, setFolders, notifyCloudMutation);
+        return;
+      }
+      deleteLocalFolder(folderId, folders, setFolders);
     },
-    [deleteCloudFolder, deleteLocalFolder, folders, isCloud],
+    [folders, isCloud, notifyCloudMutation, setFolders],
   );
+
+  return { doCreateFolder, handleDeleteFolder };
+}
+
+async function createCloudFolder(
+  title: string,
+  setFolders: (folders: Folder[]) => void,
+  notifyCloudMutation: () => void,
+) {
+  try {
+    const { folders: next } = await cloudCreateFolder(title);
+    setFolders(next);
+    notifyCloudMutation();
+  } catch (error) {
+    console.error("Failed to create folder in cloud", error);
+  }
+}
+
+function createLocalFolder(title: string, folders: Folder[], setFolders: (folders: Folder[]) => void) {
+  const next = [...folders, { id: crypto.randomUUID(), title, songs: [] }];
+  saveFolders(next);
+  setFolders(next);
+}
+
+async function deleteCloudFolder(
+  folderId: string,
+  setFolders: (folders: Folder[]) => void,
+  notifyCloudMutation: () => void,
+) {
+  try {
+    const { folders: next } = await cloudDeleteFolder(folderId);
+    setFolders(next);
+    notifyCloudMutation();
+  } catch (error) {
+    console.error("Failed to delete folder in cloud", error);
+  }
+}
+
+function deleteLocalFolder(folderId: string, folders: Folder[], setFolders: (folders: Folder[]) => void) {
+  const next = folders.filter((folder) => folder.id !== folderId);
+  saveFolders(next);
+  setFolders(next);
+}
+
+function useRecentActions({ isCloud, notifyCloudMutation }: CloudState) {
+  const recentes = useLibraryStore((s) => s.recentes);
+  const setRecentes = useLibraryStore((s) => s.setRecentes);
 
   const syncRecentes = useCallback(
     (next: StoredSong[], errorMessage: string) => {
       if (isCloud) {
-        const previous = recentes;
-        setRecentes(next);
-        void cloudSaveRecentes(next)
-          .then(({ recentes: synced }) => {
-            setRecentes(synced);
-            notifyCloudMutation();
-          })
-          .catch((error) => {
-            console.error(errorMessage, error);
-            setRecentes(previous);
-          });
-      } else {
-        saveRecentes(next);
-        setRecentes(next);
+        syncCloudRecentes(next, recentes, setRecentes, notifyCloudMutation, errorMessage);
+        return;
       }
+      saveRecentes(next);
+      setRecentes(next);
     },
     [isCloud, notifyCloudMutation, recentes, setRecentes],
   );
 
   const clearAllRecentes = useCallback(() => {
-    if (isCloud) {
-      const previous = recentes;
-      setRecentes([]);
-      void cloudClearRecentes()
-        .then(({ recentes: synced }) => {
-          setRecentes(synced);
-          notifyCloudMutation();
-        })
-        .catch((error) => {
-          console.error("Failed to clear recentes in cloud", error);
-          setRecentes(previous);
-        });
-    } else {
-      saveRecentes([]);
-      setRecentes([]);
-    }
-  }, [isCloud, notifyCloudMutation, recentes, setRecentes]);
+    syncRecentes([], "Failed to clear recentes in cloud");
+  }, [syncRecentes]);
 
   const removeFromRecentes = useCallback(
     (song: StoredSong) => {
       const k = songIdentityKey(song);
-      const next = recentes.filter((s) => songIdentityKey(s) !== k);
-      syncRecentes(next, "Failed to remove from recentes in cloud");
+      syncRecentes(recentes.filter((s) => songIdentityKey(s) !== k), "Failed to remove from recentes in cloud");
     },
     [recentes, syncRecentes],
   );
@@ -166,21 +141,38 @@ export function useLibraryActions() {
   const addToRecentes = useCallback(
     (songObj: StoredSong) => {
       const k = songIdentityKey(songObj);
-      const next = [
-        songObj,
-        ...recentes.filter((s) => songIdentityKey(s) !== k),
-      ].slice(0, 15);
-      syncRecentes(next, "Failed to add to recentes in cloud");
+      syncRecentes([songObj, ...recentes.filter((s) => songIdentityKey(s) !== k)].slice(0, 15), "Failed to add to recentes in cloud");
     },
     [recentes, syncRecentes],
   );
 
+  return { clearAllRecentes, removeFromRecentes, addToRecentes };
+}
+
+function syncCloudRecentes(
+  next: StoredSong[],
+  previous: StoredSong[],
+  setRecentes: (songs: StoredSong[]) => void,
+  notifyCloudMutation: () => void,
+  errorMessage: string,
+) {
+  setRecentes(next);
+  void (next.length === 0 ? cloudClearRecentes() : cloudSaveRecentes(next))
+    .then(({ recentes: synced }) => {
+      setRecentes(synced);
+      notifyCloudMutation();
+    })
+    .catch((error) => {
+      console.error(errorMessage, error);
+      setRecentes(previous);
+    });
+}
+
+export function useLibraryActions() {
+  const cloudState = useCloudState();
   return {
-    doCreateFolder,
-    handleDeleteFolder,
-    clearAllRecentes,
-    removeFromRecentes,
-    addToRecentes,
-    notifyCloudMutation,
+    ...useFolderActions(cloudState),
+    ...useRecentActions(cloudState),
+    notifyCloudMutation: cloudState.notifyCloudMutation,
   };
 }

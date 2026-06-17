@@ -1,4 +1,4 @@
-import { arrangementKey } from "@/lib/stored-song-key";
+import { arrangementKey } from "@/lib/arrangement-key";
 import type { Folder, StoredSong } from "@/lib/types";
 
 /** Todas as músicas da biblioteca (pastas + recentes), uma entrada por arranjo. */

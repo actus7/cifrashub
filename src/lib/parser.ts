@@ -1,6 +1,7 @@
 import { classifySection, transposeRootNote } from "./music";
-import { isValidYoutubeId } from "./youtube";
-import type { LyricBlock, LyricLine, Section, SectionType, StoredSong } from "./types";
+import { parseChordLinePair } from "./parse-chord-line-pair";
+import { extractYoutubeIdFromHtml } from "./extract-youtube-id-from-html";
+import type { LyricLine, Section, SectionType, StoredSong } from "./types";
 
 function randomUuid(): string {
   const nativeUuid = cryptoRandomUuid();
@@ -32,87 +33,6 @@ function formatUuidBytes(bytes: Uint8Array) {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-const CHORD_PATTERN =
-  "([A-G][#b]?(?:maj|min|M)?(?:m(?!aj))?(?:\\d{1,2})?(?:sus[24]?|add\\d?|dim|aug)?(?:/[A-G][#b]?)?)\\b";
-
-export function parseChordLinePair(chordLine: string, lyricLine: string): LyricBlock[] {
-  const matches = [...chordLine.matchAll(new RegExp(CHORD_PATTERN, "g"))];
-  if (matches.length === 0) return plainLyricBlocks(lyricLine);
-
-  const blocks = leadingLyricBlocks(matches, lyricLine);
-  for (let i = 0; i < matches.length; i++) {
-    const block = chordMatchToBlock(matches, i, lyricLine);
-    if (block) blocks.push(block);
-  }
-  return blocks;
-}
-
-function plainLyricBlocks(lyricLine: string): LyricBlock[] {
-  const text = lyricLine.replace(/\r?\n$/, "");
-  return text.trim() || lyricLine === ""
-    ? [{ chord: "", text, spaceAfter: true }]
-    : [];
-}
-
-function leadingLyricBlocks(matches: RegExpMatchArray[], lyricLine: string): LyricBlock[] {
-  const firstIndex = firstMatchIndex(matches);
-  const prefix = lyricLine.slice(0, firstIndex);
-  if (firstIndex <= 0 || !prefix.trim()) return [];
-  return [{ chord: "", text: prefix.trimEnd(), spaceAfter: prefixHasTrailingSpace(prefix, firstIndex) }];
-}
-
-function firstMatchIndex(matches: RegExpMatchArray[]) {
-  return matches[0]?.index ?? 0;
-}
-
-function prefixHasTrailingSpace(prefix: string, firstIndex: number) {
-  return /\s+$/.test(prefix) || prefix.length < firstIndex;
-}
-
-function chordMatchToBlock(
-  matches: RegExpMatchArray[],
-  index: number,
-  lyricLine: string,
-): LyricBlock | null {
-  const match = matches[index];
-  if (!match || match.index === undefined) return null;
-
-  const chord = match[1] as string;
-  const textSegment = chordTextSegment(matches, index, lyricLine, match.index, chord.length);
-  const text = textSegment.trimEnd();
-
-  return {
-    chord,
-    text,
-    spaceAfter: chordBlockSpaceAfter(textSegment, text, index, matches.length),
-  };
-}
-
-function chordTextSegment(
-  matches: RegExpMatchArray[],
-  index: number,
-  lyricLine: string,
-  start: number,
-  chordLength: number,
-) {
-  const end = matchEnd(matches[index + 1], lyricLine, start, chordLength);
-  return start < lyricLine.length ? lyricLine.slice(start, end) : "";
-}
-
-function chordBlockSpaceAfter(textSegment: string, text: string, index: number, matchCount: number) {
-  return /\s+$/.test(textSegment) || (text === "" && index < matchCount - 1);
-}
-
-function matchEnd(
-  next: RegExpMatchArray | undefined,
-  lyricLine: string,
-  start: number,
-  chordLength: number,
-): number {
-  return next?.index !== undefined
-    ? next.index
-    : Math.max(lyricLine.length, start + chordLength);
-}
 
 const CHORD_MARKER_RE = /‹CHORD:([^›]+)›/;
 const SECTION_RE = /^\[(.+?)\]/;
@@ -190,78 +110,6 @@ function normalizeOptionalNote(note: string | undefined): string | undefined {
   return note ? normalizeNoteText(note) : undefined;
 }
 
-export function extractYoutubeIdFromHtml(htmlContent: string): string | undefined {
-  return (
-    firstValidYoutubeId(htmlContent, curatedYoutubePatterns()) ??
-    firstValidYoutubeId(htmlContent, urlYoutubePatterns()) ??
-    youtubeIdFromDom(htmlContent) ??
-    firstValidYoutubeId(htmlContent, fallbackVideoIdPatterns())
-  );
-}
-
-function firstValidYoutubeId(htmlContent: string, patterns: RegExp[]): string | undefined {
-  for (const pattern of patterns) {
-    const id = htmlContent.match(pattern)?.[1]?.trim();
-    if (isValidYoutubeId(id)) return id;
-  }
-  return undefined;
-}
-
-function curatedYoutubePatterns(): RegExp[] {
-  return [
-    /["']youtubeId["']\s*:\s*["']([a-zA-Z0-9_-]{11})["']/,
-    /youtubeId\s*:\s*["']([a-zA-Z0-9_-]{11})["']/,
-  ];
-}
-
-function urlYoutubePatterns(): RegExp[] {
-  return [
-    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
-    /youtube-nocookie\.com\/embed\/([a-zA-Z0-9_-]{11})/,
-    /youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
-    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
-    /data-video(?:id)?=["']([a-zA-Z0-9_-]{11})["']/i,
-    /aria-label=["']https?:\/\/www\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
-  ];
-}
-
-function fallbackVideoIdPatterns(): RegExp[] {
-  return [
-    /["']videoId["']\s*:\s*["']([a-zA-Z0-9_-]{11})["']/,
-    /videoId\s*:\s*["']([a-zA-Z0-9_-]{11})["']/,
-  ];
-}
-
-function youtubeIdFromDom(htmlContent: string): string | undefined {
-  if (typeof DOMParser === "undefined") return undefined;
-
-  const doc = new DOMParser().parseFromString(htmlContent, "text/html");
-  return youtubeIdFromIframe(doc) ?? youtubeIdFromWatchLink(doc);
-}
-
-function youtubeIdFromIframe(doc: Document): string | undefined {
-  return youtubeIdFromIframeSrc(youtubeIframeSrc(doc));
-}
-
-function youtubeIframeSrc(doc: Document): string {
-  return doc.querySelector("iframe[src*='youtube']")?.getAttribute("src") ?? "";
-}
-
-function youtubeIdFromIframeSrc(src: string): string | undefined {
-  return validMatchedId(src.match(/embed\/([a-zA-Z0-9_-]{11})/)?.[1])
-    ?? validMatchedId(src.match(/[?&]v=([a-zA-Z0-9_-]{11})/)?.[1]);
-}
-
-function youtubeIdFromWatchLink(doc: Document): string | undefined {
-  const selector = "a[href*='youtube.com/watch?v='], a[aria-label*='youtube.com/watch?v=']";
-  const el = doc.querySelector(selector);
-  const value = el?.getAttribute("href") ?? el?.getAttribute("aria-label") ?? "";
-  return validMatchedId(value.match(/v=([a-zA-Z0-9_-]{11})/)?.[1]);
-}
-
-function validMatchedId(id: string | undefined): string | undefined {
-  return isValidYoutubeId(id) ? id : undefined;
-}
 
 type HtmlParseState = {
   sections: Section[];
