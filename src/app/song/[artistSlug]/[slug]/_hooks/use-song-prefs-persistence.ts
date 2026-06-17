@@ -65,23 +65,10 @@ function persistLocalPrefs(
   setCurrentSong: (updater: (song: StoredSong | null) => StoredSong | null) => void,
 ) {
   const currentKey = songIdentityKey(currentSong);
-  const nextSong = updateCurrentSongPrefs(setCurrentSong, prefs, currentSong);
+  const nextSong = withPlayerPrefs(currentSong, prefs);
+  setCurrentSong((prev) => (prev ? withPlayerPrefs(prev, prefs) : null));
   persistRecentSongPrefs(currentKey, nextSong);
   persistFolderSongPrefs(currentKey, prefs);
-}
-
-function updateCurrentSongPrefs(
-  setCurrentSong: (updater: (song: StoredSong | null) => StoredSong | null) => void,
-  prefs: PersistedPlayerPrefs,
-  fallback: StoredSong,
-) {
-  let nextSong = fallback;
-  setCurrentSong((prev) => {
-    if (!prev) return prev;
-    nextSong = withPlayerPrefs(prev, prefs);
-    return nextSong;
-  });
-  return nextSong;
 }
 
 function persistRecentSongPrefs(currentKey: string, nextSong: StoredSong) {

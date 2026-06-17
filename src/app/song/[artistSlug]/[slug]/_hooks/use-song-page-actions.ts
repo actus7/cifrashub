@@ -18,7 +18,7 @@ export function useSongPageActions(
   return {
     player,
     onYoutubeVideoResolved: (youtubeId: string) => setCurrentSong((prev) => prev ? { ...prev, youtubeId } : prev),
-    onBack: () => router.push("/"),
+    onBack: () => router.back(),
     onOpenVideo: () => player.setYoutubeMiniOpen(true),
     onOpenArtistSongs: () => {
       if (currentSong) router.push(`/artist/${currentSong.artistSlug}`);

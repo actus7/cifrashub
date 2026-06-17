@@ -52,8 +52,8 @@ function applyEditResult(args: ApplyEditResultArgs) {
   persistAppliedEdit(args, result.songData);
 }
 
-function canApplyEditResult({ appliedRef, currentSong, artistSlug, slug }: ApplyEditResultArgs) {
-  return !appliedRef.current && Boolean(currentSong && artistSlug && slug);
+function canApplyEditResult({ appliedRef, currentSong, artistSlug, slug, status }: ApplyEditResultArgs) {
+  return !appliedRef.current && status !== "loading" && Boolean(currentSong && artistSlug && slug);
 }
 
 function originMatchesRoute(
