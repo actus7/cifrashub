@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { SongView } from "@/components/song/song-view";
 import { SongViewProvider, type SongViewContextValue } from "@/components/song/song-context";
 import { usePlayerStore } from "@/store/use-player-store";
@@ -15,7 +15,9 @@ import { useLibraryActions } from "@/hooks/use-library-actions";
 import { useSession } from "@/hooks/use-session";
 import { cloudAddSongToFolder, cloudRemoveSongFromFolder, cloudSaveRecentes, cloudUpdateSongPrefs, saveFolders, saveRecentes } from "@/lib/storage";
 import { writeEditSnapshot, readEditResult, type EditOrigin } from "@/lib/cifras-edit-bridge";
-import { arrangementKey, songIdentityKey } from "@/lib/stored-song-key";
+import { arrangementKey } from "@/lib/arrangement-key";
+import { PLAYER_PREF_DEFAULTS, PLAYER_PREF_KEYS } from "@/lib/player-pref-defaults";
+import { songIdentityKey } from "@/lib/song-identity-key";
 
 function useSongParams() {
   const params = useParams();
@@ -23,6 +25,38 @@ function useSongParams() {
     artistSlug: Array.isArray(params.artistSlug) ? params.artistSlug[0] : params.artistSlug,
     slug: Array.isArray(params.slug) ? params.slug[0] : params.slug,
   };
+}
+
+type LoadedSongRefsArgs = {
+  addToRecentes: (song: StoredSong) => void;
+  folders: ReturnType<typeof useLibraryStore.getState>["folders"];
+  recentes: StoredSong[];
+  folderId: string | null;
+  arrangementId: string | null;
+};
+
+function useLoadedSongRefs({ addToRecentes, arrangementId, folderId, folders, recentes }: LoadedSongRefsArgs) {
+  const addToRecentesRef = useRef(addToRecentes);
+  const foldersRef = useRef(folders);
+  const recentesRef = useRef(recentes);
+  const folderIdRef = useRef(folderId);
+  const arrangementIdRef = useRef(arrangementId);
+
+  useEffect(() => {
+    addToRecentesRef.current = addToRecentes;
+    foldersRef.current = folders;
+    recentesRef.current = recentes;
+    folderIdRef.current = folderId;
+    arrangementIdRef.current = arrangementId;
+  }, [addToRecentes, arrangementId, folderId, folders, recentes]);
+
+  return useMemo(() => ({
+    addToRecentes: addToRecentesRef,
+    arrangementId: arrangementIdRef,
+    folderId: folderIdRef,
+    folders: foldersRef,
+    recentes: recentesRef,
+  }), []);
 }
 
 function useLoadedSong(artistSlug: string | undefined, slug: string | undefined) {
@@ -39,39 +73,27 @@ function useLoadedSong(artistSlug: string | undefined, slug: string | undefined)
   const recentes = useLibraryStore((s) => s.recentes);
   const libraryLoaded = useLibraryStore((s) => s.libraryLoaded);
 
-  const addToRecentesRef = useRef(addToRecentes);
-  const foldersRef = useRef(folders);
-  const recentesRef = useRef(recentes);
-  const folderIdRef = useRef(folderId);
-  const arrangementIdRef = useRef(arrangementId);
-  useEffect(() => {
-    addToRecentesRef.current = addToRecentes;
-    foldersRef.current = folders;
-    recentesRef.current = recentes;
-    folderIdRef.current = folderId;
-    arrangementIdRef.current = arrangementId;
-  }, [addToRecentes, arrangementId, folderId, folders, recentes]);
-
+  const refs = useLoadedSongRefs({ addToRecentes, arrangementId, folderId, folders, recentes });
   const lastRequestedRef = useRef("");
 
   const applyResult = useCallback((result: LoadSongResult) => {
     if (isLoadSongError(result)) {
       setError(result.error);
     } else {
-      const savedSong = findSavedSong(result.song, foldersRef.current, recentesRef.current, folderIdRef.current, arrangementIdRef.current);
-      const songData = reusableSavedContent(savedSong, arrangementIdRef.current) ?? result.song.songData;
-      applyLoadedSong({ ...result.song, ...savedSong, songData }, setCurrentSong, setSongData, applySongPrefs, addToRecentesRef.current);
+      const savedSong = findSavedSong(result.song, refs.folders.current, refs.recentes.current, refs.folderId.current, refs.arrangementId.current);
+      const songData = reusableSavedContent(savedSong, refs.arrangementId.current) ?? result.song.songData;
+      applyLoadedSong({ ...result.song, ...savedSong, songData }, setCurrentSong, setSongData, applySongPrefs, refs.addToRecentes.current);
     }
-  }, [applySongPrefs]);
+  }, [applySongPrefs, refs]);
 
   const load = useCallback(async () => {
-    if (!artistSlug || !slug || !libraryLoaded) return;
-    const requestKey = `${artistSlug}/${slug}`;
+    const requestKey = songRequestKey(artistSlug, slug, libraryLoaded);
+    if (!requestKey) return;
     lastRequestedRef.current = requestKey;
     setIsLoading(true);
     setError(null);
 
-    const result = await loadSongResult(artistSlug, slug);
+    const result = await loadSongResult(artistSlug!, slug!);
     if (lastRequestedRef.current !== requestKey) return;
 
     applyResult(result);
@@ -89,6 +111,10 @@ function useLoadedSong(artistSlug: string | undefined, slug: string | undefined)
   return { currentSong, setCurrentSong, songData, setSongData, isLoading, error, load, folderId, arrangementId };
 }
 
+function songRequestKey(artistSlug: string | undefined, slug: string | undefined, libraryLoaded: boolean) {
+  return artistSlug && slug && libraryLoaded ? `${artistSlug}/${slug}` : null;
+}
+
 function findSavedSong(
   song: StoredSong,
   folders: ReturnType<typeof useLibraryStore.getState>["folders"],
@@ -96,20 +122,26 @@ function findSavedSong(
   folderId: string | null,
   arrangementId: string | null,
 ) {
-  if (folderId) {
-    const fromFolder = folders
-      .find((folder) => folder.id === folderId)
-      ?.songs.find((saved) => savedSongMatches(saved, song, arrangementId));
-    if (fromFolder) return fromFolder;
-  }
-
-  const remainingFolders = folderId ? folders.filter((folder) => folder.id !== folderId) : folders;
-  const fromFolders = remainingFolders
-    .flatMap((folder) => folder.songs)
+  return savedSongCandidates(folders, recentes, folderId)
     .find((saved) => savedSongMatches(saved, song, arrangementId));
-  if (fromFolders) return fromFolders;
+}
 
-  return recentes.find((saved) => savedSongMatches(saved, song, arrangementId));
+function savedSongCandidates(
+  folders: ReturnType<typeof useLibraryStore.getState>["folders"],
+  recentes: StoredSong[],
+  folderId: string | null,
+) {
+  return [...preferredFolderSongs(folders, folderId), ...otherFolderSongs(folders, folderId), ...recentes];
+}
+
+function preferredFolderSongs(folders: ReturnType<typeof useLibraryStore.getState>["folders"], folderId: string | null) {
+  return folderId ? folders.find((folder) => folder.id === folderId)?.songs ?? [] : [];
+}
+
+function otherFolderSongs(folders: ReturnType<typeof useLibraryStore.getState>["folders"], folderId: string | null) {
+  return folders
+    .filter((folder) => folder.id !== folderId)
+    .flatMap((folder) => folder.songs);
 }
 
 function savedSongMatches(saved: StoredSong, song: StoredSong, arrangementId: string | null) {
@@ -151,28 +183,20 @@ function applyLoadedSong(
   addToRecentes(song);
 }
 
-type PersistedPlayerPrefs = Pick<StoredSong,
-  | "tone"
-  | "capo"
-  | "simplified"
-  | "showTabs"
-  | "mirrored"
-  | "fontSizeOffset"
-  | "columns"
-  | "spacingOffset"
-  | "zenMode"
-  | "autoScroll"
-  | "scrollSpeed"
-  | "metronomeActive"
-  | "bpm"
->;
+type PersistedPlayerPrefs = Pick<StoredSong, keyof typeof PLAYER_PREF_DEFAULTS>;
+type PlayerContextState = ReturnType<typeof usePlayerContextState>;
 
-function usePlayerContextState() {
+function usePitchState() {
   return {
     tone: usePlayerStore((s) => s.tone),
     setTone: usePlayerStore((s) => s.setTone),
     capo: usePlayerStore((s) => s.capo),
     setCapo: usePlayerStore((s) => s.setCapo),
+  };
+}
+
+function useDisplayState() {
+  return {
     simplified: usePlayerStore((s) => s.simplified),
     setSimplified: usePlayerStore((s) => s.setSimplified),
     showTabs: usePlayerStore((s) => s.showTabs),
@@ -185,6 +209,11 @@ function usePlayerContextState() {
     setColumns: usePlayerStore((s) => s.setColumns),
     spacingOffset: usePlayerStore((s) => s.spacingOffset),
     setSpacingOffset: usePlayerStore((s) => s.setSpacingOffset),
+  };
+}
+
+function usePracticeState() {
+  return {
     zenMode: usePlayerStore((s) => s.zenMode),
     setZenMode: usePlayerStore((s) => s.setZenMode),
     autoScroll: usePlayerStore((s) => s.autoScroll),
@@ -195,12 +224,26 @@ function usePlayerContextState() {
     setMetronomeActive: usePlayerStore((s) => s.setMetronomeActive),
     bpm: usePlayerStore((s) => s.bpm),
     setBpm: usePlayerStore((s) => s.setBpm),
+  };
+}
+
+function useOverlayState() {
+  return {
     activeChord: usePlayerStore((s) => s.activeChord),
     setActiveChord: usePlayerStore((s) => s.setActiveChord),
     displaySettingsOpen: usePlayerStore((s) => s.displaySettingsOpen),
     setDisplaySettingsOpen: usePlayerStore((s) => s.setDisplaySettingsOpen),
     youtubeMiniOpen: usePlayerStore((s) => s.youtubeMiniOpen),
     setYoutubeMiniOpen: usePlayerStore((s) => s.setYoutubeMiniOpen),
+  };
+}
+
+function usePlayerContextState() {
+  return {
+    ...usePitchState(),
+    ...useDisplayState(),
+    ...usePracticeState(),
+    ...useOverlayState(),
   };
 }
 
@@ -213,99 +256,90 @@ function withPlayerPrefs(song: StoredSong, prefs: PersistedPlayerPrefs): StoredS
 }
 
 function arePrefsEqual(song: StoredSong, prefs: PersistedPlayerPrefs) {
-  return (
-    (song.tone ?? 0) === prefs.tone &&
-    (song.capo ?? 0) === prefs.capo &&
-    (song.simplified ?? false) === prefs.simplified &&
-    (song.showTabs ?? true) === prefs.showTabs &&
-    (song.mirrored ?? false) === prefs.mirrored &&
-    (song.fontSizeOffset ?? 0) === prefs.fontSizeOffset &&
-    (song.columns ?? 1) === prefs.columns &&
-    (song.spacingOffset ?? 0) === prefs.spacingOffset &&
-    (song.zenMode ?? false) === prefs.zenMode &&
-    (song.autoScroll ?? false) === prefs.autoScroll &&
-    (song.scrollSpeed ?? 2) === prefs.scrollSpeed &&
-    (song.metronomeActive ?? false) === prefs.metronomeActive &&
-    (song.bpm ?? 100) === prefs.bpm
-  );
+  return PLAYER_PREF_KEYS.every((key) => (song[key] ?? PLAYER_PREF_DEFAULTS[key]) === prefs[key]);
+}
+
+function playerPrefs(player: PlayerContextState): PersistedPlayerPrefs {
+  return Object.fromEntries(PLAYER_PREF_KEYS.map((key) => [key, player[key]])) as PersistedPlayerPrefs;
 }
 
 function usePersistCurrentSongPrefs(
   currentSong: StoredSong | null,
   setCurrentSong: (updater: (song: StoredSong | null) => StoredSong | null) => void,
-  player: ReturnType<typeof usePlayerContextState>,
+  player: PlayerContextState,
 ) {
   const { status } = useSession();
   const lastPersistKeyRef = useRef("");
+  const prefs = playerPrefs(player);
+  const persistKey = currentSong ? JSON.stringify({ song: songIdentityKey(currentSong), prefs }) : "";
+  const prefsRef = useRef(prefs);
+  const currentSongRef = useRef(currentSong);
 
   useEffect(() => {
-    if (status !== "unauthenticated" || !currentSong) return;
+    prefsRef.current = prefs;
+    currentSongRef.current = currentSong;
+  }, [currentSong, prefs]);
 
-    const prefs: PersistedPlayerPrefs = {
-      tone: player.tone,
-      capo: player.capo,
-      simplified: player.simplified,
-      showTabs: player.showTabs,
-      mirrored: player.mirrored,
-      fontSizeOffset: player.fontSizeOffset,
-      columns: player.columns,
-      spacingOffset: player.spacingOffset,
-      zenMode: player.zenMode,
-      autoScroll: player.autoScroll,
-      scrollSpeed: player.scrollSpeed,
-      metronomeActive: player.metronomeActive,
-      bpm: player.bpm,
-    };
-    const persistKey = JSON.stringify({ song: songIdentityKey(currentSong), prefs });
-    if (lastPersistKeyRef.current === persistKey) return;
+  useEffect(() => {
+    const activeSong = currentSongRef.current;
+    const activePrefs = prefsRef.current;
+    if (!shouldPersistLocalPrefs(status, activeSong, persistKey, lastPersistKeyRef) || !activeSong) return;
     lastPersistKeyRef.current = persistKey;
+    if (arePrefsEqual(activeSong, activePrefs)) return;
+    persistLocalPrefs(activeSong, activePrefs, setCurrentSong);
+  }, [persistKey, setCurrentSong, status]);
+}
 
-    if (arePrefsEqual(currentSong, prefs)) return;
+function shouldPersistLocalPrefs(
+  status: ReturnType<typeof useSession>["status"],
+  currentSong: StoredSong | null,
+  persistKey: string,
+  lastPersistKeyRef: MutableRefObject<string>,
+) {
+  return status === "unauthenticated" && currentSong && lastPersistKeyRef.current !== persistKey;
+}
 
-    const currentKey = songIdentityKey(currentSong);
-    let nextSong: StoredSong = currentSong;
-    setCurrentSong((prev) => {
-      if (!prev) return prev;
-      nextSong = withPlayerPrefs(prev, prefs);
-      return nextSong;
-    });
+function persistLocalPrefs(
+  currentSong: StoredSong,
+  prefs: PersistedPlayerPrefs,
+  setCurrentSong: (updater: (song: StoredSong | null) => StoredSong | null) => void,
+) {
+  const currentKey = songIdentityKey(currentSong);
+  const nextSong = updateCurrentSongPrefs(setCurrentSong, prefs, currentSong);
+  persistRecentSongPrefs(currentKey, nextSong);
+  persistFolderSongPrefs(currentKey, prefs);
+}
 
-    const { recentes, folders, setRecentes, setFolders } = useLibraryStore.getState();
+function updateCurrentSongPrefs(
+  setCurrentSong: (updater: (song: StoredSong | null) => StoredSong | null) => void,
+  prefs: PersistedPlayerPrefs,
+  fallback: StoredSong,
+) {
+  let nextSong = fallback;
+  setCurrentSong((prev) => {
+    if (!prev) return prev;
+    nextSong = withPlayerPrefs(prev, prefs);
+    return nextSong;
+  });
+  return nextSong;
+}
 
-    const nextRecentes = [
-      nextSong,
-      ...recentes.filter((song) => songIdentityKey(song) !== currentKey),
-    ].slice(0, 15);
-    saveRecentes(nextRecentes);
-    setRecentes(nextRecentes);
+function persistRecentSongPrefs(currentKey: string, nextSong: StoredSong) {
+  const { recentes, setRecentes } = useLibraryStore.getState();
+  const nextRecentes = [nextSong, ...recentes.filter((song) => songIdentityKey(song) !== currentKey)].slice(0, 15);
+  saveRecentes(nextRecentes);
+  setRecentes(nextRecentes);
+}
 
-    const isSavedInFolder = folders.some((folder) => folder.songs.some((song) => songIdentityKey(song) === currentKey));
-    if (isSavedInFolder) {
-      const nextFolders = folders.map((folder) => ({
-        ...folder,
-        songs: folder.songs.map((song) => songIdentityKey(song) === currentKey ? withPlayerPrefs(song, prefs) : song),
-      }));
-      saveFolders(nextFolders);
-      setFolders(nextFolders);
-    }
-  }, [
-    currentSong,
-    player.autoScroll,
-    player.bpm,
-    player.capo,
-    player.columns,
-    player.fontSizeOffset,
-    player.metronomeActive,
-    player.mirrored,
-    player.scrollSpeed,
-    player.showTabs,
-    player.simplified,
-    player.spacingOffset,
-    player.tone,
-    player.zenMode,
-    setCurrentSong,
-    status,
-  ]);
+function persistFolderSongPrefs(currentKey: string, prefs: PersistedPlayerPrefs) {
+  const { folders, setFolders } = useLibraryStore.getState();
+  if (!folders.some((folder) => folder.songs.some((song) => songIdentityKey(song) === currentKey))) return;
+  const nextFolders = folders.map((folder) => ({
+    ...folder,
+    songs: folder.songs.map((song) => songIdentityKey(song) === currentKey ? withPlayerPrefs(song, prefs) : song),
+  }));
+  saveFolders(nextFolders);
+  setFolders(nextFolders);
 }
 
 type CloudPrefsPayload = { arrangementId: string; tone: number; capo: number; uiPrefs: StoredSongUiPrefs };
@@ -323,72 +357,69 @@ function flushPendingCloudPrefs(payload: CloudPrefsPayload) {
   }
 }
 
-function usePersistCloudSongPrefs(
-  currentSong: StoredSong | null,
-  player: ReturnType<typeof usePlayerContextState>,
-) {
+function usePersistCloudSongPrefs(currentSong: StoredSong | null, player: PlayerContextState) {
   const { status } = useSession();
   const lastPersistKeyRef = useRef("");
   const pendingPayloadRef = useRef<CloudPrefsPayload | null>(null);
+  const payload = currentSong?.arrangementId ? cloudPrefsPayload(currentSong.arrangementId, player) : null;
+  const persistKey = payload ? JSON.stringify(payload) : "";
+  const payloadRef = useRef(payload);
 
   useEffect(() => {
-    if (status !== "authenticated" || !currentSong?.arrangementId) return;
+    payloadRef.current = payload;
+  }, [payload]);
 
-    const uiPrefs: StoredSongUiPrefs = {
-      simplified: player.simplified,
-      showTabs: player.showTabs,
-      mirrored: player.mirrored,
-      fontSizeOffset: player.fontSizeOffset,
-      columns: player.columns,
-      spacingOffset: player.spacingOffset,
-      zenMode: player.zenMode,
-      autoScroll: player.autoScroll,
-      scrollSpeed: player.scrollSpeed,
-      metronomeActive: player.metronomeActive,
-      bpm: player.bpm,
-    };
-    const payload: CloudPrefsPayload = {
-      arrangementId: currentSong.arrangementId,
-      tone: player.tone,
-      capo: player.capo,
-      uiPrefs,
-    };
-    const persistKey = JSON.stringify(payload);
-    if (lastPersistKeyRef.current === persistKey) return;
-
-    pendingPayloadRef.current = payload;
-    const timeout = setTimeout(() => {
-      lastPersistKeyRef.current = persistKey;
-      pendingPayloadRef.current = null;
-      void cloudUpdateSongPrefs(payload.arrangementId, payload).catch((error) => {
-        console.error("Failed to persist song prefs in cloud", error);
-      });
-    }, 800);
-
+  useEffect(() => {
+    const currentPayload = payloadRef.current;
+    if (!shouldPersistCloudPrefs(status, currentPayload, persistKey, lastPersistKeyRef) || !currentPayload) return;
+    pendingPayloadRef.current = currentPayload;
+    const timeout = setTimeout(() => persistCloudPrefs(currentPayload, persistKey, lastPersistKeyRef, pendingPayloadRef), 800);
     return () => clearTimeout(timeout);
-  }, [
-    currentSong,
-    player.autoScroll,
-    player.bpm,
-    player.capo,
-    player.columns,
-    player.fontSizeOffset,
-    player.metronomeActive,
-    player.mirrored,
-    player.scrollSpeed,
-    player.showTabs,
-    player.simplified,
-    player.spacingOffset,
-    player.tone,
-    player.zenMode,
-    status,
-  ]);
+  }, [persistKey, status]);
 
   useEffect(() => {
     return () => {
       if (pendingPayloadRef.current) flushPendingCloudPrefs(pendingPayloadRef.current);
     };
   }, []);
+}
+
+function cloudPrefsPayload(arrangementId: string, player: PlayerContextState): CloudPrefsPayload {
+  return {
+    arrangementId,
+    tone: player.tone,
+    capo: player.capo,
+    uiPrefs: uiPrefs(player),
+  };
+}
+
+function uiPrefs(player: PlayerContextState): StoredSongUiPrefs {
+  const prefs = playerPrefs(player);
+  return Object.fromEntries(
+    PLAYER_PREF_KEYS.filter((key) => key !== "tone" && key !== "capo").map((key) => [key, prefs[key]]),
+  ) as StoredSongUiPrefs;
+}
+
+function shouldPersistCloudPrefs(
+  status: ReturnType<typeof useSession>["status"],
+  payload: CloudPrefsPayload | null,
+  persistKey: string,
+  lastPersistKeyRef: MutableRefObject<string>,
+) {
+  return status === "authenticated" && payload && lastPersistKeyRef.current !== persistKey;
+}
+
+function persistCloudPrefs(
+  payload: CloudPrefsPayload,
+  persistKey: string,
+  lastPersistKeyRef: MutableRefObject<string>,
+  pendingPayloadRef: MutableRefObject<CloudPrefsPayload | null>,
+) {
+  lastPersistKeyRef.current = persistKey;
+  pendingPayloadRef.current = null;
+  void cloudUpdateSongPrefs(payload.arrangementId, payload).catch((error) => {
+    console.error("Failed to persist song prefs in cloud", error);
+  });
 }
 
 function useSongFolderActions(currentSong: StoredSong | null) {
@@ -555,24 +586,57 @@ function useApplyEditResult(
   const { status } = useSession();
   const appliedRef = useRef(false);
 
-  useEffect(() => {
-    if (appliedRef.current || !currentSong || !artistSlug || !slug) return;
-    const result = readEditResult();
-    if (!result) return;
-    appliedRef.current = true;
-    if (!originMatchesRoute(result.origin, artistSlug, slug, folderId, arrangementId)) return;
+  useEffect(() => applyEditResult({
+    appliedRef,
+    arrangementId,
+    artistSlug,
+    currentSong,
+    folderId,
+    setCurrentSong,
+    setSongData,
+    slug,
+    status,
+  }), [artistSlug, slug, folderId, arrangementId, currentSong, setCurrentSong, setSongData, status]);
+}
 
-    setSongData(result.songData);
-    const editedSong: StoredSong = { ...currentSong, songData: result.songData };
-    setCurrentSong((prev) => (prev ? { ...prev, songData: result.songData } : prev));
+type ApplyEditResultArgs = {
+  appliedRef: MutableRefObject<boolean>;
+  artistSlug: string | undefined;
+  slug: string | undefined;
+  folderId: string | null;
+  arrangementId: string | null;
+  currentSong: StoredSong | null;
+  setCurrentSong: (updater: (song: StoredSong | null) => StoredSong | null) => void;
+  setSongData: (data: Section[]) => void;
+  status: ReturnType<typeof useSession>["status"];
+};
 
-    const persist = status === "authenticated"
-      ? persistEditedContentCloud(folderId, editedSong)
-      : Promise.resolve(persistEditedContentLocal(folderId, editedSong));
-    void persist.catch((error) => {
-      console.error("Failed to persist edited song content", error);
-    });
-  }, [artistSlug, slug, folderId, arrangementId, currentSong, setCurrentSong, setSongData, status]);
+function applyEditResult(args: ApplyEditResultArgs) {
+  if (!canApplyEditResult(args)) return;
+  const result = readEditResult();
+  if (!result) return;
+  args.appliedRef.current = true;
+  if (!originMatchesRoute(result.origin, args.artistSlug!, args.slug!, args.folderId, args.arrangementId)) return;
+  persistAppliedEdit(args, result.songData);
+}
+
+function canApplyEditResult({ appliedRef, currentSong, artistSlug, slug }: ApplyEditResultArgs) {
+  return !appliedRef.current && Boolean(currentSong && artistSlug && slug);
+}
+
+function persistAppliedEdit(args: ApplyEditResultArgs, songData: Section[]) {
+  args.setSongData(songData);
+  const editedSong: StoredSong = { ...args.currentSong!, songData };
+  args.setCurrentSong((prev) => (prev ? { ...prev, songData } : prev));
+  void persistEditedContent(args, editedSong).catch((error) => {
+    console.error("Failed to persist edited song content", error);
+  });
+}
+
+function persistEditedContent(args: ApplyEditResultArgs, editedSong: StoredSong) {
+  return args.status === "authenticated"
+    ? persistEditedContentCloud(args.folderId, editedSong)
+    : Promise.resolve(persistEditedContentLocal(args.folderId, editedSong));
 }
 
 function useSongPageActions(

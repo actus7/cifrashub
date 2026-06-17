@@ -1,5 +1,5 @@
 import { flattenLibrarySongs } from "@/lib/library-flat";
-import { arrangementKey } from "@/lib/stored-song-key";
+import { arrangementKey } from "@/lib/arrangement-key";
 import type {
   Folder,
   LocalSetlistStored,

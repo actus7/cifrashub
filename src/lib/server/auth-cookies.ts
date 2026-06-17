@@ -6,7 +6,7 @@ import type { NextResponse } from "next/server";
  * alone does not reliably expire them in production, which leaves the user
  * looking logged in after a reload.
  */
-export const NEON_AUTH_COOKIES = [
+const NEON_AUTH_COOKIES = [
   "__Secure-neon-auth.session_token",
   "__Secure-neon-auth.local.session_data",
   "__Secure-neon-auth.session_challange",

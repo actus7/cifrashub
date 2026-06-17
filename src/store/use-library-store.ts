@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { Folder, StoredSong, SetlistSummary, LocalSetlistStored } from "@/lib/types";
 import { DEFAULT_FOLDERS } from "@/lib/storage";
-import { dedupeRecentesBySong } from "@/lib/stored-song-key";
+import { dedupeRecentesBySong } from "@/lib/dedupe-recentes-by-song";
 
 interface LibraryState {
   folders: Folder[];

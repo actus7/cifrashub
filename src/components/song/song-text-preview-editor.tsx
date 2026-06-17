@@ -111,22 +111,71 @@ type SectionListProps = {
   updateSectionText: (index: number, value: string) => void;
 };
 
-export function SongTextPreviewEditor({
+export function SongTextPreviewEditor(props: SongTextPreviewEditorProps) {
+  const editor = useSongTextPreviewEditor(props);
+
+  return (
+    <div className="no-print flex min-h-0 flex-1 flex-col">
+      <StickyEditorChrome
+        editorFontBoostPx={editor.editorFontBoostPx}
+        insertAtCursor={editor.insertAtCursor}
+        onApply={editor.handleApply}
+        onCancel={props.onCancel}
+        setEditorFontBoostPx={editor.setEditorFontBoostPx}
+        wrapStickyChrome={props.wrapStickyChrome}
+      />
+      <EditorMain
+        activeSectionIndex={editor.activeSectionIndex}
+        editorFontBoostPx={editor.editorFontBoostPx}
+        isCanonical={editor.isCanonical}
+        onAddSection={editor.setAddSectionAfterIndex}
+        parsed={editor.parsed}
+        previewPrefs={editor.previewPrefs}
+        registerTextarea={editor.registerTextarea}
+        removeSection={editor.removeSection}
+        sectionParsed={editor.sectionParsed}
+        sectionTexts={editor.sectionTexts}
+        setActiveSectionIndex={editor.setActiveSectionIndex}
+        setApplyError={editor.setApplyError}
+        updateSectionText={editor.updateSectionText}
+      />
+      {editor.applyError ? <ApplyErrorMessage error={editor.applyError} /> : null}
+      <AddSectionDialog
+        addSectionAfterIndex={editor.addSectionAfterIndex}
+        insertSectionAfter={editor.insertSectionAfter}
+        setAddSectionAfterIndex={editor.setAddSectionAfterIndex}
+      />
+    </div>
+  );
+}
+
+function useSongTextPreviewEditor({
   songData,
   onApply,
-  onCancel,
   baseFontSizeOffsetPx = 0,
   previewDisplay,
-  wrapStickyChrome,
 }: SongTextPreviewEditorProps) {
-  const [sectionTexts, setSectionTexts] = useState<string[]>(() =>
-    songData.map(sectionToPlainText),
-  );
+  const state = useEditorState(songData);
+  const derived = useEditorDerived(state.sectionTexts, songData, previewDisplay, baseFontSizeOffsetPx);
+  const actions = useEditorActions(state, derived.fullText, onApply);
+
+  return {
+    ...state,
+    ...derived,
+    ...actions,
+  };
+}
+
+function useEditorState(songData: Section[]) {
+  const [sectionTexts, setSectionTexts] = useState<string[]>(() => songData.map(sectionToPlainText));
   const [activeSectionIndex, setActiveSectionIndex] = useState(0);
   const [editorFontBoostPx, setEditorFontBoostPx] = useState(0);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [addSectionAfterIndex, setAddSectionAfterIndex] = useState<number | null>(null);
   const textareaRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
+  const registerTextarea = useCallback((index: number, element: HTMLTextAreaElement | null) => {
+    textareaRefs.current[index] = element;
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -135,27 +184,87 @@ export function SongTextPreviewEditor({
     setApplyError(null);
   }, [songData]);
 
-  const fullText = useMemo(() => joinSectionPlainTexts(sectionTexts), [sectionTexts]);
-  const sectionParsed = useMemo(
-    () => sectionTexts.map((text) => parsePlainTextCifra(text)),
-    [sectionTexts],
-  );
-  const parsed = useMemo(() => parsePlainTextCifra(fullText), [fullText]);
-  const isCanonical = isEditorTextCanonical(fullText, songData);
-  const previewPrefs = usePreviewPrefs(previewDisplay, baseFontSizeOffsetPx);
-  const registerTextarea = useCallback((index: number, element: HTMLTextAreaElement | null) => {
-    textareaRefs.current[index] = element;
-  }, []);
+  return {
+    activeSectionIndex,
+    addSectionAfterIndex,
+    applyError,
+    editorFontBoostPx,
+    registerTextarea,
+    sectionTexts,
+    setActiveSectionIndex,
+    setAddSectionAfterIndex,
+    setApplyError,
+    setEditorFontBoostPx,
+    setSectionTexts,
+    textareaRefs,
+  };
+}
 
-  const updateSectionText = useCallback((index: number, value: string) => {
+function useEditorDerived(
+  sectionTexts: string[],
+  songData: Section[],
+  previewDisplay: SongPreviewDisplayPrefs | undefined,
+  baseFontSizeOffsetPx: number,
+) {
+  const fullText = useMemo(() => joinSectionPlainTexts(sectionTexts), [sectionTexts]);
+  const sectionParsed = useMemo(() => sectionTexts.map((text) => parsePlainTextCifra(text)), [sectionTexts]);
+  const parsed = useMemo(() => parsePlainTextCifra(fullText), [fullText]);
+  const previewPrefs = usePreviewPrefs(previewDisplay, baseFontSizeOffsetPx);
+
+  return {
+    fullText,
+    isCanonical: isEditorTextCanonical(fullText, songData),
+    parsed,
+    previewPrefs,
+    sectionParsed,
+  };
+}
+
+type EditorState = ReturnType<typeof useEditorState>;
+
+function useEditorActions(state: EditorState, fullText: string, onApply: (next: Section[]) => void) {
+  const updateSectionText = useUpdateSectionText(state.setSectionTexts);
+  const insertSectionAfter = useInsertSectionAfter(
+    state.setSectionTexts,
+    state.setApplyError,
+    state.setActiveSectionIndex,
+    state.textareaRefs,
+  );
+  const removeSection = useRemoveSection(state.setSectionTexts, state.setApplyError, state.setActiveSectionIndex);
+  const insertAtCursor = useInsertAtCursor(
+    state.sectionTexts,
+    state.activeSectionIndex,
+    state.textareaRefs,
+    updateSectionText,
+  );
+  const handleApply = useHandleApply(fullText, state.setApplyError, onApply);
+
+  return {
+    handleApply,
+    insertAtCursor,
+    insertSectionAfter,
+    removeSection,
+    updateSectionText,
+  };
+}
+
+function useUpdateSectionText(setSectionTexts: React.Dispatch<React.SetStateAction<string[]>>) {
+  return useCallback((index: number, value: string) => {
     setSectionTexts((prev) => {
       const next = [...prev];
       next[index] = value;
       return next;
     });
-  }, []);
+  }, [setSectionTexts]);
+}
 
-  const insertSectionAfter = useCallback((index: number, initialPlain: string) => {
+function useInsertSectionAfter(
+  setSectionTexts: React.Dispatch<React.SetStateAction<string[]>>,
+  setApplyError: React.Dispatch<React.SetStateAction<string | null>>,
+  setActiveSectionIndex: React.Dispatch<React.SetStateAction<number>>,
+  textareaRefs: TextareaRefs,
+) {
+  return useCallback((index: number, initialPlain: string) => {
     setSectionTexts((prev) => {
       const next = [...prev];
       next.splice(index + 1, 0, initialPlain);
@@ -164,39 +273,48 @@ export function SongTextPreviewEditor({
     setApplyError(null);
     focusInsertedSection(textareaRefs, index + 1, initialPlain.length);
     setActiveSectionIndex(index + 1);
-  }, []);
+  }, [setActiveSectionIndex, setApplyError, setSectionTexts, textareaRefs]);
+}
 
-  const removeSection = useCallback((index: number) => {
+function useRemoveSection(
+  setSectionTexts: React.Dispatch<React.SetStateAction<string[]>>,
+  setApplyError: React.Dispatch<React.SetStateAction<string | null>>,
+  setActiveSectionIndex: React.Dispatch<React.SetStateAction<number>>,
+) {
+  return useCallback((index: number) => {
     setSectionTexts((prev) => {
       if (prev.length <= 1) return prev;
       return prev.filter((_, sectionIndex) => sectionIndex !== index);
     });
     setApplyError(null);
     setActiveSectionIndex((prev) => nextActiveSectionIndex(prev, index));
-  }, []);
+  }, [setActiveSectionIndex, setApplyError, setSectionTexts]);
+}
 
-  const insertAtCursor = useCallback(
-    (snippet: string) => {
-      const row = sectionTexts[activeSectionIndex];
-      if (row === undefined) return;
-      const textarea = textareaRefs.current[activeSectionIndex];
-      if (!textarea) {
-        updateSectionText(activeSectionIndex, row + snippet);
-        return;
-      }
-      insertSnippetAtTextarea({
-        index: activeSectionIndex,
-        row,
-        snippet,
-        textarea,
-        textareaRefs,
-        updateSectionText,
-      });
-    },
-    [activeSectionIndex, sectionTexts, updateSectionText],
-  );
+function useInsertAtCursor(
+  sectionTexts: string[],
+  activeSectionIndex: number,
+  textareaRefs: TextareaRefs,
+  updateSectionText: (index: number, value: string) => void,
+) {
+  return useCallback((snippet: string) => {
+    const row = sectionTexts[activeSectionIndex];
+    if (row === undefined) return;
+    const textarea = textareaRefs.current[activeSectionIndex];
+    if (!textarea) {
+      updateSectionText(activeSectionIndex, row + snippet);
+      return;
+    }
+    insertSnippetAtTextarea({ index: activeSectionIndex, row, snippet, textarea, textareaRefs, updateSectionText });
+  }, [activeSectionIndex, sectionTexts, textareaRefs, updateSectionText]);
+}
 
-  const handleApply = () => {
+function useHandleApply(
+  fullText: string,
+  setApplyError: React.Dispatch<React.SetStateAction<string | null>>,
+  onApply: (next: Section[]) => void,
+) {
+  return useCallback(() => {
     const result = parsePlainTextCifra(fullText);
     if (!result.ok) {
       setApplyError(result.error);
@@ -209,41 +327,7 @@ export function SongTextPreviewEditor({
     }
     setApplyError(null);
     onApply(cleaned);
-  };
-
-  return (
-    <div className="no-print flex min-h-0 flex-1 flex-col">
-      <StickyEditorChrome
-        editorFontBoostPx={editorFontBoostPx}
-        insertAtCursor={insertAtCursor}
-        onApply={handleApply}
-        onCancel={onCancel}
-        setEditorFontBoostPx={setEditorFontBoostPx}
-        wrapStickyChrome={wrapStickyChrome}
-      />
-      <EditorMain
-        activeSectionIndex={activeSectionIndex}
-        editorFontBoostPx={editorFontBoostPx}
-        isCanonical={isCanonical}
-        onAddSection={setAddSectionAfterIndex}
-        parsed={parsed}
-        previewPrefs={previewPrefs}
-        registerTextarea={registerTextarea}
-        removeSection={removeSection}
-        sectionParsed={sectionParsed}
-        sectionTexts={sectionTexts}
-        setActiveSectionIndex={setActiveSectionIndex}
-        setApplyError={setApplyError}
-        updateSectionText={updateSectionText}
-      />
-      {applyError ? <ApplyErrorMessage error={applyError} /> : null}
-      <AddSectionDialog
-        addSectionAfterIndex={addSectionAfterIndex}
-        insertSectionAfter={insertSectionAfter}
-        setAddSectionAfterIndex={setAddSectionAfterIndex}
-      />
-    </div>
-  );
+  }, [fullText, onApply, setApplyError]);
 }
 
 function usePreviewPrefs(

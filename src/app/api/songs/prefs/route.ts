@@ -19,21 +19,42 @@ type ValidatedPrefs = {
   uiPrefs: StoredSongUiPrefs | null;
 };
 
-function validatePrefs(body: PrefsRequestBody): ValidatedPrefs | { error: string } {
-  const arrangementId = body.arrangementId?.trim();
-  if (!arrangementId) return { error: "arrangementId obrigatório" };
-  const tone = body.tone ?? 0;
-  const capo = body.capo ?? 0;
-  if (typeof tone !== "number" || !Number.isInteger(tone)) return { error: "tone inválido" };
-  if (typeof capo !== "number" || !Number.isInteger(capo)) return { error: "capo inválido" };
-  if (body.uiPrefs !== null && body.uiPrefs !== undefined && typeof body.uiPrefs !== "object") return { error: "uiPrefs inválido" };
+function validationError(message: string): never {
+  throw new Error(message);
+}
 
+function validateArrangementId(body: PrefsRequestBody) {
+  return body.arrangementId?.trim() || validationError("arrangementId obrigatório");
+}
+
+function validateInteger(value: unknown, field: string) {
+  return typeof value === "number" && Number.isInteger(value) ? value : validationError(`${field} inválido`);
+}
+
+function isNullableObject(value: unknown) {
+  return value === null || value === undefined || typeof value === "object";
+}
+
+function validateUiPrefs(uiPrefs: unknown) {
+  if (!isNullableObject(uiPrefs)) validationError("uiPrefs inválido");
+  return uiPrefs ?? null;
+}
+
+function buildPrefs(body: PrefsRequestBody): ValidatedPrefs {
   return {
-    arrangementId,
-    tone,
-    capo,
-    uiPrefs: body.uiPrefs ?? null,
+    arrangementId: validateArrangementId(body),
+    tone: validateInteger(body.tone ?? 0, "tone"),
+    capo: validateInteger(body.capo ?? 0, "capo"),
+    uiPrefs: validateUiPrefs(body.uiPrefs),
   };
+}
+
+function validatePrefs(body: PrefsRequestBody): ValidatedPrefs | { error: string } {
+  try {
+    return buildPrefs(body);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "prefs inválido" };
+  }
 }
 
 export async function PATCH(req: Request) {

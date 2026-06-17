@@ -1,5 +1,10 @@
 import { create } from "zustand";
+import { PLAYER_PREF_DEFAULTS, PLAYER_PREF_KEYS, type PlayerPrefs } from "@/lib/player-pref-defaults";
 import type { StoredSong } from "@/lib/types";
+
+function playerPrefsFromSong(song: StoredSong): PlayerPrefs {
+  return Object.fromEntries(PLAYER_PREF_KEYS.map((key) => [key, song[key] ?? PLAYER_PREF_DEFAULTS[key]])) as PlayerPrefs;
+}
 
 interface PlayerState {
   tone: number;
@@ -91,39 +96,15 @@ export const usePlayerStore = create<PlayerState>((set) => ({
 
   setYoutubeMiniOpen: (youtubeMiniOpen) => set({ youtubeMiniOpen }),
   applySongPrefs: (song) => set({
-    tone: song.tone ?? 0,
-    capo: song.capo ?? 0,
-    simplified: song.simplified ?? false,
+    ...playerPrefsFromSong(song),
     activeChord: null,
-    showTabs: song.showTabs ?? true,
-    mirrored: song.mirrored ?? false,
-    fontSizeOffset: song.fontSizeOffset ?? 0,
-    columns: song.columns ?? 1,
-    spacingOffset: song.spacingOffset ?? 0,
-    zenMode: song.zenMode ?? false,
-    autoScroll: song.autoScroll ?? false,
-    scrollSpeed: song.scrollSpeed ?? 2,
-    metronomeActive: song.metronomeActive ?? false,
-    bpm: song.bpm ?? 100,
     displaySettingsOpen: false,
     youtubeMiniOpen: false,
   }),
   reset: () => set({
-    tone: 0,
-    capo: 0,
-    simplified: false,
+    ...PLAYER_PREF_DEFAULTS,
     activeChord: null,
-    showTabs: true,
-    mirrored: false,
-    fontSizeOffset: 0,
-    columns: 1,
-    spacingOffset: 0,
-    zenMode: false,
-    autoScroll: false,
-    scrollSpeed: 2,
     displaySettingsOpen: false,
-    metronomeActive: false,
-    bpm: 100,
     youtubeMiniOpen: false,
   }),
 }));

@@ -9,7 +9,7 @@ import { fetchChordsHtml } from "@/lib/fetch-proxy";
 import { processHtmlAndExtract } from "@/lib/parser";
 import { enrichStoredSongWithYoutube } from "@/hooks/use-song-loader";
 import { cloudAddSongToFolder, cloudRemoveSongFromFolder, saveFolders } from "@/lib/storage";
-import { arrangementKey } from "@/lib/stored-song-key";
+import { arrangementKey } from "@/lib/arrangement-key";
 import { useSession } from "@/hooks/use-session";
 import type { Folder, SearchResultSong, StoredSong } from "@/lib/types";
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { extractYoutubeIdFromHtml } from "@/lib/parser";
+import { extractYoutubeIdFromHtml } from "@/lib/extract-youtube-id-from-html";
 import { cifraClubHeaders, readCifraSlugParams } from "@/lib/server/cifra-route";
 
 function invalidParamsResponse() {

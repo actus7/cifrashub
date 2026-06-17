@@ -23,7 +23,7 @@ import {
   dedupeSongsByArrangement,
   replaceRecentSongsForUser,
 } from "@/lib/server/recent-songs";
-import { arrangementKey } from "@/lib/stored-song-key";
+import { arrangementKey } from "@/lib/arrangement-key";
 
 type SyncBody = {
   folders?: Folder[];

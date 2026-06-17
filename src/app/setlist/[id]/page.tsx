@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { arrangementKey } from "@/lib/stored-song-key";
+import { arrangementKey } from "@/lib/arrangement-key";
 import { SetlistDetailViewScreen } from "@/components/setlist/setlist-detail-view";
 import { useSession } from "@/hooks/use-session";
 import { buildLocalSetlistDetail } from "@/lib/setlist-local";

@@ -11,7 +11,7 @@ import { SongLoadingState } from "./song-loading-state";
 import { SongErrorState } from "./song-error-state";
 import { ArtistLinkButton } from "./artist-link-button";
 import { songViewMainClassName } from "@/lib/song-article-layout";
-import { currentSongKey } from "@/lib/stored-song-key";
+import { currentSongKey } from "@/lib/current-song-key";
 import { useSongViewContext, type SongViewContextValue } from "./song-context";
 import { useAutoScroll } from "@/hooks/use-auto-scroll";
 import { useMetronome } from "@/hooks/use-metronome";
