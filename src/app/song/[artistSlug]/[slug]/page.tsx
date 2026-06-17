@@ -16,6 +16,7 @@ import { useSession } from "@/hooks/use-session";
 import { cloudAddSongToFolder, cloudRemoveSongFromFolder, cloudSaveRecentes, cloudUpdateSongPrefs, saveFolders, saveRecentes } from "@/lib/storage";
 import { writeEditSnapshot, readEditResult, type EditOrigin } from "@/lib/cifras-edit-bridge";
 import { arrangementKey } from "@/lib/arrangement-key";
+import { PLAYER_PREF_DEFAULTS, PLAYER_PREF_KEYS } from "@/lib/player-pref-defaults";
 import { songIdentityKey } from "@/lib/song-identity-key";
 
 function useSongParams() {
@@ -182,24 +183,6 @@ function applyLoadedSong(
   addToRecentes(song);
 }
 
-const PLAYER_PREF_DEFAULTS = {
-  tone: 0,
-  capo: 0,
-  simplified: false,
-  showTabs: true,
-  mirrored: false,
-  fontSizeOffset: 0,
-  columns: 1,
-  spacingOffset: 0,
-  zenMode: false,
-  autoScroll: false,
-  scrollSpeed: 2,
-  metronomeActive: false,
-  bpm: 100,
-};
-
-const PLAYER_PREF_KEYS = Object.keys(PLAYER_PREF_DEFAULTS) as Array<keyof typeof PLAYER_PREF_DEFAULTS>;
-
 type PersistedPlayerPrefs = Pick<StoredSong, keyof typeof PLAYER_PREF_DEFAULTS>;
 type PlayerContextState = ReturnType<typeof usePlayerContextState>;
 
@@ -289,13 +272,22 @@ function usePersistCurrentSongPrefs(
   const lastPersistKeyRef = useRef("");
   const prefs = playerPrefs(player);
   const persistKey = currentSong ? JSON.stringify({ song: songIdentityKey(currentSong), prefs }) : "";
+  const prefsRef = useRef(prefs);
+  const currentSongRef = useRef(currentSong);
 
   useEffect(() => {
-    if (!shouldPersistLocalPrefs(status, currentSong, persistKey, lastPersistKeyRef) || !currentSong) return;
+    prefsRef.current = prefs;
+    currentSongRef.current = currentSong;
+  }, [currentSong, prefs]);
+
+  useEffect(() => {
+    const activeSong = currentSongRef.current;
+    const activePrefs = prefsRef.current;
+    if (!shouldPersistLocalPrefs(status, activeSong, persistKey, lastPersistKeyRef) || !activeSong) return;
     lastPersistKeyRef.current = persistKey;
-    if (arePrefsEqual(currentSong, prefs)) return;
-    persistLocalPrefs(currentSong, prefs, setCurrentSong);
-  }, [currentSong, persistKey, prefs, setCurrentSong, status]);
+    if (arePrefsEqual(activeSong, activePrefs)) return;
+    persistLocalPrefs(activeSong, activePrefs, setCurrentSong);
+  }, [persistKey, setCurrentSong, status]);
 }
 
 function shouldPersistLocalPrefs(
@@ -371,13 +363,19 @@ function usePersistCloudSongPrefs(currentSong: StoredSong | null, player: Player
   const pendingPayloadRef = useRef<CloudPrefsPayload | null>(null);
   const payload = currentSong?.arrangementId ? cloudPrefsPayload(currentSong.arrangementId, player) : null;
   const persistKey = payload ? JSON.stringify(payload) : "";
+  const payloadRef = useRef(payload);
 
   useEffect(() => {
-    if (!shouldPersistCloudPrefs(status, payload, persistKey, lastPersistKeyRef) || !payload) return;
-    pendingPayloadRef.current = payload;
-    const timeout = setTimeout(() => persistCloudPrefs(payload, persistKey, lastPersistKeyRef, pendingPayloadRef), 800);
+    payloadRef.current = payload;
+  }, [payload]);
+
+  useEffect(() => {
+    const currentPayload = payloadRef.current;
+    if (!shouldPersistCloudPrefs(status, currentPayload, persistKey, lastPersistKeyRef) || !currentPayload) return;
+    pendingPayloadRef.current = currentPayload;
+    const timeout = setTimeout(() => persistCloudPrefs(currentPayload, persistKey, lastPersistKeyRef, pendingPayloadRef), 800);
     return () => clearTimeout(timeout);
-  }, [payload, persistKey, status]);
+  }, [persistKey, status]);
 
   useEffect(() => {
     return () => {

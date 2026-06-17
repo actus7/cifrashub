@@ -85,9 +85,13 @@ async function createCloudFolder(
 }
 
 function createLocalFolder(title: string, folders: Folder[], setFolders: (folders: Folder[]) => void) {
-  const next = [...folders, { id: crypto.randomUUID(), title, songs: [] }];
+  const next = [...folders, { id: newFolderId(), title, songs: [] }];
   saveFolders(next);
   setFolders(next);
+}
+
+function newFolderId() {
+  return typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : Math.random().toString(36).slice(2, 15);
 }
 
 async function deleteCloudFolder(

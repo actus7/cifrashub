@@ -1,25 +1,6 @@
 import { create } from "zustand";
+import { PLAYER_PREF_DEFAULTS, PLAYER_PREF_KEYS, type PlayerPrefs } from "@/lib/player-pref-defaults";
 import type { StoredSong } from "@/lib/types";
-
-const PLAYER_PREF_DEFAULTS = {
-  tone: 0,
-  capo: 0,
-  simplified: false,
-  showTabs: true,
-  mirrored: false,
-  fontSizeOffset: 0,
-  columns: 1,
-  spacingOffset: 0,
-  zenMode: false,
-  autoScroll: false,
-  scrollSpeed: 2,
-  metronomeActive: false,
-  bpm: 100,
-};
-
-const PLAYER_PREF_KEYS = Object.keys(PLAYER_PREF_DEFAULTS) as Array<keyof typeof PLAYER_PREF_DEFAULTS>;
-
-type PlayerPrefs = typeof PLAYER_PREF_DEFAULTS;
 
 function playerPrefsFromSong(song: StoredSong): PlayerPrefs {
   return Object.fromEntries(PLAYER_PREF_KEYS.map((key) => [key, song[key] ?? PLAYER_PREF_DEFAULTS[key]])) as PlayerPrefs;
