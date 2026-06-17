@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SongTextPreviewEditor } from "@/components/song/song-text-preview-editor";
 import {
+  clearEditSnapshot,
   readEditSnapshot,
   writeEditResult,
   type CifrasEditSnapshot,
@@ -44,7 +45,10 @@ export default function EditarCifraPage() {
   }
 
   const { currentSong, songData, origin } = snapshot;
-  const backToSong = () => router.push(songUrl(origin));
+  const backToSong = () => {
+    clearEditSnapshot();
+    router.replace(songUrl(origin));
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-background print:hidden">

@@ -46,6 +46,10 @@ export function readEditSnapshot(): CifrasEditSnapshot | null {
   }
 }
 
+export function clearEditSnapshot(): void {
+  sessionStorage.removeItem(SNAPSHOT_KEY);
+}
+
 export function writeEditResult(origin: EditOrigin, sections: Section[]): void {
   sessionStorage.setItem(RESULT_KEY, JSON.stringify({ origin, songData: sections }));
 }
