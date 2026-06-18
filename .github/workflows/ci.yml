@@ -37,6 +37,14 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://stub:stub@localhost/stub' }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED || 'postgresql://stub:stub@localhost/stub' }}
+          AUTH_COOKIE_SECRET: ${{ secrets.AUTH_COOKIE_SECRET || 'ci-stub-secret-32-chars-minimum!!' }}
+          NEON_AUTH_URL: ${{ secrets.NEON_AUTH_URL || 'https://stub.neon.tech' }}
+          NEON_AUTH_BASE_URL: ${{ secrets.NEON_AUTH_BASE_URL || 'https://stub.neon.tech' }}
+          NEON_AUTH_COOKIE_SECRET: ${{ secrets.NEON_AUTH_COOKIE_SECRET || 'ci-stub-secret-32-chars-minimum!!' }}
+          NEXT_PUBLIC_BASE_URL: https://www.cifrashub.com.br
 
       - name: Audit dependencies
         run: npm run audit
