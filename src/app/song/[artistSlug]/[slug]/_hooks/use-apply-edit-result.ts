@@ -53,7 +53,9 @@ function applyEditResult(args: ApplyEditResultArgs) {
 }
 
 function canApplyEditResult({ appliedRef, currentSong, artistSlug, slug, status }: ApplyEditResultArgs) {
-  return !appliedRef.current && status !== "loading" && Boolean(currentSong && artistSlug && slug);
+  if (appliedRef.current) return false;
+  if (status === "loading") return false;
+  return [currentSong, artistSlug, slug].every(Boolean);
 }
 
 function originMatchesRoute(

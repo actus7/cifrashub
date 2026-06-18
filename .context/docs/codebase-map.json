@@ -1,0 +1,992 @@
+{
+  "version": "1.0.0",
+  "generated": "2026-06-16T01:05:21.163Z",
+  "stack": {
+    "primaryLanguage": "typescript",
+    "languages": [
+      "javascript",
+      "typescript"
+    ],
+    "frameworks": [
+      "nextjs"
+    ],
+    "buildTools": [],
+    "testFrameworks": [],
+    "packageManager": "npm",
+    "isMonorepo": false,
+    "hasDocker": false,
+    "hasCI": true,
+    "runtimeEnvironment": "browser"
+  },
+  "structure": {
+    "totalFiles": 0,
+    "rootPath": ".",
+    "topDirectories": [],
+    "languageDistribution": []
+  },
+  "architecture": {
+    "layers": [
+      {
+        "name": "Utils",
+        "description": "Shared utilities and helpers",
+        "directories": [
+          "src\\store",
+          "src\\lib",
+          "src\\hooks",
+          "src\\lib\\server"
+        ],
+        "symbolCount": 245,
+        "dependsOn": [
+          "Controllers"
+        ]
+      },
+      {
+        "name": "Controllers",
+        "description": "Request handling and routing",
+        "directories": [
+          "src\\lib",
+          "src\\lib\\server",
+          "src\\app\\api\\youtube-search",
+          "src\\app\\api\\sync",
+          "src\\app\\api\\sign-out",
+          "src\\app\\api\\share",
+          "src\\app\\api\\setlists",
+          "src\\app\\api\\recentes",
+          "src\\app\\api\\folders",
+          "src\\app\\api\\cifra-youtube",
+          "src\\app\\api\\cifra-html",
+          "src\\app\\api\\account",
+          "src\\app\\api\\setlists\\[id]",
+          "src\\app\\api\\folders\\[id]",
+          "src\\app\\api\\auth\\[...path]",
+          "src\\app\\api\\setlists\\[id]\\items",
+          "src\\app\\api\\public\\share\\[token]",
+          "src\\app\\api\\folders\\[id]\\songs"
+        ],
+        "symbolCount": 176,
+        "dependsOn": []
+      },
+      {
+        "name": "Repositories",
+        "description": "Data access and persistence",
+        "directories": [
+          "src\\lib\\server"
+        ],
+        "symbolCount": 8,
+        "dependsOn": []
+      },
+      {
+        "name": "Components",
+        "description": "UI components and views",
+        "directories": [
+          "src\\components",
+          "src\\app",
+          "src\\components\\ui",
+          "src\\components\\song",
+          "src\\components\\setlist",
+          "src\\components\\share",
+          "src\\components\\providers",
+          "src\\components\\home",
+          "src\\components\\folder",
+          "src\\components\\auth",
+          "src\\components\\artist",
+          "src\\app\\editar",
+          "src\\app\\setlist\\[id]",
+          "src\\app\\s\\[token]",
+          "src\\app\\folder\\[id]",
+          "src\\app\\auth\\[pathname]",
+          "src\\app\\account\\[pathname]",
+          "src\\app\\artist\\[slug]",
+          "src\\app\\song\\[artistSlug]\\[slug]"
+        ],
+        "symbolCount": 204,
+        "dependsOn": []
+      }
+    ],
+    "patterns": [],
+    "entryPoints": [
+      "src\\db\\index.ts"
+    ],
+    "mainEntryPoints": [
+      "src\\db\\index.ts"
+    ],
+    "moduleExports": []
+  },
+  "symbols": {
+    "classes": [],
+    "interfaces": [
+      {
+        "name": "ChordShape",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 132,
+        "exported": true
+      },
+      {
+        "name": "CurrentSongMeta",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 42,
+        "exported": true
+      },
+      {
+        "name": "Folder",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 84,
+        "exported": true
+      },
+      {
+        "name": "LocalSetlistStored",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 115,
+        "exported": true
+      },
+      {
+        "name": "LyricBlock",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 11,
+        "exported": true
+      },
+      {
+        "name": "SearchResultArtist",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 36,
+        "exported": true
+      },
+      {
+        "name": "SearchResultSong",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 27,
+        "exported": true
+      },
+      {
+        "name": "Section",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 21,
+        "exported": true
+      },
+      {
+        "name": "SetlistDetailView",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 110,
+        "exported": true
+      },
+      {
+        "name": "SetlistItemView",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 102,
+        "exported": true
+      },
+      {
+        "name": "SetlistSummary",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 93,
+        "exported": true
+      },
+      {
+        "name": "StoredSong",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 69,
+        "exported": true
+      },
+      {
+        "name": "ArtistLinkButtonProps",
+        "kind": "interface",
+        "file": "src\\components\\song\\artist-link-button.tsx",
+        "line": 6,
+        "exported": false
+      },
+      {
+        "name": "BeforeInstallPromptEvent",
+        "kind": "interface",
+        "file": "src\\hooks\\use-pwa-install.ts",
+        "line": 5,
+        "exported": false
+      },
+      {
+        "name": "ChordBarre",
+        "kind": "interface",
+        "file": "src\\lib\\types.ts",
+        "line": 126,
+        "exported": false
+      },
+      {
+        "name": "LibraryState",
+        "kind": "interface",
+        "file": "src\\store\\use-library-store.ts",
+        "line": 6,
+        "exported": false
+      },
+      {
+        "name": "PlayerState",
+        "kind": "interface",
+        "file": "src\\store\\use-player-store.ts",
+        "line": 3,
+        "exported": false
+      },
+      {
+        "name": "SongPageErrorProps",
+        "kind": "interface",
+        "file": "src\\components\\song\\song-page-error.tsx",
+        "line": 5,
+        "exported": false
+      }
+    ],
+    "functions": [
+      {
+        "name": "AccountLayout",
+        "kind": "function",
+        "file": "src\\app\\account\\[pathname]\\layout.tsx",
+        "line": 10,
+        "exported": true
+      },
+      {
+        "name": "AccountPage",
+        "kind": "function",
+        "file": "src\\app\\account\\[pathname]\\page.tsx",
+        "line": 6,
+        "exported": true
+      },
+      {
+        "name": "arrangementKey",
+        "kind": "function",
+        "file": "src\\lib\\stored-song-key.ts",
+        "line": 4,
+        "exported": true
+      },
+      {
+        "name": "ArtistLinkButton",
+        "kind": "function",
+        "file": "src\\components\\song\\artist-link-button.tsx",
+        "line": 16,
+        "exported": true
+      },
+      {
+        "name": "ArtistPage",
+        "kind": "function",
+        "file": "src\\app\\artist\\[slug]\\page.tsx",
+        "line": 7,
+        "exported": true
+      },
+      {
+        "name": "assertFolderOwner",
+        "kind": "function",
+        "file": "src\\lib\\server\\cloud-data.ts",
+        "line": 126,
+        "exported": true
+      },
+      {
+        "name": "assertUserOwnsArrangement",
+        "kind": "function",
+        "file": "src\\lib\\server\\setlist-queries.ts",
+        "line": 125,
+        "exported": true
+      },
+      {
+        "name": "assertUserOwnsSetlist",
+        "kind": "function",
+        "file": "src\\lib\\server\\setlist-queries.ts",
+        "line": 139,
+        "exported": true
+      },
+      {
+        "name": "AuthHeaderControl",
+        "kind": "function",
+        "file": "src\\components\\auth\\user-menu.tsx",
+        "line": 206,
+        "exported": true
+      },
+      {
+        "name": "AuthLayout",
+        "kind": "function",
+        "file": "src\\app\\auth\\[pathname]\\layout.tsx",
+        "line": 10,
+        "exported": true
+      },
+      {
+        "name": "AuthPage",
+        "kind": "function",
+        "file": "src\\app\\auth\\[pathname]\\page.tsx",
+        "line": 6,
+        "exported": true
+      },
+      {
+        "name": "buildLocalSetlistDetail",
+        "kind": "function",
+        "file": "src\\lib\\setlist-local.ts",
+        "line": 24,
+        "exported": true
+      },
+      {
+        "name": "buildStoredSongRow",
+        "kind": "function",
+        "file": "src\\lib\\server\\stored-song-row.ts",
+        "line": 44,
+        "exported": true
+      },
+      {
+        "name": "classifySection",
+        "kind": "function",
+        "file": "src\\lib\\music.ts",
+        "line": 138,
+        "exported": true
+      },
+      {
+        "name": "cleanSongSections",
+        "kind": "function",
+        "file": "src\\lib\\parse-plain-cifra.ts",
+        "line": 5,
+        "exported": true
+      },
+      {
+        "name": "clearAuthCookies",
+        "kind": "function",
+        "file": "src\\lib\\server\\auth-cookies.ts",
+        "line": 15,
+        "exported": true
+      },
+      {
+        "name": "clearRecentSongsForUser",
+        "kind": "function",
+        "file": "src\\lib\\server\\recent-songs.ts",
+        "line": 31,
+        "exported": true
+      },
+      {
+        "name": "cloudAddSetlistItem",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 166,
+        "exported": true
+      },
+      {
+        "name": "cloudAddSongToFolder",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 101,
+        "exported": true
+      },
+      {
+        "name": "cloudClearRecentes",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 131,
+        "exported": true
+      },
+      {
+        "name": "cloudCreateFolder",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 84,
+        "exported": true
+      },
+      {
+        "name": "cloudCreateSetlist",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 141,
+        "exported": true
+      },
+      {
+        "name": "cloudDeleteFolder",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 93,
+        "exported": true
+      },
+      {
+        "name": "cloudDeleteSetlist",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 154,
+        "exported": true
+      },
+      {
+        "name": "cloudFetchLibrary",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 73,
+        "exported": true
+      },
+      {
+        "name": "cloudFetchSetlists",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 137,
+        "exported": true
+      },
+      {
+        "name": "cloudGetSetlist",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 162,
+        "exported": true
+      },
+      {
+        "name": "cloudRemoveSetlistItem",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 177,
+        "exported": true
+      },
+      {
+        "name": "cloudRemoveSongFromFolder",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 111,
+        "exported": true
+      },
+      {
+        "name": "cloudReorderSetlistItems",
+        "kind": "function",
+        "file": "src\\lib\\cloud-api.ts",
+        "line": 188,
+        "exported": true
+      }
+    ],
+    "types": [
+      {
+        "name": "CifrasEditSnapshot",
+        "kind": "type",
+        "file": "src\\lib\\cifras-edit-bridge.ts",
+        "line": 17,
+        "exported": true
+      },
+      {
+        "name": "LyricLine",
+        "kind": "type",
+        "file": "src\\lib\\types.ts",
+        "line": 19,
+        "exported": true
+      },
+      {
+        "name": "SectionType",
+        "kind": "type",
+        "file": "src\\lib\\types.ts",
+        "line": 1,
+        "exported": true
+      },
+      {
+        "name": "ShareSnapshotPayload",
+        "kind": "type",
+        "file": "src\\lib\\share-payload.ts",
+        "line": 3,
+        "exported": true
+      },
+      {
+        "name": "SongViewContextValue",
+        "kind": "type",
+        "file": "src\\components\\song\\song-context.tsx",
+        "line": 11,
+        "exported": true
+      },
+      {
+        "name": "StoredSongUiPrefs",
+        "kind": "type",
+        "file": "src\\lib\\types.ts",
+        "line": 60,
+        "exported": true
+      },
+      {
+        "name": "AddFolderSongArgs",
+        "kind": "type",
+        "file": "src\\app\\folder\\[id]\\page.tsx",
+        "line": 68,
+        "exported": false
+      },
+      {
+        "name": "AddSongSelectProps",
+        "kind": "type",
+        "file": "src\\components\\setlist\\setlist-detail-view.tsx",
+        "line": 42,
+        "exported": false
+      },
+      {
+        "name": "ArtistLinkVariant",
+        "kind": "type",
+        "file": "src\\components\\song\\artist-link-button.tsx",
+        "line": 4,
+        "exported": false
+      },
+      {
+        "name": "ArtistSongsResult",
+        "kind": "type",
+        "file": "src\\components\\artist\\artist-view.tsx",
+        "line": 41,
+        "exported": false
+      },
+      {
+        "name": "ArtistViewProps",
+        "kind": "type",
+        "file": "src\\components\\artist\\artist-view.tsx",
+        "line": 9,
+        "exported": false
+      },
+      {
+        "name": "CachedCifra",
+        "kind": "type",
+        "file": "src\\app\\api\\cifra-html\\route.ts",
+        "line": 9,
+        "exported": false
+      },
+      {
+        "name": "ChordDiagramProps",
+        "kind": "type",
+        "file": "src\\components\\song\\chord-popup.tsx",
+        "line": 23,
+        "exported": false
+      },
+      {
+        "name": "ChordPopupProps",
+        "kind": "type",
+        "file": "src\\components\\song\\chord-popup.tsx",
+        "line": 16,
+        "exported": false
+      },
+      {
+        "name": "CifraHtmlResponse",
+        "kind": "type",
+        "file": "src\\lib\\fetch-proxy.ts",
+        "line": 3,
+        "exported": false
+      },
+      {
+        "name": "CloudFolderRow",
+        "kind": "type",
+        "file": "src\\app\\api\\sync\\route.ts",
+        "line": 33,
+        "exported": false
+      },
+      {
+        "name": "CloudSnapshot",
+        "kind": "type",
+        "file": "src\\components\\providers\\sync-provider.tsx",
+        "line": 25,
+        "exported": false
+      },
+      {
+        "name": "CloudSongRow",
+        "kind": "type",
+        "file": "src\\app\\api\\sync\\route.ts",
+        "line": 34,
+        "exported": false
+      },
+      {
+        "name": "CloudSyncContext",
+        "kind": "type",
+        "file": "src\\components\\providers\\sync-provider.tsx",
+        "line": 33,
+        "exported": false
+      },
+      {
+        "name": "ContentChunk",
+        "kind": "type",
+        "file": "src\\components\\song\\song-content.tsx",
+        "line": 21,
+        "exported": false
+      },
+      {
+        "name": "Db",
+        "kind": "type",
+        "file": "src\\db\\index.ts",
+        "line": 6,
+        "exported": false
+      },
+      {
+        "name": "DeleteFolderArgs",
+        "kind": "type",
+        "file": "src\\hooks\\use-library-actions.ts",
+        "line": 20,
+        "exported": false
+      },
+      {
+        "name": "DeleteFolderDialogProps",
+        "kind": "type",
+        "file": "src\\components\\folder\\folder-view.tsx",
+        "line": 61,
+        "exported": false
+      },
+      {
+        "name": "DeleteSongsDialogProps",
+        "kind": "type",
+        "file": "src\\components\\folder\\folder-view.tsx",
+        "line": 68,
+        "exported": false
+      },
+      {
+        "name": "FavoriteFolder",
+        "kind": "type",
+        "file": "scripts\\merge-duplicate-favoritos.ts",
+        "line": 12,
+        "exported": false
+      },
+      {
+        "name": "FavoriteSong",
+        "kind": "type",
+        "file": "scripts\\merge-duplicate-favoritos.ts",
+        "line": 13,
+        "exported": false
+      },
+      {
+        "name": "FolderGridProps",
+        "kind": "type",
+        "file": "src\\components\\home\\folder-grid.tsx",
+        "line": 10,
+        "exported": false
+      },
+      {
+        "name": "FolderRouteCtx",
+        "kind": "type",
+        "file": "src\\lib\\server\\folder-route.ts",
+        "line": 5,
+        "exported": false
+      },
+      {
+        "name": "FolderSearchInputProps",
+        "kind": "type",
+        "file": "src\\components\\folder\\folder-search.tsx",
+        "line": 19,
+        "exported": false
+      },
+      {
+        "name": "FolderSearchProps",
+        "kind": "type",
+        "file": "src\\components\\folder\\folder-search.tsx",
+        "line": 11,
+        "exported": false
+      }
+    ],
+    "enums": []
+  },
+  "publicAPI": [
+    {
+      "name": "AccountLayout",
+      "kind": "function",
+      "file": "src\\app\\account\\[pathname]\\layout.tsx",
+      "line": 10,
+      "exported": true
+    },
+    {
+      "name": "AccountPage",
+      "kind": "function",
+      "file": "src\\app\\account\\[pathname]\\page.tsx",
+      "line": 6,
+      "exported": true
+    },
+    {
+      "name": "arrangementKey",
+      "kind": "function",
+      "file": "src\\lib\\stored-song-key.ts",
+      "line": 4,
+      "exported": true
+    },
+    {
+      "name": "ArtistLinkButton",
+      "kind": "function",
+      "file": "src\\components\\song\\artist-link-button.tsx",
+      "line": 16,
+      "exported": true
+    },
+    {
+      "name": "ArtistPage",
+      "kind": "function",
+      "file": "src\\app\\artist\\[slug]\\page.tsx",
+      "line": 7,
+      "exported": true
+    },
+    {
+      "name": "assertFolderOwner",
+      "kind": "function",
+      "file": "src\\lib\\server\\cloud-data.ts",
+      "line": 126,
+      "exported": true
+    },
+    {
+      "name": "assertUserOwnsArrangement",
+      "kind": "function",
+      "file": "src\\lib\\server\\setlist-queries.ts",
+      "line": 125,
+      "exported": true
+    },
+    {
+      "name": "assertUserOwnsSetlist",
+      "kind": "function",
+      "file": "src\\lib\\server\\setlist-queries.ts",
+      "line": 139,
+      "exported": true
+    },
+    {
+      "name": "AuthHeaderControl",
+      "kind": "function",
+      "file": "src\\components\\auth\\user-menu.tsx",
+      "line": 206,
+      "exported": true
+    },
+    {
+      "name": "AuthLayout",
+      "kind": "function",
+      "file": "src\\app\\auth\\[pathname]\\layout.tsx",
+      "line": 10,
+      "exported": true
+    },
+    {
+      "name": "AuthPage",
+      "kind": "function",
+      "file": "src\\app\\auth\\[pathname]\\page.tsx",
+      "line": 6,
+      "exported": true
+    },
+    {
+      "name": "buildLocalSetlistDetail",
+      "kind": "function",
+      "file": "src\\lib\\setlist-local.ts",
+      "line": 24,
+      "exported": true
+    },
+    {
+      "name": "buildStoredSongRow",
+      "kind": "function",
+      "file": "src\\lib\\server\\stored-song-row.ts",
+      "line": 44,
+      "exported": true
+    },
+    {
+      "name": "ChordShape",
+      "kind": "interface",
+      "file": "src\\lib\\types.ts",
+      "line": 132,
+      "exported": true
+    },
+    {
+      "name": "CifrasEditSnapshot",
+      "kind": "type",
+      "file": "src\\lib\\cifras-edit-bridge.ts",
+      "line": 17,
+      "exported": true
+    },
+    {
+      "name": "classifySection",
+      "kind": "function",
+      "file": "src\\lib\\music.ts",
+      "line": 138,
+      "exported": true
+    },
+    {
+      "name": "cleanSongSections",
+      "kind": "function",
+      "file": "src\\lib\\parse-plain-cifra.ts",
+      "line": 5,
+      "exported": true
+    },
+    {
+      "name": "clearAuthCookies",
+      "kind": "function",
+      "file": "src\\lib\\server\\auth-cookies.ts",
+      "line": 15,
+      "exported": true
+    },
+    {
+      "name": "clearRecentSongsForUser",
+      "kind": "function",
+      "file": "src\\lib\\server\\recent-songs.ts",
+      "line": 31,
+      "exported": true
+    },
+    {
+      "name": "cloudAddSetlistItem",
+      "kind": "function",
+      "file": "src\\lib\\cloud-api.ts",
+      "line": 166,
+      "exported": true
+    },
+    {
+      "name": "cloudAddSongToFolder",
+      "kind": "function",
+      "file": "src\\lib\\cloud-api.ts",
+      "line": 101,
+      "exported": true
+    },
+    {
+      "name": "cloudClearRecentes",
+      "kind": "function",
+      "file": "src\\lib\\cloud-api.ts",
+      "line": 131,
+      "exported": true
+    },
+    {
+      "name": "cloudCreateFolder",
+      "kind": "function",
+      "file": "src\\lib\\cloud-api.ts",
+      "line": 84,
+      "exported": true
+    },
+    {
+      "name": "cloudCreateSetlist",
+      "kind": "function",
+      "file": "src\\lib\\cloud-api.ts",
+      "line": 141,
+      "exported": true
+    },
+    {
+      "name": "cloudDeleteFolder",
+      "kind": "function",
+      "file": "src\\lib\\cloud-api.ts",
+      "line": 93,
+      "exported": true
+    },
+    {
+      "name": "cloudDeleteSetlist",
+      "kind": "function",
+      "file": "src\\lib\\cloud-api.ts",
+      "line": 154,
+      "exported": true
+    },
+    {
+      "name": "cloudFetchLibrary",
+      "kind": "function",
+      "file": "src\\lib\\cloud-api.ts",
+      "line": 73,
+      "exported": true
+    },
+    {
+      "name": "cloudFetchSetlists",
+      "kind": "function",
+      "file": "src\\lib\\cloud-api.ts",
+      "line": 137,
+      "exported": true
+    },
+    {
+      "name": "cloudGetSetlist",
+      "kind": "function",
+      "file": "src\\lib\\cloud-api.ts",
+      "line": 162,
+      "exported": true
+    },
+    {
+      "name": "cloudRemoveSetlistItem",
+      "kind": "function",
+      "file": "src\\lib\\cloud-api.ts",
+      "line": 177,
+      "exported": true
+    }
+  ],
+  "dependencies": {
+    "mostImported": [
+      {
+        "file": "src\\lib\\types.ts",
+        "importedBy": 5,
+        "description": "Type definitions"
+      },
+      {
+        "file": "src\\components\\song\\song-context.tsx",
+        "importedBy": 3
+      },
+      {
+        "file": "src\\db\\schema.ts",
+        "importedBy": 2
+      },
+      {
+        "file": ".next\\types\\routes.d.ts",
+        "importedBy": 1,
+        "description": "TypeScript type definitions"
+      },
+      {
+        "file": "src\\lib\\music.ts",
+        "importedBy": 1,
+        "description": "Shared library code"
+      },
+      {
+        "file": "src\\lib\\youtube.ts",
+        "importedBy": 1,
+        "description": "Shared library code"
+      },
+      {
+        "file": "src\\app\\globals.css",
+        "importedBy": 1,
+        "description": "Application entry (Next.js app router)"
+      },
+      {
+        "file": "src\\components\\song\\song-header.tsx",
+        "importedBy": 1
+      },
+      {
+        "file": "src\\components\\song\\song-toolbar.tsx",
+        "importedBy": 1
+      },
+      {
+        "file": "src\\components\\song\\save-modal.tsx",
+        "importedBy": 1
+      },
+      {
+        "file": "src\\components\\song\\chord-popup.tsx",
+        "importedBy": 1
+      },
+      {
+        "file": "src\\components\\song\\song-content.tsx",
+        "importedBy": 1
+      },
+      {
+        "file": "src\\components\\song\\zen-exit-button.tsx",
+        "importedBy": 1
+      },
+      {
+        "file": "src\\components\\song\\youtube-mini-player.tsx",
+        "importedBy": 1
+      },
+      {
+        "file": "src\\components\\song\\song-loading-state.tsx",
+        "importedBy": 1
+      },
+      {
+        "file": "src\\components\\song\\song-error-state.tsx",
+        "importedBy": 1
+      },
+      {
+        "file": "src\\components\\song\\artist-link-button.tsx",
+        "importedBy": 1
+      },
+      {
+        "file": "src\\components\\home\\folder-grid.tsx",
+        "importedBy": 1
+      },
+      {
+        "file": "src\\components\\home\\recent-list.tsx",
+        "importedBy": 1
+      },
+      {
+        "file": "src\\components\\home\\search-bar.tsx",
+        "importedBy": 1
+      }
+    ]
+  },
+  "stats": {
+    "totalSymbols": 760,
+    "exportedSymbols": 167,
+    "analysisTimeMs": 535
+  },
+  "keyFiles": [
+    {
+      "path": "src\\db\\index.ts",
+      "description": "Module exports",
+      "category": "entrypoint"
+    }
+  ],
+  "navigation": {
+    "tests": "src/**/*.test.ts",
+    "config": [],
+    "types": [],
+    "mainLogic": [
+      "src"
+    ]
+  }
+}

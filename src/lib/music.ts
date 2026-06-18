@@ -66,6 +66,10 @@ function isMinorKey(key: string): boolean {
   return key.endsWith("m") && !key.endsWith("dim");
 }
 
+function keyRoot(key: string): string {
+  return isMinorKey(key) ? key.slice(0, -1) : key;
+}
+
 /**
  * Calcula estado do toggle relativo maior/menor.
  * Retorna o tom destino e os labels para o botão.
@@ -75,7 +79,7 @@ function normalizeSemitone(value: number): number {
 }
 
 function relativeBackLabel(writtenKey: string, minor: boolean): string {
-  const root = transposeRootNote(writtenKey, 0);
+  const root = transposeRootNote(keyRoot(writtenKey), 0);
   return minor ? `Voltar p/ Menor (${root}m)` : `Voltar p/ Maior (${root})`;
 }
 
@@ -101,7 +105,7 @@ export function getRelativeKeyToggle(
   const offset = relativeOffset(minor);
   const isAtRelative = normalizeSemitone(tone) === normalizeSemitone(offset);
   const targetTone = isAtRelative ? 0 : offset;
-  const currentKey = transposeRootNote(writtenKey, isAtRelative ? 0 : tone);
+  const currentKey = transposeRootNote(keyRoot(writtenKey), isAtRelative ? 0 : tone);
   const targetNote = transposeRootNote(currentKey, isAtRelative ? -offset : offset);
 
   return {
@@ -121,12 +125,13 @@ function baseChord(chord: string) {
 }
 
 function simplifiedChordName(chord: string) {
-  return chord.match(/^([A-G][#b]?m?)/)?.[1] ?? chord;
+  const match = chord.match(/^([A-G][#b]?)(m(?!aj))?/);
+  return match ? `${match[1]}${match[2] ?? ""}` : chord;
 }
 
 const SECTION_MATCHERS: Array<[RegExp, SectionType]> = [
   [/intro/, "intro"],
-  [/pre.?refr[aã]o|pre.?chorus/, "pre-chorus"],
+  [/pr[eé].?refr[aã]o|pre.?chorus/, "pre-chorus"],
   [/vers[oõ]|parte|estrofe/, "verse"],
   [/refr[aã]o|chorus/, "chorus"],
   [/ponte|bridge/, "bridge"],

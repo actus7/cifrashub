@@ -13,7 +13,7 @@ export function findSavedSong(
     .find((saved) => savedSongMatches(saved, song, arrangementId));
 }
 
-export function savedSongCandidates(
+function savedSongCandidates(
   folders: Folder[],
   recentes: StoredSong[],
   folderId: string | null,
@@ -21,17 +21,17 @@ export function savedSongCandidates(
   return [...preferredFolderSongs(folders, folderId), ...otherFolderSongs(folders, folderId), ...recentes];
 }
 
-export function preferredFolderSongs(folders: Folder[], folderId: string | null) {
+function preferredFolderSongs(folders: Folder[], folderId: string | null) {
   return folderId ? folders.find((folder) => folder.id === folderId)?.songs ?? [] : [];
 }
 
-export function otherFolderSongs(folders: Folder[], folderId: string | null) {
+function otherFolderSongs(folders: Folder[], folderId: string | null) {
   return folders
     .filter((folder) => folder.id !== folderId)
     .flatMap((folder) => folder.songs);
 }
 
-export function savedSongMatches(saved: StoredSong, song: StoredSong, arrangementId: string | null) {
+function savedSongMatches(saved: StoredSong, song: StoredSong, arrangementId: string | null) {
   if (arrangementId) return arrangementKey(saved) === arrangementId;
   return songIdentityKey(saved) === songIdentityKey(song);
 }

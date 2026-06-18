@@ -53,3 +53,6 @@ next-env.d.ts
 *.diff
 /diff*.txt
 /d_parsers.txt
+
+# generated browser automation artifacts
+.playwright-mcp/

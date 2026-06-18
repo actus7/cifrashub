@@ -54,10 +54,6 @@ const CHORD_PATTERN =
 
 const SECTION_RE = /^\[(.+?)\]/;
 
-function chordLineFromAngleMarkers(line: string): string {
-  return line.replace(/‹CHORD:([^›]+)›\s*/g, "$1  ").trimEnd();
-}
-
 function lineHasAngleChordMarkers(line: string): boolean {
   return /‹CHORD:/.test(line);
 }
@@ -262,15 +258,49 @@ function isPlainLyricCandidate(line: string) {
 }
 
 function parseChordBlocks(lines: string[], index: number, markerLine: boolean) {
+  if (markerLine) {
+    return {
+      blocks: parseMarkerChordLine(lines[index] ?? ""),
+      consumedNextLine: false,
+    };
+  }
+
   const lyricLine = nextLyricLine(lines, index);
   return {
-    blocks: parseChordLinePair(cleanChordLine(lines[index] ?? "", markerLine), lyricLine),
+    blocks: parseChordLinePair(lines[index] ?? "", lyricLine),
     consumedNextLine: lyricLine !== "",
   };
 }
 
-function cleanChordLine(line: string, markerLine: boolean) {
-  return markerLine ? chordLineFromAngleMarkers(line) : line;
+function parseMarkerChordLine(line: string): LyricLine {
+  const matches = [...line.matchAll(/‹CHORD:([^›]+)›/g)];
+  return matches.map((match, index) => markerMatchToBlock(line, matches, match, index));
+}
+
+function markerMatchToBlock(
+  line: string,
+  matches: RegExpMatchArray[],
+  match: RegExpMatchArray,
+  index: number,
+): LyricLine[number] {
+  const segment = markerTextSegment(line, matches, match, index);
+  const text = segment.trimEnd();
+  return {
+    chord: match[1] ?? "",
+    text,
+    spaceAfter: /\s+$/u.test(segment) || (text === "" && index < matches.length - 1),
+  };
+}
+
+function markerTextSegment(
+  line: string,
+  matches: RegExpMatchArray[],
+  match: RegExpMatchArray,
+  index: number,
+): string {
+  const start = (match.index ?? 0) + match[0].length;
+  const end = matches[index + 1]?.index ?? line.length;
+  return line.slice(start, end);
 }
 
 function nextLyricLine(lines: string[], index: number) {

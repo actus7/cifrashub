@@ -1,0 +1,35 @@
+project:
+  name: "fallow-health-improvements"
+  scale: MEDIUM
+  started: "2026-06-17T15:02:35.783Z"
+  current_phase: R
+
+phases:
+  P:
+    status: filled
+    started_at: "2026-06-17T15:02:35.783Z"
+    completed_at: "2026-06-17T15:10:53.890Z"
+  R:
+    status: in_progress
+    started_at: "2026-06-17T15:10:53.908Z"
+  E:
+    status: pending
+  V:
+    status: pending
+  C:
+    status: skipped
+    reason: "Not required for scale MEDIUM"
+
+execution:
+  history:
+    - timestamp: "2026-06-17T15:10:53.908Z"
+      phase: R
+      action: started
+  last_activity: "2026-06-17T15:10:53.908Z"
+  resume_context: "Fase R (Revisão) em progresso"
+
+settings:
+  autonomous_mode: true
+  require_plan: false
+  require_approval: false
+
