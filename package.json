@@ -18,6 +18,12 @@
     "vercel-build": "node scripts/vercel-build.cjs",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "audit": "npm audit --audit-level=moderate",
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build && npm run audit",
+    "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:push:ci": "drizzle-kit push --force",
     "db:studio": "drizzle-kit studio",
@@ -62,7 +68,8 @@
     "shadcn": "^4.1.2",
     "sharp": "^0.34.5",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   },
   "knip": {
     "entry": [

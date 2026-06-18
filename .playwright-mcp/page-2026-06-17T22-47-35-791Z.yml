@@ -1,0 +1,24 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e68]:
+        - banner [ref=e69]
+        - main [ref=e79]
+      - contentinfo [ref=e50]:
+        - paragraph [ref=e51]:
+          - strong [ref=e52]: CifrasHub
+          - text: é um projeto de código aberto (licença MIT). Contribuições são bem-vindas.
+        - link "Código-fonte no GitHub" [ref=e53] [cursor=pointer]:
+          - /url: https://github.com/Geeks-Zone/cifrashub
+          - img [ref=e54]
+          - text: Código-fonte no GitHub
+    - region "Notifications alt+T"
+    - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e107] [cursor=pointer]:
+    - generic [ref=e110]:
+      - text: Compiling
+      - generic [ref=e111]:
+        - generic [ref=e112]: .
+        - generic [ref=e113]: .
+        - generic [ref=e114]: .
+  - alert [ref=e67]

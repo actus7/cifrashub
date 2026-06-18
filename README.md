@@ -61,7 +61,13 @@ cp .env.example .env.local
 
 1. Crie um projeto no [Neon Console](https://console.neon.tech)
 2. Copie as connection strings para `.env.local`
-3. Execute as migrations:
+3. Gere migrações versionadas quando alterar `src/db/schema.ts`:
+
+```bash
+npm run db:generate
+```
+
+4. Aplique o schema apenas em ambientes locais ou revisados:
 
 ```bash
 npm run db:push
@@ -83,7 +89,13 @@ Acesse [http://localhost:3000](http://localhost:3000).
 | `npm run build` | Gera o build de produção |
 | `npm run start` | Inicia o servidor de produção |
 | `npm run lint` | Executa o ESLint |
-| `npm run db:push` | Aplica o schema ao banco de dados |
+| `npm run typecheck` | Valida os tipos TypeScript |
+| `npm run test` | Executa a suíte Vitest uma vez |
+| `npm run test:watch` | Executa a suíte Vitest em modo watch |
+| `npm run audit` | Verifica vulnerabilidades moderadas ou maiores |
+| `npm run verify` | Executa lint, typecheck, testes, build e audit |
+| `npm run db:generate` | Gera migrações Drizzle versionadas |
+| `npm run db:push` | Aplica o schema ao banco de dados em ambiente controlado |
 | `npm run db:studio` | Abre o Drizzle Studio (GUI do banco) |
 
 ### Deploy (Vercel)
@@ -139,6 +151,14 @@ cp .env.example .env.local
 ```
 
 ### Database setup
+
+Generate versioned migrations after schema changes:
+
+```bash
+npm run db:generate
+```
+
+Apply the schema only in local or reviewed environments:
 
 ```bash
 npm run db:push

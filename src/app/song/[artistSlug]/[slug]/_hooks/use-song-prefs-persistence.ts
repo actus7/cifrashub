@@ -7,7 +7,7 @@ import { songIdentityKey } from "@/lib/song-identity-key";
 import { useLibraryStore } from "@/store/use-library-store";
 import type { PlayerContextState } from "./use-player-context-state";
 
-export type PersistedPlayerPrefs = Pick<StoredSong, keyof typeof PLAYER_PREF_DEFAULTS>;
+type PersistedPlayerPrefs = Pick<StoredSong, keyof typeof PLAYER_PREF_DEFAULTS>;
 
 type CloudPrefsPayload = { arrangementId: string; tone: number; capo: number; uiPrefs: StoredSongUiPrefs };
 

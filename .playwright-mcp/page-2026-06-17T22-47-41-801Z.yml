@@ -1,0 +1,27 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e115]:
+        - img [ref=e117]
+        - heading "Ops! Algo deu errado." [level=2] [ref=e119]
+        - paragraph [ref=e120]: Não foi possível carregar esta cifra. Cifra indisponível neste formato.
+        - generic [ref=e121]:
+          - button "Voltar" [ref=e122]:
+            - img
+            - text: Voltar
+          - button "Tentar novamente" [ref=e123]:
+            - img
+            - text: Tentar novamente
+      - contentinfo [ref=e50]:
+        - paragraph [ref=e51]:
+          - strong [ref=e52]: CifrasHub
+          - text: é um projeto de código aberto (licença MIT). Contribuições são bem-vindas.
+        - link "Código-fonte no GitHub" [ref=e53] [cursor=pointer]:
+          - /url: https://github.com/Geeks-Zone/cifrashub
+          - img [ref=e54]
+          - text: Código-fonte no GitHub
+    - region "Notifications alt+T"
+    - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e63] [cursor=pointer]:
+    - img [ref=e64]
+  - alert [ref=e67]

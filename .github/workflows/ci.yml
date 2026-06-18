@@ -4,21 +4,20 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  lint-and-build:
-    name: Lint & Build
+  verify:
+    name: Lint, typecheck, test, build and audit
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -30,13 +29,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
       - name: Build
         run: npm run build
-        env:
-          # Provide minimal stubs so Next.js build doesn't fail on missing env vars.
-          # These are not real credentials — the build only needs the vars to be defined.
-          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://stub:stub@localhost/stub' }}
-          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED || 'postgresql://stub:stub@localhost/stub' }}
-          AUTH_COOKIE_SECRET: ${{ secrets.AUTH_COOKIE_SECRET || 'ci-stub-secret-32-chars-minimum!!' }}
-          NEON_AUTH_URL: ${{ secrets.NEON_AUTH_URL || 'https://stub.neon.tech' }}
-          NEXT_PUBLIC_BASE_URL: https://www.cifrashub.com.br
+
+      - name: Audit dependencies
+        run: npm run audit
