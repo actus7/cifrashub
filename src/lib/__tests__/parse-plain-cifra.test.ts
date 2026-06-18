@@ -34,7 +34,7 @@ describe("parsePlainTextCifra", () => {
   });
 
   it("parses explicit chord markers", () => {
-    const sections = parsed("[Verso]\n<CHORD:G>Olá <CHORD:D>mundo");
+    const sections = parsed("[Verso]\n‹CHORD:G›Olá ‹CHORD:D›mundo");
 
     expect(sections[0]?.content[0]).toEqual([
       { chord: "G", text: "Olá", spaceAfter: true },
