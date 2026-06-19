@@ -264,7 +264,7 @@ function TabsChunkPanel({
       key={`tab-${idx}-${cIdx}`}
       open={expandTabs ? true : undefined}
       className={cn(
-        "song-tab-accordion group/tab-acc no-print mb-3 w-full min-w-0 max-w-full break-inside-avoid rounded-lg border border-border/60 bg-card/40 shadow-sm",
+        "song-tab-accordion group/tab-acc no-print mb-3 w-full min-w-0 max-w-full print-break-auto rounded-lg border border-border/60 bg-card/40 shadow-sm",
         "open:border-border open:bg-card/60",
       )}
     >
@@ -422,7 +422,7 @@ function SectionBlock({
   return (
     <div
       key={idx}
-      className={cn("relative min-w-0 break-inside-avoid", idx > 0 && "mt-6")}
+      className={cn("relative min-w-0 print-break-auto", idx > 0 && "mt-6")}
       style={{ marginBottom: `${sectionSpacing}px` }}
     >
       <SectionBar type={section.type} />

@@ -253,8 +253,9 @@ html.zen-scroll-hide body::-webkit-scrollbar {
     padding: 0 !important;
     margin: 0 !important;
   }
-  .break-inside-avoid {
-    page-break-inside: avoid !important;
+  .print-break-auto {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
     margin-bottom: 20px !important;
   }
   /* Seções em accordion: no papel mostrar sempre expandidas, sem o ícone de colapso */

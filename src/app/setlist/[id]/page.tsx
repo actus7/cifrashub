@@ -39,11 +39,10 @@ function reorderedItems(items: SetlistDetailView["items"], itemId: string, direc
   if (idx < 0 || dest < 0 || dest >= sorted.length) return null;
 
   const next = [...sorted];
-  const temp = next[idx].position;
-  next[idx].position = next[dest].position;
-  next[dest].position = temp;
+  const [moved] = next.splice(idx, 1);
+  next.splice(dest, 0, moved);
 
-  return next;
+  return next.map((item, position) => ({ ...item, position }));
 }
 
 function localItemsWithPositions(
