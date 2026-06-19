@@ -46,4 +46,25 @@ describe("song identity utilities", () => {
 
     expect(flattenLibrarySongs(folders, [recentSong])).toEqual([recentSong]);
   });
+
+  it("keeps local setlist positions when building details", async () => {
+    const { buildLocalSetlistDetail } = await import("@/lib/setlist-local");
+    const first = song({ id: "first", arrangementId: "first", title: "First" });
+    const second = song({ id: "second", arrangementId: "second", title: "Second" });
+
+    const detail = buildLocalSetlistDetail(
+      {
+        id: "setlist",
+        title: "Setlist",
+        items: [
+          { itemId: "first", arrangementId: "first", position: 1 },
+          { itemId: "second", arrangementId: "second", position: 0 },
+        ],
+      },
+      [{ id: "f1", title: "Favoritos", songs: [first, second] }],
+      [],
+    );
+
+    expect(detail.items.map((item) => item.position)).toEqual([1, 0]);
+  });
 });

@@ -129,6 +129,7 @@ export interface LocalSetlistStored {
   items: Array<{
     itemId: string;
     arrangementId: string;
+    position?: number;
     notes?: string | null;
   }>;
 }

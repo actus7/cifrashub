@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import {
   ArrowLeft,
+  Check,
   ChevronDown,
   ChevronUp,
   Link2,
   ListMusic,
+  Loader2,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,9 +27,9 @@ type SetlistDetailViewProps = {
   recentes: StoredSong[];
   onBack: () => void;
   onOpenSong: (song: StoredSong) => void;
-  onAddItem: (arrangementId: string) => void;
-  onRemoveItem: (itemId: string) => void;
-  onMoveItem: (itemId: string, direction: -1 | 1) => void;
+  onAddItem: (arrangementId: string) => Promise<void> | void;
+  onRemoveItem: (itemId: string) => Promise<void> | void;
+  onMoveItem: (itemId: string, direction: -1 | 1) => Promise<void> | void;
   onShare?: () => void;
   shareBusy?: boolean;
   disabled?: boolean;
@@ -42,15 +45,15 @@ type SetlistHeaderProps = {
 type AddSongSelectProps = {
   addable: StoredSong[];
   disabled?: boolean;
-  onAddItem: (arrangementId: string) => void;
+  onAddItem: (arrangementId: string) => Promise<void> | void;
 };
 
 type SetlistItemsProps = {
   items: SetlistItemView[];
   disabled?: boolean;
   onOpenSong: (song: StoredSong) => void;
-  onRemoveItem: (itemId: string) => void;
-  onMoveItem: (itemId: string, direction: -1 | 1) => void;
+  onRemoveItem: (itemId: string) => Promise<void> | void;
+  onMoveItem: (itemId: string, direction: -1 | 1) => Promise<void> | void;
 };
 
 type SetlistItemRowProps = {
@@ -59,8 +62,8 @@ type SetlistItemRowProps = {
   total: number;
   disabled?: boolean;
   onOpenSong: (song: StoredSong) => void;
-  onRemoveItem: (itemId: string) => void;
-  onMoveItem: (itemId: string, direction: -1 | 1) => void;
+  onRemoveItem: (itemId: string) => Promise<void> | void;
+  onMoveItem: (itemId: string, direction: -1 | 1) => Promise<void> | void;
 };
 
 type MoveControlsProps = Pick<SetlistItemRowProps, "disabled" | "index" | "item" | "onMoveItem" | "total">;
@@ -161,32 +164,59 @@ function SetlistHero({ detail }: { detail: SetlistDetailView }) {
 }
 
 function AddSongSelect({ addable, disabled, onAddItem }: AddSongSelectProps) {
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  const handleAdd = async (value: string) => {
+    if (!value || status === "saving") return;
+
+    setStatus("saving");
+    try {
+      await onAddItem(value);
+      setStatus("saved");
+      window.setTimeout(() => setStatus("idle"), 1600);
+    } catch {
+      setStatus("error");
+    }
+  };
+
   return (
     <div className="mb-4">
       <label className="mb-1 block text-xs font-medium text-muted-foreground">
         Adicionar da biblioteca
       </label>
-      <select
-        className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
-        defaultValue=""
-        disabled={disabled || addable.length === 0}
-        onChange={(e) => {
-          const v = e.target.value;
-          if (v) {
-            onAddItem(v);
-            e.target.value = "";
-          }
-        }}
-      >
-        <option value="">
-          {addable.length === 0 ? "Todas já estão na setlist" : "Escolher música…"}
-        </option>
-        {addable.map((song) => (
-          <option key={arrangementKey(song)} value={arrangementKey(song)}>
-            {song.title} — {song.artist}
+      <div className="flex gap-2">
+        <select
+          className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-sm"
+          value=""
+          disabled={disabled || status === "saving" || addable.length === 0}
+          onChange={(e) => void handleAdd(e.target.value)}
+        >
+          <option value="">
+            {addable.length === 0 ? "Todas já estão na setlist" : "Escolher música…"}
           </option>
-        ))}
-      </select>
+          {addable.map((song) => (
+            <option key={arrangementKey(song)} value={arrangementKey(song)}>
+              {song.title} — {song.artist}
+            </option>
+          ))}
+        </select>
+        <AddSongStatus status={status} />
+      </div>
+      {status === "error" ? (
+        <p className="mt-1 text-xs text-destructive">Não foi possível adicionar a música.</p>
+      ) : null}
+    </div>
+  );
+}
+
+function AddSongStatus({ status }: { status: "idle" | "saving" | "saved" | "error" }) {
+  if (status === "idle") return null;
+
+  return (
+    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground">
+      {status === "saving" ? <Loader2 className="size-4 animate-spin" /> : null}
+      {status === "saved" ? <Check className="size-4 text-primary" /> : null}
+      {status === "error" ? <span className="text-xs font-bold text-destructive">!</span> : null}
     </div>
   );
 }
@@ -233,6 +263,19 @@ function SetlistItemRow(props: SetlistItemRowProps) {
 }
 
 function MoveControls({ disabled, index, item, onMoveItem, total }: MoveControlsProps) {
+  const [moving, setMoving] = useState(false);
+
+  const move = async (direction: -1 | 1) => {
+    if (moving) return;
+
+    setMoving(true);
+    try {
+      await onMoveItem(item.itemId, direction);
+    } finally {
+      setMoving(false);
+    }
+  };
+
   return (
     <div className="flex flex-col justify-center gap-0.5 border-r border-border/50 pr-1">
       <Button
@@ -240,8 +283,8 @@ function MoveControls({ disabled, index, item, onMoveItem, total }: MoveControls
         variant="ghost"
         size="icon-sm"
         className="size-7"
-        disabled={disabled || index === 0}
-        onClick={() => onMoveItem(item.itemId, -1)}
+        disabled={disabled || moving || index === 0}
+        onClick={() => void move(-1)}
       >
         <ChevronUp className="size-4" />
       </Button>
@@ -250,8 +293,8 @@ function MoveControls({ disabled, index, item, onMoveItem, total }: MoveControls
         variant="ghost"
         size="icon-sm"
         className="size-7"
-        disabled={disabled || index === total - 1}
-        onClick={() => onMoveItem(item.itemId, 1)}
+        disabled={disabled || moving || index === total - 1}
+        onClick={() => void move(1)}
       >
         <ChevronDown className="size-4" />
       </Button>
@@ -287,16 +330,29 @@ function SetlistItemButton({ item, onOpenSong }: SetlistItemButtonProps) {
 }
 
 function RemoveItemButton({ disabled, item, onRemoveItem }: RemoveItemButtonProps) {
+  const [removing, setRemoving] = useState(false);
+
+  const remove = async () => {
+    if (removing) return;
+
+    setRemoving(true);
+    try {
+      await onRemoveItem(item.itemId);
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon-sm"
       className="shrink-0 text-muted-foreground hover:text-destructive"
-      disabled={disabled}
-      onClick={() => onRemoveItem(item.itemId)}
+      disabled={disabled || removing}
+      onClick={() => void remove()}
     >
-      <Trash2 className="size-4" />
+      {removing ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
     </Button>
   );
 }
