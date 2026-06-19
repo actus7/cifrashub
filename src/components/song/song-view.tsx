@@ -111,7 +111,6 @@ function SongBody({
       simplified={simplified}
       nashvilleNumbers={nashvilleNumbers}
       nashvilleKey={currentSong.cifraWrittenKey ?? currentSong.cifraSoundingKey}
-      tone={effectiveTransposition}
       effectiveTransposition={effectiveTransposition}
       fontSizeOffset={fontSizeOffset}
       columns={columns}

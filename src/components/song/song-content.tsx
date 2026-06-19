@@ -12,7 +12,6 @@ type SongContentProps = {
   simplified: boolean;
   nashvilleNumbers?: boolean;
   nashvilleKey?: string;
-  tone?: number;
   effectiveTransposition: number;
   fontSizeOffset: number;
   columns: number;
@@ -86,7 +85,6 @@ type LineRenderProps = {
   simplified: boolean;
   nashvilleNumbers: boolean;
   nashvilleKey?: string;
-  tone: number;
   effectiveTransposition: number;
 };
 
@@ -102,10 +100,10 @@ function displayedChord(
   chord: string | undefined,
   nashvilleNumbers: boolean,
   nashvilleKey: string | undefined,
-  tone: number,
+  effectiveTransposition: number,
 ) {
   if (!chord || !nashvilleNumbers || !nashvilleKey) return chord;
-  return chordToNashville(chord, transposeRootNote(nashvilleKey, tone));
+  return chordToNashville(chord, transposeRootNote(nashvilleKey, effectiveTransposition));
 }
 
 function ChordBlock({
@@ -148,7 +146,7 @@ function ChordName({
     <span
       role="button"
       tabIndex={displayChord ? 0 : -1}
-      aria-label={displayChord ? `Acorde ${displayChord}` : undefined}
+      aria-label={displayChord ? `Acorde ${popupChord ?? displayChord}` : undefined}
       className="chord-name -ml-0.5 cursor-pointer rounded-sm px-0.5 font-mono text-[1.05em] font-bold text-primary select-none whitespace-pre transition-colors hover:bg-primary/15"
       onClick={(e) => activateChord(e, popupChord, onChordClick)}
       onKeyDown={(e) => handleChordKeyDown(e, popupChord, onChordClick)}
@@ -229,7 +227,6 @@ function ChordRow({
   simplified,
   nashvilleNumbers,
   nashvilleKey,
-  tone,
   effectiveTransposition,
   onChordClick,
 }: Omit<LineRenderProps, "lineHasChord" | "rowKey">) {
@@ -243,7 +240,7 @@ function ChordRow({
     >
       {line.map((block, bIdx) => {
         const popupChord = resolveChord(block.chord, simplified, effectiveTransposition);
-        const displayChord = displayedChord(popupChord, nashvilleNumbers, nashvilleKey, tone);
+        const displayChord = displayedChord(popupChord, nashvilleNumbers, nashvilleKey, effectiveTransposition);
         return (
           <ChordBlock
             key={bIdx}
@@ -482,7 +479,6 @@ export const SongContent = memo(function SongContent({
   simplified,
   nashvilleNumbers = false,
   nashvilleKey,
-  tone = 0,
   effectiveTransposition,
   fontSizeOffset,
   columns,
@@ -514,7 +510,6 @@ export const SongContent = memo(function SongContent({
     simplified,
     nashvilleNumbers,
     nashvilleKey: resolvedNashvilleKey,
-    tone,
     effectiveTransposition,
   };
 

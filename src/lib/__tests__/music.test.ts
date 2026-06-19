@@ -48,6 +48,11 @@ describe("music utilities", () => {
     expect(chordToNashville("F#°", "G")).toBe("7°");
     expect(chordToNashville("Bb", "F")).toBe("4");
     expect(chordToNashville("D/F#", "G")).toBe("5/7");
+    expect(chordToNashville("Cmaj7", "C")).toBe("1maj7");
+    expect(chordToNashville("Fmaj7", "C")).toBe("4maj7");
+    expect(chordToNashville("G7", "C")).toBe("57");
+    expect(chordToNashville("Fsus4", "C")).toBe("4sus4");
+    expect(chordToNashville("Dm7", "C")).toBe("2m7");
   });
 
   it("simplifies chords and classifies sections", () => {
