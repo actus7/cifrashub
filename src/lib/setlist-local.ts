@@ -30,7 +30,7 @@ export function buildLocalSetlistDetail(
   const byArr = new Map(lib.map((s) => [arrangementKey(s), s] as const));
   const items: SetlistItemView[] = stored.items.map((it, idx) => ({
     itemId: it.itemId,
-    position: idx,
+    position: it.position ?? idx,
     arrangementId: it.arrangementId,
     notes: it.notes ?? null,
     song: byArr.get(it.arrangementId) ?? null,

@@ -23,7 +23,9 @@ export function useSongPageActions(
     onOpenArtistSongs: () => {
       if (currentSong) router.push(`/artist/${currentSong.artistSlug}`);
     },
-    onPrint: () => window.print(),
+    onPrint: () => {
+      window.setTimeout(() => window.print(), 0);
+    },
     onTapZone: () => {},
     onToggleZen: () => player.setZenMode(!usePlayerStore.getState().zenMode),
     onOpenSongEditor: () => {

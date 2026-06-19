@@ -102,7 +102,7 @@ export default function SetlistPage() {
   ) => {
     const updated = (loadLocalSetlists() ?? []).map((setlist) => {
       if (setlist.id !== setId) return setlist;
-      return { ...setlist, items: updateItems(setlist.items) };
+      return { ...setlist, items: updateItems(setlist.items), updatedAt: new Date().toISOString() };
     });
 
     saveLocalSetlists(updated);
@@ -118,10 +118,22 @@ export default function SetlistPage() {
       return;
     }
 
-    updateLocalSetlist((items) => [
-      ...items,
-      { itemId: Date.now().toString(), arrangementId, position: items.length, notes: null },
-    ]);
+    updateLocalSetlist((items) => {
+      if (items.some((item) => item.arrangementId === arrangementId)) return items;
+
+      return [
+        ...items,
+        {
+          itemId:
+            typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          arrangementId,
+          position: Math.max(-1, ...items.map((i) => i.position ?? 0)) + 1,
+          notes: null,
+        },
+      ];
+    });
   };
 
   const onRemoveItem = async (itemId: string) => {
