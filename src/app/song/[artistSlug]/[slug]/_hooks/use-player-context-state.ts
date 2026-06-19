@@ -17,6 +17,8 @@ function useDisplayState() {
     setSimplified: usePlayerStore((s) => s.setSimplified),
     showTabs: usePlayerStore((s) => s.showTabs),
     setShowTabs: usePlayerStore((s) => s.setShowTabs),
+    nashvilleNumbers: usePlayerStore((s) => s.nashvilleNumbers),
+    setNashvilleNumbers: usePlayerStore((s) => s.setNashvilleNumbers),
     mirrored: usePlayerStore((s) => s.mirrored),
     setMirrored: usePlayerStore((s) => s.setMirrored),
     fontSizeOffset: usePlayerStore((s) => s.fontSizeOffset),

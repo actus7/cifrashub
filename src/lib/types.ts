@@ -60,6 +60,7 @@ export interface CurrentSongMeta {
 export type StoredSongUiPrefs = {
   simplified?: boolean;
   showTabs?: boolean;
+  nashvilleNumbers?: boolean;
   mirrored?: boolean;
   fontSizeOffset?: number;
   columns?: number;
@@ -80,6 +81,7 @@ export interface StoredSong extends CurrentSongMeta {
   capo?: number;
   simplified?: boolean;
   showTabs?: boolean;
+  nashvilleNumbers?: boolean;
   mirrored?: boolean;
   fontSizeOffset?: number;
   columns?: number;

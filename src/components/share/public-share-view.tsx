@@ -103,6 +103,8 @@ function SharedSongContent({ song }: { song: Extract<ShareSnapshotPayload, { typ
       songData={song.songData}
       showTabs
       simplified={false}
+      nashvilleNumbers={song.nashvilleNumbers ?? false}
+      nashvilleKey={song.cifraWrittenKey ?? song.cifraSoundingKey}
       effectiveTransposition={song.tone ?? 0}
       fontSizeOffset={0}
       columns={1}

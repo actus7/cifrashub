@@ -779,6 +779,7 @@ function SectionPreview({
             showTabs
             expandTabs
             simplified={previewPrefs.simplified}
+            nashvilleNumbers={false}
             effectiveTransposition={previewPrefs.effectiveTransposition}
             fontSizeOffset={previewPrefs.fontSizeOffset}
             columns={previewPrefs.columns}

@@ -12,6 +12,7 @@ interface PlayerState {
   simplified: boolean;
   activeChord: string | null;
   showTabs: boolean;
+  nashvilleNumbers: boolean;
   mirrored: boolean;
   fontSizeOffset: number;
   columns: number;
@@ -33,6 +34,7 @@ interface PlayerState {
   setSimplified: (simplified: boolean) => void;
   setActiveChord: (chord: string | null) => void;
   setShowTabs: (show: boolean) => void;
+  setNashvilleNumbers: (nashvilleNumbers: boolean) => void;
   setMirrored: (mirrored: boolean) => void;
   setFontSizeOffset: (offset: number) => void;
   setColumns: (columns: number) => void;
@@ -59,6 +61,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   simplified: false,
   activeChord: null,
   showTabs: true,
+  nashvilleNumbers: false,
   mirrored: false,
   fontSizeOffset: 0,
   columns: 1,
@@ -79,6 +82,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   setSimplified: (simplified) => set({ simplified }),
   setActiveChord: (activeChord) => set({ activeChord }),
   setShowTabs: (showTabs) => set({ showTabs }),
+  setNashvilleNumbers: (nashvilleNumbers) => set({ nashvilleNumbers }),
   setMirrored: (mirrored) => set({ mirrored }),
   setFontSizeOffset: (fontSizeOffset) => set({ fontSizeOffset }),
   setColumns: (columns) => set({ columns }),

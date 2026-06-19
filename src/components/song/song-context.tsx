@@ -24,6 +24,8 @@ export type SongViewContextValue = {
   setSimplified: (v: boolean) => void;
   showTabs: boolean;
   setShowTabs: (v: boolean) => void;
+  nashvilleNumbers: boolean;
+  setNashvilleNumbers: (v: boolean) => void;
   mirrored: boolean;
   setMirrored: (v: boolean) => void;
   fontSizeOffset: number;

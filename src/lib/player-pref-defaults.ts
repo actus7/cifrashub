@@ -3,6 +3,7 @@ export const PLAYER_PREF_DEFAULTS = {
   capo: 0,
   simplified: false,
   showTabs: true,
+  nashvilleNumbers: false,
   mirrored: false,
   fontSizeOffset: 0,
   columns: 1,

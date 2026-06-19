@@ -15,6 +15,7 @@ export function youtubeIdForRow(s: Pick<StoredSong, "youtubeId">): string | null
 const UI_PREF_KEYS = [
   "simplified",
   "showTabs",
+  "nashvilleNumbers",
   "mirrored",
   "fontSizeOffset",
   "columns",
