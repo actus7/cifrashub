@@ -154,8 +154,9 @@ function degreeFromInterval(interval: number) {
 }
 
 function chordQuality(suffix: string) {
-  if (/^(°|dim)/i.test(suffix)) return suffix.replace(/^(°|dim)/i, "°");
-  return suffix;
+  if (/^(°|dim)/i.test(suffix)) return "°";
+  if (/^m(?!aj)/.test(suffix)) return "m";
+  return "";
 }
 
 function chordRootToNashville(root: string, key: string) {
