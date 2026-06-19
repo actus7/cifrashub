@@ -129,6 +129,60 @@ function simplifiedChordName(chord: string) {
   return match ? `${match[1]}${match[2] ?? ""}` : chord;
 }
 
+const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11] as const;
+const ACCIDENTAL_LABELS: Record<number, string> = {
+  [-1]: "b",
+  0: "",
+  1: "#",
+};
+
+function noteIndex(note: string) {
+  return NOTES.indexOf(normalizeKeyRoot(note) as (typeof NOTES)[number]);
+}
+
+function chordParts(chord: string) {
+  return chord.match(/^([A-G][#b]?)(.*)$/);
+}
+
+function degreeFromInterval(interval: number) {
+  const normalized = normalizeSemitone(interval);
+  for (const accidental of [0, -1, 1]) {
+    const degreeIndex = MAJOR_SCALE.findIndex((degree) => normalizeSemitone(degree + accidental) === normalized);
+    if (degreeIndex !== -1) return `${ACCIDENTAL_LABELS[accidental]}${degreeIndex + 1}`;
+  }
+  return undefined;
+}
+
+function chordQuality(suffix: string) {
+  if (/^(°|dim)/i.test(suffix)) return "°";
+  if (/^m(?!aj)/.test(suffix)) return "m";
+  return "";
+}
+
+function chordRootToNashville(root: string, key: string) {
+  const rootIndex = noteIndex(root);
+  const keyIndex = noteIndex(keyRoot(key));
+  if (rootIndex === -1 || keyIndex === -1) return undefined;
+  return degreeFromInterval(rootIndex - keyIndex);
+}
+
+function chordPartToNashville(part: string, key: string, includeQuality: boolean) {
+  const match = chordParts(part);
+  if (!match) return part;
+  const degree = chordRootToNashville(match[1], key);
+  if (!degree) return part;
+  return `${degree}${includeQuality ? chordQuality(match[2] ?? "") : ""}`;
+}
+
+export function chordToNashville(chord: string, key: string): string {
+  if (!chord || !key) return chord;
+  const [base, bass] = normalizeChord(chord).split("/");
+  if (!base) return chord;
+  const nashvilleBase = chordPartToNashville(base, key, true);
+  if (!bass) return nashvilleBase;
+  return `${nashvilleBase}/${chordPartToNashville(bass, key, false)}`;
+}
+
 const SECTION_MATCHERS: Array<[RegExp, SectionType]> = [
   [/intro/, "intro"],
   [/pr[eé].?refr[aã]o|pre.?chorus/, "pre-chorus"],

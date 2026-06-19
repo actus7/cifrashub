@@ -20,7 +20,7 @@ import { useSongKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 type SongViewCtx = SongViewContextValue;
 
 type SongTitleBlockProps = Pick<SongViewCtx, "currentSong" | "zenMode" | "onOpenArtistSongs" | "tone" | "capo">;
-type SongBodyProps = Pick<SongViewCtx, "isParsing" | "parseError" | "songData" | "showTabs" | "simplified" | "effectiveTransposition" | "fontSizeOffset" | "columns" | "spacingOffset" | "setActiveChord">;
+type SongBodyProps = Pick<SongViewCtx, "isParsing" | "parseError" | "songData" | "showTabs" | "simplified" | "nashvilleNumbers" | "currentSong" | "effectiveTransposition" | "fontSizeOffset" | "columns" | "spacingOffset" | "setActiveChord">;
 type SongOverlaysProps = Pick<SongViewCtx, "activeChord" | "setActiveChord" | "mirrored" | "capo" | "youtubeMiniOpen" | "setYoutubeMiniOpen" | "youtubeEmbedUrl" | "isParsing" | "parseError" | "youtubeFallbackSearchQuery" | "onYoutubeVideoResolved" | "currentSong">;
 type SongSaveModalProps = Pick<SongViewCtx, "saveModalOpen" | "setSaveModalOpen" | "folders" | "currentSong" | "newFolderName" | "setNewFolderName" | "onCreateFolderFromSave" | "onToggleSongInFolder">;
 
@@ -93,6 +93,8 @@ function SongBody({
   songData,
   showTabs,
   simplified,
+  nashvilleNumbers,
+  currentSong,
   effectiveTransposition,
   fontSizeOffset,
   columns,
@@ -107,6 +109,9 @@ function SongBody({
       songData={songData}
       showTabs={showTabs}
       simplified={simplified}
+      nashvilleNumbers={nashvilleNumbers}
+      nashvilleKey={currentSong.cifraWrittenKey ?? currentSong.cifraSoundingKey}
+      tone={effectiveTransposition}
       effectiveTransposition={effectiveTransposition}
       fontSizeOffset={fontSizeOffset}
       columns={columns}
@@ -136,6 +141,8 @@ function SongMain(ctx: SongViewCtx) {
         songData={ctx.songData}
         showTabs={ctx.showTabs}
         simplified={ctx.simplified}
+        nashvilleNumbers={ctx.nashvilleNumbers}
+        currentSong={ctx.currentSong}
         effectiveTransposition={ctx.effectiveTransposition}
         fontSizeOffset={ctx.fontSizeOffset}
         columns={ctx.columns}

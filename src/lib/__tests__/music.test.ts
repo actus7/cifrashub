@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  chordToNashville,
   classifySection,
   getRelativeKeyToggle,
   normalizeChord,
@@ -34,6 +35,19 @@ describe("music utilities", () => {
       isAtRelative: true,
       label: "Voltar p/ Maior (C)",
     });
+  });
+
+  it("converts chords to Nashville numbers", () => {
+    expect(chordToNashville("C", "C")).toBe("1");
+    expect(chordToNashville("Dm", "C")).toBe("2m");
+    expect(chordToNashville("Em", "C")).toBe("3m");
+    expect(chordToNashville("F", "C")).toBe("4");
+    expect(chordToNashville("G", "C")).toBe("5");
+    expect(chordToNashville("Am", "C")).toBe("6m");
+    expect(chordToNashville("B°", "C")).toBe("7°");
+    expect(chordToNashville("F#°", "G")).toBe("7°");
+    expect(chordToNashville("Bb", "F")).toBe("4");
+    expect(chordToNashville("D/F#", "G")).toBe("5/7");
   });
 
   it("simplifies chords and classifies sections", () => {

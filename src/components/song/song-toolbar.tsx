@@ -402,7 +402,7 @@ type ControlProps = {
 };
 
 function DisplayModeControls({ setExpanded }: { setExpanded: (v: string | null) => void }) {
-  const { showTabs, setShowTabs, simplified, setSimplified, mirrored, setMirrored } = useSongViewContext();
+  const { showTabs, setShowTabs, simplified, setSimplified, nashvilleNumbers, setNashvilleNumbers, mirrored, setMirrored } = useSongViewContext();
   const close = () => setExpanded(null);
 
   return (
@@ -412,6 +412,9 @@ function DisplayModeControls({ setExpanded }: { setExpanded: (v: string | null) 
       </ToolbarButton>
       <ToolbarButton active={simplified} onClick={() => { setSimplified(!simplified); close(); }} title={simplified ? "Mostrar acordes originais" : "Simplificar acordes"}>
         <Guitar className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton active={nashvilleNumbers} onClick={() => { setNashvilleNumbers(!nashvilleNumbers); close(); }} title={nashvilleNumbers ? "Mostrar cifras" : "Mostrar graus"} className="font-mono text-xs font-extrabold">
+        Nº
       </ToolbarButton>
       <ToolbarButton active={mirrored} onClick={() => { setMirrored(!mirrored); close(); }} title={mirrored ? "Mão direita (padrão)" : "Mão esquerda (canhoto)"}>
         <FlipHorizontal className="size-4 -scale-x-100" />

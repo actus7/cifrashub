@@ -10,6 +10,7 @@ type UiPrefs = NonNullable<SongRow["uiPrefs"]>;
 const uiPrefKeys = [
   "simplified",
   "showTabs",
+  "nashvilleNumbers",
   "mirrored",
   "fontSizeOffset",
   "columns",

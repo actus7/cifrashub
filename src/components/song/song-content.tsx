@@ -2,7 +2,7 @@
 
 import { memo, type KeyboardEvent } from "react";
 import { ChevronDown } from "lucide-react";
-import { simplifyChord, transposeChord } from "@/lib/music";
+import { chordToNashville, simplifyChord, transposeChord, transposeRootNote } from "@/lib/music";
 import { cn } from "@/lib/utils";
 import type { LyricLine, Section } from "@/lib/types";
 
@@ -10,6 +10,9 @@ type SongContentProps = {
   songData: Section[];
   showTabs: boolean;
   simplified: boolean;
+  nashvilleNumbers?: boolean;
+  nashvilleKey?: string;
+  tone?: number;
   effectiveTransposition: number;
   fontSizeOffset: number;
   columns: number;
@@ -24,6 +27,18 @@ type ContentChunk =
 
 function lineChunkType(line: LyricLine): ContentChunk["type"] {
   return line.length > 0 && Boolean(line[0]?.isTab) ? "tabs" : "lyrics";
+}
+
+function firstChordRoot(songData: Section[]): string | undefined {
+  for (const section of songData) {
+    for (const line of section.content) {
+      for (const block of line) {
+        const root = block.chord?.match(/^([A-G][#b]?)/)?.[1];
+        if (root) return root;
+      }
+    }
+  }
+  return undefined;
 }
 
 function appendLineChunk(chunks: ContentChunk[], line: LyricLine) {
@@ -69,14 +84,13 @@ type LineRenderProps = {
   lineHasChord: LineHasChord;
   onChordClick: (chord: string) => void;
   simplified: boolean;
+  nashvilleNumbers: boolean;
+  nashvilleKey?: string;
+  tone: number;
   effectiveTransposition: number;
 };
 
-function resolveChord(
-  raw: string | undefined,
-  simplified: boolean,
-  effectiveTransposition: number,
-) {
+function resolveChord(raw: string | undefined, simplified: boolean, effectiveTransposition: number) {
   if (!raw) return undefined;
   let c = raw;
   if (simplified) c = simplifyChord(c);
@@ -84,22 +98,34 @@ function resolveChord(
   return c || undefined;
 }
 
+function displayedChord(
+  chord: string | undefined,
+  nashvilleNumbers: boolean,
+  nashvilleKey: string | undefined,
+  tone: number,
+) {
+  if (!chord || !nashvilleNumbers || !nashvilleKey) return chord;
+  return chordToNashville(chord, transposeRootNote(nashvilleKey, tone));
+}
+
 function ChordBlock({
   block,
   displayChord,
+  popupChord,
   isLineTab,
   chordTextGap,
   onChordClick,
 }: {
   block: LyricLine[number];
   displayChord: string | undefined;
+  popupChord: string | undefined;
   isLineTab: boolean;
   chordTextGap: number;
   onChordClick: (chord: string) => void;
 }) {
   return (
     <div className={cn("flex flex-col", chordBlockSpacing(block))}>
-      <ChordName displayChord={displayChord} onChordClick={onChordClick} />
+      <ChordName displayChord={displayChord} popupChord={popupChord} onChordClick={onChordClick} />
       <ChordText block={block} isLineTab={isLineTab} chordTextGap={chordTextGap} />
     </div>
   );
@@ -111,9 +137,11 @@ function chordBlockSpacing(block: LyricLine[number]): string | false {
 
 function ChordName({
   displayChord,
+  popupChord,
   onChordClick,
 }: {
   displayChord: string | undefined;
+  popupChord: string | undefined;
   onChordClick: (chord: string) => void;
 }) {
   return (
@@ -122,8 +150,8 @@ function ChordName({
       tabIndex={displayChord ? 0 : -1}
       aria-label={displayChord ? `Acorde ${displayChord}` : undefined}
       className="chord-name -ml-0.5 cursor-pointer rounded-sm px-0.5 font-mono text-[1.05em] font-bold text-primary select-none whitespace-pre transition-colors hover:bg-primary/15"
-      onClick={(e) => activateChord(e, displayChord, onChordClick)}
-      onKeyDown={(e) => handleChordKeyDown(e, displayChord, onChordClick)}
+      onClick={(e) => activateChord(e, popupChord, onChordClick)}
+      onKeyDown={(e) => handleChordKeyDown(e, popupChord, onChordClick)}
     >
       {displayChord || "\u00A0"}
     </span>
@@ -199,6 +227,9 @@ function ChordRow({
   lineRowGap,
   chordTextGap,
   simplified,
+  nashvilleNumbers,
+  nashvilleKey,
+  tone,
   effectiveTransposition,
   onChordClick,
 }: Omit<LineRenderProps, "lineHasChord" | "rowKey">) {
@@ -211,16 +242,14 @@ function ChordRow({
       style={{ marginBottom: `${lineSpacing}px`, rowGap: `${lineRowGap}px` }}
     >
       {line.map((block, bIdx) => {
-        const displayChord = resolveChord(
-          block.chord,
-          simplified,
-          effectiveTransposition,
-        );
+        const popupChord = resolveChord(block.chord, simplified, effectiveTransposition);
+        const displayChord = displayedChord(popupChord, nashvilleNumbers, nashvilleKey, tone);
         return (
           <ChordBlock
             key={bIdx}
             block={block}
             displayChord={displayChord}
+            popupChord={popupChord}
             isLineTab={isLineTab}
             chordTextGap={chordTextGap}
             onChordClick={onChordClick}
@@ -451,6 +480,9 @@ export const SongContent = memo(function SongContent({
   songData,
   showTabs,
   simplified,
+  nashvilleNumbers = false,
+  nashvilleKey,
+  tone = 0,
   effectiveTransposition,
   fontSizeOffset,
   columns,
@@ -459,6 +491,7 @@ export const SongContent = memo(function SongContent({
   expandTabs = false,
 }: SongContentProps) {
   const sectionSpacing = 16 + spacingOffset;
+  const resolvedNashvilleKey = nashvilleKey ?? firstChordRoot(songData);
   const lineSpacing = spacingOffset;
   const lineRowGap = spacingOffset * 0.5;
   const chordTextGap = spacingOffset * 0.25;
@@ -479,6 +512,9 @@ export const SongContent = memo(function SongContent({
     lineHasChord,
     onChordClick,
     simplified,
+    nashvilleNumbers,
+    nashvilleKey: resolvedNashvilleKey,
+    tone,
     effectiveTransposition,
   };
 
