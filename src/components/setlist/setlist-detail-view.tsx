@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   Check,
@@ -166,6 +166,13 @@ function SetlistHero({ detail }: { detail: SetlistDetailView }) {
 function AddSongSelect({ addable, disabled, onAddItem }: AddSongSelectProps) {
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
+  useEffect(() => {
+    if (status !== "saved") return;
+
+    const timer = window.setTimeout(() => setStatus("idle"), 1600);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+
   const handleAdd = async (value: string) => {
     if (!value || status === "saving") return;
 
@@ -173,7 +180,6 @@ function AddSongSelect({ addable, disabled, onAddItem }: AddSongSelectProps) {
     try {
       await onAddItem(value);
       setStatus("saved");
-      window.setTimeout(() => setStatus("idle"), 1600);
     } catch {
       setStatus("error");
     }

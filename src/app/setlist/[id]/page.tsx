@@ -123,7 +123,15 @@ export default function SetlistPage() {
 
       return [
         ...items,
-        { itemId: crypto.randomUUID(), arrangementId, position: items.length, notes: null },
+        {
+          itemId:
+            typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          arrangementId,
+          position: Math.max(-1, ...items.map((i) => i.position ?? 0)) + 1,
+          notes: null,
+        },
       ];
     });
   };
