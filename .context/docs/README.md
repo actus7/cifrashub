@@ -10,6 +10,7 @@ Welcome to the repository knowledge base. Start with the project overview, then 
 - [Glossary & Domain Concepts](./glossary.md)
 - [Security & Compliance Notes](./security.md)
 - [Tooling & Productivity Guide](./tooling.md)
+- [Neon Traffic and Connection Runbook](./neon-traffic.md)
 
 ## Repository Snapshot
 *Top-level directories will appear here once the repository contains subfolders.*

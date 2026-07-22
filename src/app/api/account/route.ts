@@ -1,23 +1,7 @@
-import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
+import { sql } from "@/db";
 import { neonAuth } from "@/lib/auth-server";
 import { clearAuthCookies } from "@/lib/server/auth-cookies";
-
-let sqlClient: ReturnType<typeof neon> | null = null;
-
-function getSqlClient() {
-  if (sqlClient) return sqlClient;
-
-  const connectionString =
-    process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
-
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is not configured.");
-  }
-
-  sqlClient = neon(connectionString);
-  return sqlClient;
-}
 
 export async function DELETE() {
   const { data: session } = await neonAuth.getSession();
@@ -28,8 +12,6 @@ export async function DELETE() {
   }
 
   try {
-    const sql = getSqlClient();
-
     await sql.transaction((tx) => [
       tx`
         DELETE FROM public.share_token

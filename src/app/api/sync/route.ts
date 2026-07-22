@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { userFolders, userSongs } from "@/db/schema";
 import type { Folder, StoredSong } from "@/lib/types";
-import { requireApiUserJson } from "@/lib/server/api-route";
+import { requireApiUserId, requireApiUserJson } from "@/lib/server/api-route";
 import { nextPosition } from "@/lib/server/positions";
 import {
   ensureDefaultFolder,
@@ -230,6 +230,13 @@ function cloudSongsForUser(userId: string) {
 async function persistSongSync(songSync: SongSyncState) {
   await Promise.all(songSync.toUpdate.map(updateStoredSongRow));
   if (songSync.toInsert.length > 0) await db.insert(userSongs).values(songSync.toInsert);
+}
+
+export async function GET() {
+  const auth = await requireApiUserId();
+  if ("response" in auth) return auth.response;
+
+  return NextResponse.json(await loadCloudFoldersAndSongs(auth.userId));
 }
 
 export async function POST(req: Request) {

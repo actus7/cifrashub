@@ -13,6 +13,6 @@ const connectionString =
   process.env.DATABASE_URL ??
   "postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder?sslmode=disable";
 
-const sql = neon(connectionString);
+export const sql = neon(connectionString);
 
 export const db: Db = drizzle(sql, { schema });

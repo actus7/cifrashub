@@ -22,8 +22,7 @@ import { useLibraryStore } from "@/store/use-library-store";
 import type { LocalSetlistStored, Folder, StoredSong, SetlistSummary } from "@/lib/types";
 import { localSetlistsToSummaries } from "@/lib/setlist-local";
 import { cloudSyncSignalKey } from "@/lib/sync-signal-key";
-
-const CLOUD_SYNC_POLL_MS = 15_000;
+import { subscribeToCloudRefresh } from "@/lib/cloud-refresh";
 
 type CloudSnapshot = { folders?: Folder[]; recentes?: StoredSong[] };
 type LibrarySetters = {
@@ -166,43 +165,9 @@ function createCloudRefreshSubscription(
   syncSignalKey: string,
   refreshCloudState: () => Promise<void>,
 ) {
-  const runRefresh = () => {
+  return subscribeToCloudRefresh(syncSignalKey, () => {
     void refreshCloudState();
-  };
-
-  let intervalId: number | null = null;
-  const startPolling = () => {
-    if (!intervalId) intervalId = window.setInterval(runRefresh, CLOUD_SYNC_POLL_MS);
-  };
-  const stopPolling = () => {
-    if (intervalId) window.clearInterval(intervalId);
-    intervalId = null;
-  };
-  const handleVisibility = () => {
-    if (document.visibilityState === "visible") {
-      runRefresh();
-      startPolling();
-      return;
-    }
-    stopPolling();
-  };
-  const handleStorage = (event: StorageEvent) => {
-    if (event.key === syncSignalKey && event.newValue) runRefresh();
-  };
-
-  if (document.visibilityState === "visible") startPolling();
-  window.addEventListener("focus", runRefresh);
-  window.addEventListener("online", runRefresh);
-  window.addEventListener("storage", handleStorage);
-  document.addEventListener("visibilitychange", handleVisibility);
-
-  return () => {
-    stopPolling();
-    window.removeEventListener("focus", runRefresh);
-    window.removeEventListener("online", runRefresh);
-    window.removeEventListener("storage", handleStorage);
-    document.removeEventListener("visibilitychange", handleVisibility);
-  };
+  });
 }
 
 async function runInitialCloudSync(ctx: CloudSyncContext) {

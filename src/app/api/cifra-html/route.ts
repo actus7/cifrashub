@@ -5,6 +5,7 @@ import { cachedCifras } from "@/db/schema";
 import { cifraClubHeaders, readCifraSlugParams } from "@/lib/server/cifra-route";
 
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+const CDN_CACHE_CONTROL = "public, s-maxage=86400, stale-while-revalidate=604800";
 
 type CachedCifra = {
   html: string;
@@ -105,7 +106,10 @@ function unavailableResponse() {
 }
 
 function htmlResponse(html: string) {
-  return NextResponse.json({ html });
+  return NextResponse.json(
+    { html },
+    { headers: { "Cache-Control": CDN_CACHE_CONTROL } },
+  );
 }
 
 async function freshCifraResponse(artistSlug: string, slug: string) {
