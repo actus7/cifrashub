@@ -4,6 +4,7 @@ import { userFolders, userSongs } from "@/db/schema";
 import type { Folder, StoredSong } from "@/lib/types";
 
 type SongRow = typeof userSongs.$inferSelect;
+type FolderRow = typeof userFolders.$inferSelect;
 
 type UiPrefs = NonNullable<SongRow["uiPrefs"]>;
 
@@ -58,58 +59,69 @@ export function rowToStoredSong(row: SongRow): StoredSong {
   };
 }
 
-/** Garante ao menos a pasta padrão “Favoritos”. */
-export async function ensureDefaultFolder(userId: string) {
-  const existing = await db
+function foldersForUser(userId: string) {
+  return db
     .select()
     .from(userFolders)
-    .where(eq(userFolders.userId, userId));
+    .where(eq(userFolders.userId, userId))
+    .orderBy(asc(userFolders.position), asc(userFolders.createdAt));
+}
 
+function songsForUser(userId: string) {
+  return db
+    .select()
+    .from(userSongs)
+    .where(eq(userSongs.userId, userId));
+}
+
+async function ensureDefaultFolderRows(
+  userId: string,
+  existing: FolderRow[],
+): Promise<FolderRow[]> {
   if (existing.length === 0) {
-    await db.insert(userFolders).values({
-      userId,
-      title: "Favoritos",
-      position: 0,
-      isDefault: true,
-    });
-    return;
+    const [created] = await db
+      .insert(userFolders)
+      .values({
+        userId,
+        title: "Favoritos",
+        position: 0,
+        isDefault: true,
+      })
+      .returning();
+    return created ? [created] : [];
   }
 
-  const hasDefault = existing.some((f) => f.isDefault);
-  if (!hasDefault) {
-    const favoritos = existing.find((f) => f.title === "Favoritos");
-    if (favoritos) {
-      await db
-        .update(userFolders)
-        .set({ isDefault: true, updatedAt: new Date() })
-        .where(eq(userFolders.id, favoritos.id));
-      return;
-    }
+  if (existing.some((folder) => folder.isDefault)) return existing;
 
-    const first = [...existing].sort((a, b) => a.position - b.position)[0]!;
-    await db
-      .update(userFolders)
-      .set({ isDefault: true, updatedAt: new Date() })
-      .where(eq(userFolders.id, first.id));
-  }
+  const defaultFolder =
+    existing.find((folder) => folder.title === "Favoritos") ?? existing[0]!;
+  const updatedAt = new Date();
+  await db
+    .update(userFolders)
+    .set({ isDefault: true, updatedAt })
+    .where(eq(userFolders.id, defaultFolder.id));
+
+  return existing.map((folder) =>
+    folder.id === defaultFolder.id
+      ? { ...folder, isDefault: true, updatedAt }
+      : folder,
+  );
+}
+
+/** Garante ao menos a pasta padrão “Favoritos”. */
+export async function ensureDefaultFolder(userId: string) {
+  await ensureDefaultFolderRows(userId, await foldersForUser(userId));
 }
 
 export async function loadCloudFoldersAndSongs(userId: string): Promise<{
   folders: Folder[];
   recentes: StoredSong[];
 }> {
-  await ensureDefaultFolder(userId);
-
-  const folderRows = await db
-    .select()
-    .from(userFolders)
-    .where(eq(userFolders.userId, userId))
-    .orderBy(asc(userFolders.position), asc(userFolders.createdAt));
-
-  const songRows = await db
-    .select()
-    .from(userSongs)
-    .where(eq(userSongs.userId, userId));
+  const [existingFolders, songRows] = await Promise.all([
+    foldersForUser(userId),
+    songsForUser(userId),
+  ]);
+  const folderRows = await ensureDefaultFolderRows(userId, existingFolders);
 
   const folders: Folder[] = folderRows.map((f) => ({
     id: f.id,

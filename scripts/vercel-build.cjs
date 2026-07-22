@@ -5,17 +5,32 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { execSync } = require("child_process");
 
+function isDirectNeonUrl(value) {
+  try {
+    const hostname = new URL(value).hostname;
+    return hostname.endsWith(".neon.tech") && !hostname.split(".")[0].endsWith("-pooler");
+  } catch {
+    return false;
+  }
+}
+
 if (process.env.VERCEL_ENV === "production") {
-  const dbUrl = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
-  if (!dbUrl) {
+  const runtimeDbUrl = process.env.DATABASE_URL;
+  const migrationDbUrl = process.env.DATABASE_URL_UNPOOLED;
+  if (!runtimeDbUrl || !migrationDbUrl) {
     console.error(
-      "\n[vercel-build] ERROR: DATABASE_URL (or DATABASE_URL_UNPOOLED) is not set.\n" +
+      "\n[vercel-build] ERROR: DATABASE_URL and DATABASE_URL_UNPOOLED are required.\n" +
         "Configure it in Vercel → Settings → Environment Variables before deploying to production.\n" +
-        "Required variables:\n" +
-        "  - DATABASE_URL\n" +
-        "  - DATABASE_URL_UNPOOLED\n" +
-        "  - NEON_AUTH_COOKIE_SECRET (or AUTH_COOKIE_SECRET)\n" +
-        "  - NEON_AUTH_BASE_URL (or NEON_AUTH_URL)\n",
+        "Use the pooled (-pooler) URL at runtime and reserve the direct URL for migrations.\n",
+    );
+    process.exit(1);
+  }
+
+  if (isDirectNeonUrl(runtimeDbUrl)) {
+    console.error(
+      "\n[vercel-build] ERROR: DATABASE_URL points to a direct Neon endpoint.\n" +
+        "Use the pooled hostname containing -pooler for the application runtime.\n" +
+        "Keep the direct connection only in DATABASE_URL_UNPOOLED.\n",
     );
     process.exit(1);
   }

@@ -75,11 +75,7 @@ export async function cloudFetchLibrary(): Promise<{
   folders: Folder[];
   recentes: StoredSong[];
 }> {
-  const [fa, ra] = await Promise.all([
-    apiJson<{ folders: Folder[] }>("/api/folders"),
-    apiJson<{ recentes: StoredSong[] }>("/api/recentes"),
-  ]);
-  return { folders: fa.folders, recentes: ra.recentes };
+  return apiJson("/api/sync");
 }
 
 export async function cloudCreateFolder(
@@ -205,4 +201,3 @@ export async function cloudUpdateSongPrefs(
     body: JSON.stringify({ arrangementId, ...prefs }),
   });
 }
-
