@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -87,6 +88,10 @@ export const userFolders = pgTable(
     isDefault: boolean("is_default").notNull().default(false),
     ...timestampColumns(),
   },
+  (t) => ({
+    idxUserFolderUserPosition: index("idx_user_folder_user_position")
+      .on(t.userId, t.position, t.createdAt),
+  }),
 );
 
 export const cachedCifras = pgTable(
@@ -134,6 +139,10 @@ export const userSongs = pgTable(
     ...timestampColumns(),
   },
   (t) => ({
+    idxUserSongsUserFolderRecentPosition: index("idx_user_song_user_folder_recent_position")
+      .on(t.userId, t.folderId, t.isRecent, t.position),
+    idxUserSongsUserArrangement: index("idx_user_song_user_arrangement")
+      .on(t.userId, t.arrangementId),
     uqFolderArrangement: uniqueIndex("uq_user_song_folder_arr")
       .on(t.userId, t.folderId, t.arrangementId)
       .where(sql`${t.folderId} is not null`),
@@ -143,16 +152,23 @@ export const userSongs = pgTable(
   }),
 );
 
-export const userSetlists = pgTable("user_setlist", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  userId: uuid("user_id").notNull(),
-  title: text("title").notNull(),
-  description: text("description"),
-  position: positionColumn(),
-  ...timestampColumns(),
-});
+export const userSetlists = pgTable(
+  "user_setlist",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: uuid("user_id").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    position: positionColumn(),
+    ...timestampColumns(),
+  },
+  (t) => ({
+    idxUserSetlistUserPosition: index("idx_user_setlist_user_position")
+      .on(t.userId, t.position, t.createdAt),
+  }),
+);
 
 export const userSetlistItems = pgTable(
   "user_setlist_item",
@@ -168,6 +184,10 @@ export const userSetlistItems = pgTable(
     notes: text("notes"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
+  (t) => ({
+    idxUserSetlistItemSetlistPosition: index("idx_user_setlist_item_setlist_position")
+      .on(t.setlistId, t.position, t.createdAt),
+  }),
 );
 
 export const shareSnapshots = pgTable("share_snapshot", {

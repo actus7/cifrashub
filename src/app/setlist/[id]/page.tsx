@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { arrangementKey } from "@/lib/arrangement-key";
 import { SetlistDetailViewScreen } from "@/components/setlist/setlist-detail-view";
@@ -69,6 +69,17 @@ function LoadingState() {
   return <div className="p-8 text-center text-muted-foreground">Carregando setlist...</div>;
 }
 
+async function resolveSetlistDetail(
+  isCloud: boolean,
+  setId: string,
+  folders: ReturnType<typeof useLibraryStore.getState>["folders"],
+  recentes: ReturnType<typeof useLibraryStore.getState>["recentes"],
+) {
+  return isCloud
+    ? cloudGetSetlist(setId)
+    : localSetlistDetail(setId, folders, recentes);
+}
+
 export default function SetlistPage() {
   const router = useRouter();
   const setId = useSetlistId();
@@ -82,19 +93,25 @@ export default function SetlistPage() {
   const [detail, setDetail] = useState<SetlistDetailView | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadSetlist = useCallback(async () => {
-    try {
-      setDetail(isCloud ? await cloudGetSetlist(setId) : localSetlistDetail(setId, folders, recentes));
-    } catch {
-      setDetail(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [folders, isCloud, recentes, setId]);
-
   useEffect(() => {
-    if (status !== "loading") void loadSetlist();
-  }, [loadSetlist, status]);
+    if (status === "loading") return;
+
+    let cancelled = false;
+    void resolveSetlistDetail(isCloud, setId, folders, recentes)
+      .then((nextDetail) => {
+        if (!cancelled) setDetail(nextDetail);
+      })
+      .catch(() => {
+        if (!cancelled) setDetail(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [folders, isCloud, recentes, setId, status]);
 
   const updateLocalSetlist = (
     updateItems: (items: LocalSetlistStored["items"]) => LocalSetlistStored["items"],

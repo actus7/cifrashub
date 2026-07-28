@@ -8,6 +8,13 @@
       "when": 1781739508527,
       "tag": "0000_dizzy_mandrill",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785264275958,
+      "tag": "0001_narrow_firebrand",
+      "breakpoints": true
     }
   ]
 }

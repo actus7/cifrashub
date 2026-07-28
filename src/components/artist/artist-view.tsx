@@ -98,6 +98,7 @@ export function ArtistView({
             size="icon"
             className="-ml-1 rounded-xl text-muted-foreground"
             onClick={onBack}
+            aria-label="Voltar"
           >
             <ChevronLeft className="size-5" />
           </Button>

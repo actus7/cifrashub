@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { navigateBackOrFallback } from "@/lib/navigation";
 
 interface SongPageErrorProps {
   error: Error | string;
@@ -22,7 +23,11 @@ export function SongPageError({ error, onRetry }: SongPageErrorProps) {
       </p>
       
       <div className="flex flex-col sm:flex-row items-center gap-3">
-        <Button variant="outline" onClick={() => router.back()} className="w-full sm:w-auto">
+        <Button
+          variant="outline"
+          onClick={() => navigateBackOrFallback(router)}
+          className="w-full sm:w-auto"
+        >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar
         </Button>
