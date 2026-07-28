@@ -143,8 +143,6 @@ export const userSongs = pgTable(
       .on(t.userId, t.folderId, t.isRecent, t.position),
     idxUserSongsUserArrangement: index("idx_user_song_user_arrangement")
       .on(t.userId, t.arrangementId),
-    idxUserSongsSourceSlug: index("idx_user_song_source_slug")
-      .on(t.sourceArtistSlug, t.sourceSlug),
     uqFolderArrangement: uniqueIndex("uq_user_song_folder_arr")
       .on(t.userId, t.folderId, t.arrangementId)
       .where(sql`${t.folderId} is not null`),

@@ -791,27 +791,6 @@
           "method": "btree",
           "with": {}
         },
-        "idx_user_song_source_slug": {
-          "name": "idx_user_song_source_slug",
-          "columns": [
-            {
-              "expression": "source_artist_slug",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "source_slug",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "uq_user_song_folder_arr": {
           "name": "uq_user_song_folder_arr",
           "columns": [

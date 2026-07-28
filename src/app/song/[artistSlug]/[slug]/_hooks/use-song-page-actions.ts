@@ -1,6 +1,7 @@
 import { useRouter } from "next/navigation";
 import { arrangementKey } from "@/lib/arrangement-key";
 import { writeEditSnapshot } from "@/lib/cifras-edit-bridge";
+import { navigateBackOrFallback } from "@/lib/navigation";
 import type { Section, StoredSong } from "@/lib/types";
 import { usePlayerStore } from "@/store/use-player-store";
 import { usePlayerContextState } from "./use-player-context-state";
@@ -18,7 +19,7 @@ export function useSongPageActions(
   return {
     player,
     onYoutubeVideoResolved: (youtubeId: string) => setCurrentSong((prev) => prev ? { ...prev, youtubeId } : prev),
-    onBack: () => router.back(),
+    onBack: () => navigateBackOrFallback(router),
     onOpenVideo: () => player.setYoutubeMiniOpen(true),
     onOpenArtistSongs: () => {
       if (currentSong) router.push(`/artist/${currentSong.artistSlug}`);

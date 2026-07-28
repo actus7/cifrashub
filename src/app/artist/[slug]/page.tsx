@@ -2,6 +2,7 @@
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArtistView } from "@/components/artist/artist-view";
+import { navigateBackOrFallback } from "@/lib/navigation";
 import type { SearchResultSong } from "@/lib/types";
 
 export default function ArtistPage() {
@@ -20,7 +21,7 @@ export default function ArtistPage() {
     <ArtistView
       artistName={artistNameFromQuery}
       artistSlug={artistSlug as string}
-      onBack={() => router.back()}
+      onBack={() => navigateBackOrFallback(router)}
       onOpenSong={handleOpenSong}
     />
   );
