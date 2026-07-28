@@ -93,7 +93,8 @@ export default function SetlistPage() {
   }, [folders, isCloud, recentes, setId]);
 
   useEffect(() => {
-    if (status !== "loading") void loadSetlist();
+    if (status === "loading") return;
+    queueMicrotask(() => void loadSetlist());
   }, [loadSetlist, status]);
 
   const updateLocalSetlist = (
