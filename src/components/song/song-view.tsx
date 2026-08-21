@@ -193,7 +193,7 @@ export function SongView() {
   useSongViewSideEffects(ctx);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-background pb-20 sm:pb-16 selection:bg-primary/30 print:bg-white print:text-black">
+    <div className="min-h-screen overflow-x-clip bg-background pb-20 sm:pb-16 selection:bg-primary/30 print:bg-white print:text-black">
       <SongChrome zenMode={ctx.zenMode} onToggleZen={ctx.onToggleZen} />
       <SongSaveModalHost
         saveModalOpen={ctx.saveModalOpen}

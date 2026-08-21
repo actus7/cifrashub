@@ -24,6 +24,7 @@ import { transposeRootNote } from "@/lib/music";
 import { cn } from "@/lib/utils";
 import type { CurrentSongMeta } from "@/lib/types";
 import { useSongViewContext } from "./song-context";
+import { VersionBadge } from "./song-version-menu";
 
 export function CifraClubMeta({
   song,
@@ -188,61 +189,64 @@ function DesktopSongTitle({
         capo={capo}
         className="shrink-0 text-balance sm:max-w-[min(240px,36vw)] sm:pt-0.5"
       />
+      <VersionBadge className="shrink-0 self-start sm:pt-0.5" />
     </div>
   );
 }
 
 function SongHeaderActions({ extraActions }: SongHeaderProps) {
+  const { autoScroll, metronomeActive } = useSongViewContext();
+  const showSecondaryBar = autoScroll || metronomeActive;
+
   return (
-    <div className="flex items-center gap-0.5 sm:gap-1">
-      <AutoScrollHeaderControl />
-      <MetronomeHeaderControl />
-      <div className="mx-0.5 hidden h-5 w-px bg-border/50 sm:block" />
-      <StaticHeaderActions />
-      {extraActions}
-      <SaveHeaderAction />
-      <AuthHeaderControl className="ml-0.5 sm:ml-1" />
+    <div className="flex shrink-0 flex-col items-end">
+      <div className="flex items-center gap-0.5 sm:gap-1">
+        <AutoScrollHeaderControl />
+        <AutoScrollSpeedControls />
+        <MetronomeHeaderControl />
+        <MetronomeBpmControls />
+        <div className="mx-0.5 hidden h-5 w-px bg-border/50 sm:block" />
+        <StaticHeaderActions />
+        {extraActions}
+        <SaveHeaderAction />
+        <AuthHeaderControl className="ml-0.5 sm:ml-1" />
+      </div>
+      {showSecondaryBar && <MobileSecondaryBar />}
     </div>
   );
 }
 
 function AutoScrollHeaderControl() {
-  const { autoScroll, setAutoScroll, scrollSpeed, setScrollSpeed } = useSongViewContext();
+  const { autoScroll, setAutoScroll } = useSongViewContext();
 
   return (
-    <div className="flex items-center">
-      <HeaderToggleButton
-        active={autoScroll}
-        inactiveLabel="Rolagem automática"
-        activeLabel="Parar rolagem"
-        onClick={() => setAutoScroll(!autoScroll)}
-      >
-        {autoScroll ? (
-          <Pause className="size-[18px]" fill="currentColor" />
-        ) : (
-          <Play className="ml-0.5 size-[18px]" fill="currentColor" />
-        )}
-      </HeaderToggleButton>
-      {autoScroll && <AutoScrollSpeedControls scrollSpeed={scrollSpeed} setScrollSpeed={setScrollSpeed} />}
-    </div>
+    <HeaderToggleButton
+      active={autoScroll}
+      inactiveLabel="Rolagem automática"
+      activeLabel="Parar rolagem"
+      onClick={() => setAutoScroll(!autoScroll)}
+    >
+      {autoScroll ? (
+        <Pause className="size-[18px]" fill="currentColor" />
+      ) : (
+        <Play className="ml-0.5 size-[18px]" fill="currentColor" />
+      )}
+    </HeaderToggleButton>
   );
 }
 
 function MetronomeHeaderControl() {
-  const { metronomeActive, setMetronomeActive, bpm, setBpm } = useSongViewContext();
+  const { metronomeActive, setMetronomeActive, bpm } = useSongViewContext();
 
   return (
-    <div className="flex items-center">
-      <HeaderToggleButton
-        active={metronomeActive}
-        inactiveLabel="Metrônomo"
-        activeLabel="Parar metrônomo"
-        onClick={() => setMetronomeActive(!metronomeActive)}
-      >
-        {metronomeActive ? <span className="text-[11px] font-bold">{bpm}</span> : <Timer className="size-[18px]" />}
-      </HeaderToggleButton>
-      {metronomeActive && <MetronomeBpmControls bpm={bpm} setBpm={setBpm} />}
-    </div>
+    <HeaderToggleButton
+      active={metronomeActive}
+      inactiveLabel="Metrônomo"
+      activeLabel="Parar metrônomo"
+      onClick={() => setMetronomeActive(!metronomeActive)}
+    >
+      {metronomeActive ? <span className="text-[11px] font-bold">{bpm}</span> : <Timer className="size-[18px]" />}
+    </HeaderToggleButton>
   );
 }
 
@@ -279,13 +283,10 @@ function HeaderToggleButton({
   );
 }
 
-function AutoScrollSpeedControls({
-  scrollSpeed,
-  setScrollSpeed,
-}: {
-  scrollSpeed: number;
-  setScrollSpeed: (speed: number) => void;
-}) {
+function AutoScrollSpeedControls() {
+  const { autoScroll, scrollSpeed, setScrollSpeed } = useSongViewContext();
+  if (!autoScroll) return null;
+
   return (
     <div className="hidden items-center gap-0.5 sm:flex">
       <HeaderMiniButton onClick={() => setScrollSpeed(Math.max(1, scrollSpeed - 1))} disabled={scrollSpeed <= 1}>
@@ -299,13 +300,10 @@ function AutoScrollSpeedControls({
   );
 }
 
-function MetronomeBpmControls({
-  bpm,
-  setBpm,
-}: {
-  bpm: number;
-  setBpm: (bpm: number) => void;
-}) {
+function MetronomeBpmControls() {
+  const { metronomeActive, bpm, setBpm } = useSongViewContext();
+  if (!metronomeActive) return null;
+
   return (
     <div className="hidden items-center gap-0.5 sm:flex">
       <HeaderMiniButton onClick={() => setBpm(Math.max(40, bpm - 5))}>
@@ -338,6 +336,42 @@ function HeaderMiniButton({
     >
       {children}
     </Button>
+  );
+}
+
+function MobileSecondaryBar() {
+  const { autoScroll, scrollSpeed, setScrollSpeed, metronomeActive, bpm, setBpm } = useSongViewContext();
+
+  return (
+    <div className="flex items-center justify-center gap-3 border-t border-border/40 px-3 py-1.5 sm:hidden">
+      {autoScroll && (
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-muted-foreground">Velocidade</span>
+          <HeaderMiniButton onClick={() => setScrollSpeed(Math.max(1, scrollSpeed - 1))} disabled={scrollSpeed <= 1}>
+            <Rewind className="size-3" />
+          </HeaderMiniButton>
+          <span className="min-w-[1.5rem] text-center text-[10px] font-bold text-primary">{scrollSpeed}x</span>
+          <HeaderMiniButton onClick={() => setScrollSpeed(Math.min(5, scrollSpeed + 1))} disabled={scrollSpeed >= 5}>
+            <FastForward className="size-3" />
+          </HeaderMiniButton>
+        </div>
+      )}
+      {autoScroll && metronomeActive && (
+        <div className="h-4 w-px bg-border/50" />
+      )}
+      {metronomeActive && (
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-muted-foreground">BPM</span>
+          <HeaderMiniButton onClick={() => setBpm(Math.max(40, bpm - 5))}>
+            <Minus className="size-3" />
+          </HeaderMiniButton>
+          <span className="min-w-[1.5rem] text-center text-[10px] font-bold text-primary">{bpm}</span>
+          <HeaderMiniButton onClick={() => setBpm(Math.min(240, bpm + 5))}>
+            <Plus className="size-3" />
+          </HeaderMiniButton>
+        </div>
+      )}
+    </div>
   );
 }
 
