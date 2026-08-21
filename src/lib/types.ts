@@ -56,6 +56,9 @@ export interface CurrentSongMeta {
   cifraCapo?: number;
 }
 
+/** Versão da cifra em exibição: salva (personalizada), cache do servidor ou original da fonte. */
+export type SongVersion = "saved" | "cache" | "original";
+
 /** Preferências de exibição persistidas com a cifra (local + nuvem em `ui_prefs`). */
 export type StoredSongUiPrefs = {
   simplified?: boolean;

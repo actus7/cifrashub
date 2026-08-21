@@ -47,6 +47,9 @@ export function useLoadedSong(artistSlug: string | undefined, slug: string | und
   const [songData, setSongData] = useState<Section[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [hasSavedVersion, setHasSavedVersion] = useState(false);
+  const initialCachedSongDataRef = useRef<Section[]>([]);
+  const savedSongDataRef = useRef<Section[] | null>(null);
   const applySongPrefs = usePlayerStore((s) => s.applySongPrefs);
   const { addToRecentes } = useLibraryActions();
   const folders = useLibraryStore((s) => s.folders);
@@ -62,6 +65,11 @@ export function useLoadedSong(artistSlug: string | undefined, slug: string | und
     } else {
       const savedSong = findSavedSong(result.song, refs.folders.current, refs.recentes.current, refs.folderId.current, refs.arrangementId.current);
       const songData = reusableSavedContent(savedSong, refs.arrangementId.current) ?? result.song.songData;
+
+      initialCachedSongDataRef.current = result.song.songData;
+      savedSongDataRef.current = savedSong ? savedSong.songData : null;
+      setHasSavedVersion(Boolean(savedSong));
+
       applyLoadedSong({ ...result.song, ...savedSong, songData }, setCurrentSong, setSongData, applySongPrefs, refs.addToRecentes.current);
     }
   }, [applySongPrefs, refs]);
@@ -88,7 +96,11 @@ export function useLoadedSong(artistSlug: string | undefined, slug: string | und
     return () => window.clearTimeout(timeout);
   }, [load]);
 
-  return { currentSong, setCurrentSong, songData, setSongData, isLoading, error, load, folderId, arrangementId };
+  return {
+    currentSong, setCurrentSong, songData, setSongData,
+    isLoading, error, load, folderId, arrangementId,
+    hasSavedVersion, initialCachedSongDataRef, savedSongDataRef,
+  };
 }
 
 function songRequestKey(artistSlug: string | undefined, slug: string | undefined, libraryLoaded: boolean) {

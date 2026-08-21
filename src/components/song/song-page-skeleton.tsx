@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function SongPageSkeleton() {
   return (
-    <div className="min-h-screen overflow-x-hidden bg-background pb-20 sm:pb-16">
+    <div className="min-h-screen overflow-x-clip bg-background pb-20 sm:pb-16">
       {/* ─── Mock Header ─────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 flex h-14 w-full items-center justify-between border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex items-center gap-4">

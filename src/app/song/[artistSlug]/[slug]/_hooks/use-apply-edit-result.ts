@@ -1,7 +1,7 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import { useSession } from "@/hooks/use-session";
-import { arrangementKey } from "@/lib/arrangement-key";
 import { readEditResult, type EditOrigin } from "@/lib/cifras-edit-bridge";
+import { replaceSongByArrangement } from "@/lib/replace-song-by-arrangement";
 import { cloudAddSongToFolder, cloudSaveRecentes, saveFolders, saveRecentes } from "@/lib/storage";
 import type { Section, StoredSong } from "@/lib/types";
 import { useLibraryStore } from "@/store/use-library-store";
@@ -116,16 +116,4 @@ function persistEditedContentLocal(folderId: string | null, song: StoredSong) {
   const nextRecentes = replaceSongByArrangement(recentes, song).slice(0, 15);
   saveRecentes(nextRecentes);
   setRecentes(nextRecentes);
-}
-
-function replaceSongByArrangement(songs: StoredSong[], song: StoredSong) {
-  const key = arrangementKey(song);
-  let replaced = false;
-  const next = songs.map((s) => {
-    if (arrangementKey(s) !== key) return s;
-    replaced = true;
-    return song;
-  });
-
-  return replaced ? next : [song, ...next];
 }

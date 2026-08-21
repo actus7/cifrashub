@@ -38,6 +38,23 @@ const CHORD_MARKER_RE = /‹CHORD:([^›]+)›/;
 const SECTION_RE = /^\[(.+?)\]/;
 const KEY_ROOT_RE = /key:\s*["']([A-G][#b]?)["']/;
 
+/** Matches plausible chord text like C7M, Am7, Bm7, Em, E5, D5, Bm, (passagem) */
+const CHORD_TEXT_RE = /^[A-G(#][#b♯♭]?(?:M|maj|min|m|dim|aug|sus|add|º|°|\+|\^|\/[A-G]?[#b♯♭]?|-|\(|\)|\d|\s|\.|,|…|'|"){0,20}$/;
+
+/**
+ * Tests whether text content of a `<b>` tag looks like a chord rather than
+ * metadata (e.g. "Tom:", "Afinação:"). Used to guard chord-marker replacement.
+ */
+export function isChordText(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  // Parenthetical annotations like (passagem), (2x), etc.
+  if (/^\(.*\)$/.test(t)) return true;
+  // Must start with a note letter
+  if (!/^[A-G]/.test(t)) return false;
+  return CHORD_TEXT_RE.test(t);
+}
+
 function extractCifraClubKeyCapo(htmlContent: string): {
   writtenKey?: string;
   capo?: number;
@@ -49,9 +66,10 @@ function extractCifraClubKeyCapo(htmlContent: string): {
 function keyCapoMetadata(htmlContent: string) {
   const block = keyCapoScriptBlock(htmlContent);
   const visible = visibleKeyCapo(htmlContent);
+  const newFormat = newFormatKeyCapo(htmlContent);
   return {
-    writtenKey: keyFromScript(block, htmlContent) ?? visible.writtenKey,
-    capoRaw: capoFromScript(block) ?? visible.capoRaw,
+    writtenKey: keyFromScript(block, htmlContent) ?? visible.writtenKey ?? newFormat.writtenKey,
+    capoRaw: capoFromScript(block) ?? visible.capoRaw ?? newFormat.capoRaw,
   };
 }
 
@@ -110,6 +128,30 @@ function normalizeOptionalNote(note: string | undefined): string | undefined {
   return note ? normalizeNoteText(note) : undefined;
 }
 
+/**
+ * New Cifra Club format: Tom and capo in button elements near metadata `<b>` tags.
+ * Example: `<b>Tom<!-- -->: </b> <button type="button" ...>Em</button>`
+ */
+function newFormatKeyCapo(htmlContent: string): { writtenKey?: string; capoRaw?: string } {
+  const writtenKey = newFormatTom(htmlContent);
+  const capoRaw = newFormatCapo(htmlContent);
+  return { writtenKey, capoRaw };
+}
+
+function newFormatTom(htmlContent: string): string | undefined {
+  // Match: <b>Tom<!-- -->: </b> ... <button ...>Em</button>
+  // The HTML comment between "Tom" and ":" is an artifact of React SSR.
+  const m = htmlContent.match(/<b[^>]*>\s*Tom(?:\s*<!--\s*-->)?\s*:\s*<\/b>\s*(?:<[^>]*>)*\s*<button[^>]*>\s*([A-G][#b♯♭]?m?)\s*<\/button>/i);
+  return normalizeOptionalNote(m?.[1]);
+}
+
+function newFormatCapo(htmlContent: string): string | undefined {
+  // Look for capo number near "Capotraste" text in button contexts
+  const capoMatch = htmlContent.match(/Capotraste[^<]*<\/p>[^]*?<p[^>]*>\s*(\d+)\s*<\/p>/i)
+    ?? htmlContent.match(/[Cc]apotraste[^<]*<[^>]*>\s*(\d+)/);
+  return capoMatch?.[1];
+}
+
 
 type HtmlParseState = {
   sections: Section[];
@@ -135,7 +177,15 @@ function parseHtmlCifra(htmlContent: string): Section[] {
 function htmlToCifraDocument(htmlContent: string): Document {
   const doc = new DOMParser().parseFromString(htmlContent, "text/html");
   doc.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
-  doc.querySelectorAll("b").forEach((el) => el.replaceWith(`‹CHORD:${el.textContent ?? ""}›`));
+  // Only wrap <b> text that looks like a chord (reject metadata like "Tom:", "Afinação:").
+  doc.querySelectorAll("b").forEach((el) => {
+    const text = el.textContent ?? "";
+    if (isChordText(text)) {
+      el.replaceWith(`‹CHORD:${text}›`);
+    } else {
+      el.replaceWith(text);
+    }
+  });
   doc.querySelectorAll("span.cnt, span.tablatura").forEach((el) => {
     el.replaceWith((el.textContent ?? "").split("\n").map((l) => "‹TAB_LINE›" + l).join("\n"));
   });
@@ -283,8 +333,10 @@ const CONTENT_SELECTORS = [
   ".cifra_cnt",
 ] as const;
 
+const MIN_MULTI_PRE_TEXT = 200;
+
 function contentNodeFromDocument(doc: Document): Element | null {
-  return selectedContentNode(doc) ?? longestPreNode(doc);
+  return selectedContentNode(doc) ?? multiPreAncestor(doc) ?? longestPreNode(doc);
 }
 
 function selectedContentNode(doc: Document): Element | null {
@@ -293,6 +345,66 @@ function selectedContentNode(doc: Document): Element | null {
     if (node) return node;
   }
   return null;
+}
+
+/**
+ * New Cifra Club format: song content split across multiple `<pre>` elements
+ * inside a common ancestor container. Find pres that contain song content
+ * (section labels, chord `<b>` children, or tab-like patterns), then return
+ * their closest common ancestor if combined text exceeds threshold.
+ */
+function multiPreAncestor(doc: Document): Element | null {
+  const allPres = Array.from(doc.querySelectorAll("pre"));
+  if (allPres.length < 2) return null;
+
+  const songPres = allPres.filter(isSongContentPre);
+  if (songPres.length < 2) return null;
+
+  const ancestor = findCommonAncestor(songPres);
+  if (!ancestor) return null;
+
+  const combinedText = songPres.reduce((sum, pre) => sum + (pre.textContent ?? "").trim().length, 0);
+  return combinedText >= MIN_MULTI_PRE_TEXT ? ancestor : null;
+}
+
+/** A `<pre>` that contains song content: section labels, chord tags, or tab lines. */
+function isSongContentPre(pre: Element): boolean {
+  const text = pre.textContent ?? "";
+  if (SECTION_RE.test(text.trim())) return true;
+  if (pre.querySelector("b")) return true;
+  // Tab-like patterns: E|--- or multiple dashes
+  if (/^[eBGDAE1-6]?\|.*-{2,}/im.test(text)) return true;
+  if (/-{6,}/.test(text)) return true;
+  return false;
+}
+
+/** Walk up from each element to find the closest common ancestor. */
+function findCommonAncestor(elements: Element[]): Element | null {
+  if (elements.length === 0) return null;
+
+  // Collect ancestor chains for each element.
+  const chains = elements.map((el) => {
+    const chain: Element[] = [];
+    let current: Element | null = el;
+    while (current) {
+      chain.push(current);
+      current = current.parentElement;
+    }
+    return chain;
+  });
+
+  // Find the deepest common ancestor by comparing chains from the root.
+  const minLen = Math.min(...chains.map((c) => c.length));
+  let common: Element | null = null;
+  for (let depth = 1; depth <= minLen; depth++) {
+    const candidate = chains[0]![chains[0]!.length - depth]!;
+    if (chains.every((chain) => chain[chain.length - depth] === candidate)) {
+      common = candidate;
+    } else {
+      break;
+    }
+  }
+  return common;
 }
 
 function longestPreNode(doc: Document): Element | null {
