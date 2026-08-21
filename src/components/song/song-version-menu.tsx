@@ -233,7 +233,7 @@ function VersionOption({
       variant="ghost"
       disabled={disabled}
       className={cn(
-        "h-auto w-full justify-start gap-2 rounded-lg px-2 py-1.5 text-sm",
+        "h-auto w-full justify-start gap-2 whitespace-normal rounded-lg px-2 py-1.5 text-sm",
         active
           ? "bg-primary/10 font-medium text-primary"
           : "text-foreground",
@@ -242,7 +242,7 @@ function VersionOption({
       onClick={onSelect}
     >
       <VersionIcon version={version} className="size-4 shrink-0" />
-      <span className="flex-1 text-left">
+      <span className="min-w-0 flex-1 text-left">
         {versionLabel(version)}
         {hint ? (
           <span className="ml-1 text-xs text-muted-foreground">({hint})</span>
@@ -273,7 +273,7 @@ function VersionAction({
       type="button"
       variant="ghost"
       disabled={disabled}
-      className="h-auto w-full justify-start gap-2 rounded-lg px-2 py-1.5 text-sm"
+      className="h-auto w-full justify-start gap-2 whitespace-normal rounded-lg px-2 py-1.5 text-sm"
       onClick={onClick}
     >
       {pending && disabled ? (
@@ -281,7 +281,7 @@ function VersionAction({
       ) : (
         <Icon className="size-4 shrink-0 text-muted-foreground" />
       )}
-      <div className="flex-1 text-left">
+      <div className="min-w-0 flex-1 text-left">
         <p className="text-foreground">{label}</p>
         <p className="text-xs text-muted-foreground">{helper}</p>
       </div>
