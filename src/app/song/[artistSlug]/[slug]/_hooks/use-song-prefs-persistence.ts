@@ -1,28 +1,32 @@
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import { useSession } from "@/hooks/use-session";
 import { cloudUpdateSongPrefs, saveFolders, saveRecentes } from "@/lib/storage";
 import type { StoredSong, StoredSongUiPrefs } from "@/lib/types";
-import { PLAYER_PREF_DEFAULTS, PLAYER_PREF_KEYS } from "@/lib/player-pref-defaults";
 import { songIdentityKey } from "@/lib/song-identity-key";
 import { useLibraryStore } from "@/store/use-library-store";
 import type { PlayerContextState } from "./use-player-context-state";
-
-type PersistedPlayerPrefs = Pick<StoredSong, keyof typeof PLAYER_PREF_DEFAULTS>;
+import {
+  arePrefsEqual,
+  applyPrefsToFolders,
+  applyPrefsToRecentes,
+  playerPrefs,
+  uiPrefs,
+  withPlayerPrefs,
+  type PersistedPlayerPrefs,
+} from "../_lib/song-prefs-helpers";
 
 type CloudPrefsPayload = { arrangementId: string; tone: number; capo: number; uiPrefs: StoredSongUiPrefs };
 
-function withPlayerPrefs(song: StoredSong, prefs: PersistedPlayerPrefs): StoredSong {
-  return { ...song, ...prefs };
-}
+// ── usePersistCurrentSongPrefs ───────────────────────────────────────────────
 
-function arePrefsEqual(song: StoredSong, prefs: PersistedPlayerPrefs) {
-  return PLAYER_PREF_KEYS.every((key) => (song[key] ?? PLAYER_PREF_DEFAULTS[key]) === prefs[key]);
-}
-
-function playerPrefs(player: PlayerContextState): PersistedPlayerPrefs {
-  return Object.fromEntries(PLAYER_PREF_KEYS.map((key) => [key, player[key]])) as PersistedPlayerPrefs;
-}
-
+/**
+ * Persists player prefs (tone, capo, display settings) into the in-memory
+ * song object and the library store.
+ *
+ * - **Unauthenticated**: also writes to localStorage (saveFolders / saveRecentes).
+ * - **Authenticated**: updates Zustand only — the cloud sync provider handles
+ *   durable storage, and cloud-refresh refetches will overwrite anyway.
+ */
 export function usePersistCurrentSongPrefs(
   currentSong: StoredSong | null,
   setCurrentSong: (updater: (song: StoredSong | null) => StoredSong | null) => void,
@@ -43,70 +47,102 @@ export function usePersistCurrentSongPrefs(
   useEffect(() => {
     const activeSong = currentSongRef.current;
     const activePrefs = prefsRef.current;
-    if (!shouldPersistLocalPrefs(status, activeSong, persistKey, lastPersistKeyRef) || !activeSong) return;
+    if (!activeSong || lastPersistKeyRef.current === persistKey) return;
     lastPersistKeyRef.current = persistKey;
     if (arePrefsEqual(activeSong, activePrefs)) return;
-    persistLocalPrefs(activeSong, activePrefs, setCurrentSong);
+    applyPrefsToSong(activeSong, activePrefs, status, setCurrentSong);
   }, [persistKey, setCurrentSong, status]);
 }
 
-function shouldPersistLocalPrefs(
-  status: ReturnType<typeof useSession>["status"],
-  currentSong: StoredSong | null,
-  persistKey: string,
-  lastPersistKeyRef: MutableRefObject<string>,
-) {
-  return status === "unauthenticated" && currentSong && lastPersistKeyRef.current !== persistKey;
-}
-
-function persistLocalPrefs(
+function applyPrefsToSong(
   currentSong: StoredSong,
   prefs: PersistedPlayerPrefs,
+  status: ReturnType<typeof useSession>["status"],
   setCurrentSong: (updater: (song: StoredSong | null) => StoredSong | null) => void,
 ) {
   const currentKey = songIdentityKey(currentSong);
   const nextSong = withPlayerPrefs(currentSong, prefs);
   setCurrentSong((prev) => (prev ? withPlayerPrefs(prev, prefs) : null));
-  persistRecentSongPrefs(currentKey, nextSong);
-  persistFolderSongPrefs(currentKey, prefs);
-}
 
-function persistRecentSongPrefs(currentKey: string, nextSong: StoredSong) {
-  const { recentes, setRecentes } = useLibraryStore.getState();
-  const nextRecentes = [nextSong, ...recentes.filter((song) => songIdentityKey(song) !== currentKey)].slice(0, 15);
-  saveRecentes(nextRecentes);
+  // Always update Zustand in-memory store so SPA navigation and folder saves
+  // see the fresh tone/capo.
+  const { recentes, setRecentes, folders, setFolders } = useLibraryStore.getState();
+  const nextRecentes = applyPrefsToRecentes(recentes, currentKey, nextSong);
   setRecentes(nextRecentes);
-}
 
-function persistFolderSongPrefs(currentKey: string, prefs: PersistedPlayerPrefs) {
-  const { folders, setFolders } = useLibraryStore.getState();
-  if (!folders.some((folder) => folder.songs.some((song) => songIdentityKey(song) === currentKey))) return;
-  const nextFolders = folders.map((folder) => ({
-    ...folder,
-    songs: folder.songs.map((song) => songIdentityKey(song) === currentKey ? withPlayerPrefs(song, prefs) : song),
-  }));
-  saveFolders(nextFolders);
-  setFolders(nextFolders);
-}
+  const nextFolders = applyPrefsToFolders(folders, currentKey, prefs);
+  if (nextFolders !== folders) setFolders(nextFolders);
 
-function flushPendingCloudPrefs(payload: CloudPrefsPayload) {
-  try {
-    fetch("/api/songs/prefs", {
-      method: "PATCH",
-      credentials: "include",
-      keepalive: true,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch {
+  // Only persist to localStorage for unauthenticated users.
+  // Cloud users: the sync-provider handles durable storage.
+  if (status === "unauthenticated") {
+    saveRecentes(nextRecentes);
+    if (nextFolders !== folders) saveFolders(nextFolders);
   }
 }
 
+// ── usePersistCloudSongPrefs ─────────────────────────────────────────────────
+
+type PendingPrefs = { identity: string; tone: number; capo: number; uiPrefs: StoredSongUiPrefs };
+
+/**
+ * Persists player prefs to the cloud via PATCH /api/songs/prefs.
+ *
+ * - Debounced at 800 ms to avoid excessive API calls.
+ * - If `arrangementId` is missing (song not yet saved to a folder), the latest
+ *   prefs are kept in a ref. When `arrangementId` appears (e.g. after the user
+ *   saves the song), the pending prefs are flushed immediately.
+ * - On component unmount, any pending (debounced) payload is sent via
+ *   `keepalive` fetch so the browser can complete it during navigation.
+ */
 export function usePersistCloudSongPrefs(currentSong: StoredSong | null, player: PlayerContextState) {
   const { status } = useSession();
   const lastPersistKeyRef = useRef("");
   const pendingPayloadRef = useRef<CloudPrefsPayload | null>(null);
-  const payload = currentSong?.arrangementId ? cloudPrefsPayload(currentSong.arrangementId, player) : null;
+  const latestPrefsRef = useRef<PendingPrefs | null>(null);
+  const prevArrangementIdRef = useRef<string | undefined>(currentSong?.arrangementId);
+
+  const arrangementId = currentSong?.arrangementId;
+  const identity = currentSong ? songIdentityKey(currentSong) : "";
+  const tone = player.tone;
+  const capo = player.capo;
+  const ui = uiPrefs(player);
+
+  // Always keep the latest prefs so we can flush when arrangementId appears.
+  useEffect(() => {
+    if (currentSong) {
+      latestPrefsRef.current = { identity, tone, capo, uiPrefs: ui };
+    }
+  });
+
+  // Flush pending prefs when arrangementId transitions from null → string.
+  useEffect(() => {
+    const prev = prevArrangementIdRef.current;
+    prevArrangementIdRef.current = arrangementId;
+
+    if (!arrangementId || prev) return; // only on first appearance
+    const pending = latestPrefsRef.current;
+    if (!pending || pending.identity !== identity) return;
+
+    const payload: CloudPrefsPayload = {
+      arrangementId,
+      tone: pending.tone,
+      capo: pending.capo,
+      uiPrefs: pending.uiPrefs,
+    };
+    // Mark as flushed so the debounce effect doesn't re-send identical prefs.
+    lastPersistKeyRef.current = JSON.stringify(payload);
+    latestPrefsRef.current = null;
+    void cloudUpdateSongPrefs(arrangementId, payload).catch((error) => {
+      console.error("Failed to flush pending cloud prefs", error);
+    });
+  }, [arrangementId, identity]);
+
+  // Debounced persist when arrangementId is already present.
+  const payload = useMemo(
+    () => (arrangementId ? { arrangementId, tone, capo, uiPrefs: ui } : null),
+    [arrangementId, tone, capo, ui],
+  );
   const persistKey = payload ? JSON.stringify(payload) : "";
   const payloadRef = useRef(payload);
 
@@ -122,6 +158,7 @@ export function usePersistCloudSongPrefs(currentSong: StoredSong | null, player:
     return () => clearTimeout(timeout);
   }, [persistKey, status]);
 
+  // Flush on unmount so the browser can finish the request during navigation.
   useEffect(() => {
     return () => {
       if (pendingPayloadRef.current) flushPendingCloudPrefs(pendingPayloadRef.current);
@@ -129,20 +166,18 @@ export function usePersistCloudSongPrefs(currentSong: StoredSong | null, player:
   }, []);
 }
 
-function cloudPrefsPayload(arrangementId: string, player: PlayerContextState): CloudPrefsPayload {
-  return {
-    arrangementId,
-    tone: player.tone,
-    capo: player.capo,
-    uiPrefs: uiPrefs(player),
-  };
-}
-
-function uiPrefs(player: PlayerContextState): StoredSongUiPrefs {
-  const prefs = playerPrefs(player);
-  return Object.fromEntries(
-    PLAYER_PREF_KEYS.filter((key) => key !== "tone" && key !== "capo").map((key) => [key, prefs[key]]),
-  ) as StoredSongUiPrefs;
+function flushPendingCloudPrefs(payload: CloudPrefsPayload) {
+  try {
+    fetch("/api/songs/prefs", {
+      method: "PATCH",
+      credentials: "include",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // swallow — best-effort on unload
+  }
 }
 
 function shouldPersistCloudPrefs(
