@@ -11,6 +11,7 @@ import { useSongContextValue } from "./_hooks/use-song-context-value";
 import { useSongFolderActions } from "./_hooks/use-song-folder-actions";
 import { useSongPageActions } from "./_hooks/use-song-page-actions";
 import { useSongParams } from "./_hooks/use-song-params";
+import { useSongVersion } from "./_hooks/use-song-version";
 
 export default function SongPage() {
   const { artistSlug, slug } = useSongParams();
@@ -34,7 +35,26 @@ export default function SongPage() {
     songState.setCurrentSong,
     songState.setSongData,
   );
-  const value = useSongContextValue({ currentSong: songState.currentSong, songData: songState.songData, folderState, actions });
+  const versionState = useSongVersion({
+    artistSlug,
+    slug,
+    currentSong: songState.currentSong,
+    setCurrentSong: songState.setCurrentSong,
+    setSongData: songState.setSongData,
+    folderId: songState.folderId,
+    arrangementId: songState.arrangementId,
+    hasSavedVersion: songState.hasSavedVersion,
+    initialCachedSongDataRef: songState.initialCachedSongDataRef,
+    savedSongDataRef: songState.savedSongDataRef,
+    onFullReload: songState.load,
+  });
+  const value = useSongContextValue({
+    currentSong: songState.currentSong,
+    songData: songState.songData,
+    folderState,
+    actions,
+    versionState,
+  });
 
   if (songState.isLoading) return <SongPageSkeleton />;
   if (songState.error) return <SongPageError error={songState.error} onRetry={songState.load} />;

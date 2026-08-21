@@ -149,13 +149,61 @@ function fetchErrorResponse(e: unknown) {
   return NextResponse.json({ html: null, error: message }, { status: 502 });
 }
 
+function readSourceParam(request: Request): string | null {
+  const { searchParams } = new URL(request.url);
+  return searchParams.get("source")?.trim() ?? null;
+}
+
+function noStoreHtmlResponse(html: string) {
+  return NextResponse.json(
+    { html },
+    { headers: { "Cache-Control": "no-store" } },
+  );
+}
+
+async function forcedFreshCifraResponse(artistSlug: string, slug: string) {
+  const fresh = await fetchFreshCifra(artistSlug, slug);
+  if (!fresh) return unavailableResponse();
+
+  await saveCachedHtml(artistSlug, slug, fresh.url, fresh.html);
+  return noStoreHtmlResponse(fresh.html);
+}
+
 export async function GET(request: Request) {
   const params = readCifraSlugParams(request);
   if ("response" in params) return invalidParamsResponse();
 
   try {
+    if (readSourceParam(request) === "fresh") {
+      return await forcedFreshCifraResponse(params.artistSlug, params.slug);
+    }
     return await cachedCifraResponse(params.artistSlug, params.slug);
   } catch (e) {
     return fetchErrorResponse(e);
   }
+}
+
+export async function DELETE(request: Request) {
+  const params = readCifraSlugParams(request);
+  if ("response" in params) return invalidParamsResponse();
+
+  try {
+    const deleted = await deleteCachedCifra(params.artistSlug, params.slug);
+    return NextResponse.json(
+      { ok: true, deleted },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Falha ao limpar cache";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
+}
+
+async function deleteCachedCifra(artistSlug: string, slug: string): Promise<boolean> {
+  const result = await db
+    .delete(cachedCifras)
+    .where(
+      and(eq(cachedCifras.artistSlug, artistSlug), eq(cachedCifras.slug, slug)),
+    );
+  return (result.rowCount ?? 0) > 0;
 }

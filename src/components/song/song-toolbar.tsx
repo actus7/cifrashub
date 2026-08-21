@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { getRelativeKeyToggle, transposeRootNote } from "@/lib/music";
 import type { Section } from "@/lib/types";
 import { useSongViewContext } from "./song-context";
+import { VersionToolbarControl } from "./song-version-menu";
 
 function firstChordRoot(songData: Section[]): string | undefined {
   for (const section of songData) {
@@ -43,7 +44,7 @@ function firstLineChordRoot(line: Section["content"][number]) {
   return undefined;
 }
 
-function ToolbarButton({
+export function ToolbarButton({
   active,
   onClick,
   title,
@@ -107,7 +108,7 @@ function ExpandButton({
   );
 }
 
-function ToolbarPopoverGroup({
+export function ToolbarPopoverGroup({
   open,
   setExpanded,
   popoverContent,
@@ -159,6 +160,8 @@ export const SongToolbar = memo(function SongToolbar() {
 
   return (
     <div className="no-print fixed right-3 bottom-[calc(max(1rem,env(safe-area-inset-bottom,1rem)))] sm:bottom-auto sm:top-1/2 z-40 sm:-translate-y-1/2 flex flex-col items-end sm:items-center gap-2 sm:right-4">
+      <VersionToolbarControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
+      <ToolbarSeparator />
       <ToneControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
       <CapoControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
       <ToolbarSeparator />

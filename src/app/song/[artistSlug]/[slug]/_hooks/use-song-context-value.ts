@@ -1,18 +1,30 @@
 import { useMemo } from "react";
-import type { Section, StoredSong } from "@/lib/types";
+import type { Section, SongVersion, StoredSong } from "@/lib/types";
 import type { useSongFolderActions } from "./use-song-folder-actions";
 import type { useSongPageActions } from "./use-song-page-actions";
+
+export type SongVersionState = {
+  songVersion: SongVersion;
+  setSongVersion: (v: SongVersion) => void;
+  onReloadOriginal: () => void;
+  onResetSaved: () => void;
+  onResetCache: () => void;
+  versionActionPending: boolean;
+  hasSavedVersion: boolean;
+};
 
 export function useSongContextValue({
   currentSong,
   songData,
   folderState,
   actions,
+  versionState,
 }: {
   currentSong: StoredSong | null;
   songData: Section[];
   folderState: ReturnType<typeof useSongFolderActions>;
   actions: ReturnType<typeof useSongPageActions>;
+  versionState: SongVersionState;
 }) {
   const p = actions.player;
   const youtubeEmbedUrl = currentSong?.youtubeId ? `https://www.youtube.com/embed/${currentSong.youtubeId}` : null;
@@ -37,5 +49,12 @@ export function useSongContextValue({
     onOpenSongEditor: actions.onOpenSongEditor,
     onShareArrangement: actions.onShareArrangement,
     shareArrangementDisabled: false,
-  }), [actions, currentSong, folderState, p, songData, youtubeEmbedUrl]);
+    songVersion: versionState.songVersion,
+    setSongVersion: versionState.setSongVersion,
+    onReloadOriginal: versionState.onReloadOriginal,
+    onResetSaved: versionState.onResetSaved,
+    onResetCache: versionState.onResetCache,
+    versionActionPending: versionState.versionActionPending,
+    hasSavedVersion: versionState.hasSavedVersion,
+  }), [actions, currentSong, folderState, p, songData, versionState, youtubeEmbedUrl]);
 }

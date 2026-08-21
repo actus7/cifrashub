@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 import type { ReactNode } from "react";
-import type { CurrentSongMeta, Folder, Section } from "@/lib/types";
+import type { CurrentSongMeta, Folder, Section, SongVersion } from "@/lib/types";
 
 /**
  * Valor completo do contexto da view de cifra.
@@ -14,6 +14,22 @@ export type SongViewContextValue = {
   songData: Section[];
   isParsing: boolean;
   parseError: string | null;
+
+  // ─── Versão da cifra (salva/cache/original) ────────────────────────────────
+  /** Versão atualmente em exibição. */
+  songVersion: SongVersion;
+  /** Define a versão em exibição ("saved" volta para a versão personalizada). */
+  setSongVersion: (v: SongVersion) => void;
+  /** Carrega o original direto da fonte, ignorando cache local/servidor. */
+  onReloadOriginal: () => void;
+  /** Restaura a versão salva para o estado de origem (parse fresco da fonte). */
+  onResetSaved: () => void;
+  /** Limpa o cache do servidor para esta cifra e recarrega da fonte. */
+  onResetCache: () => void;
+  /** Indica carregamento em curso de original/reset. */
+  versionActionPending: boolean;
+  /** A cifra em exibição é uma versão salva/personalizada. */
+  hasSavedVersion: boolean;
 
   // ─── Configurações de exibição ─────────────────────────────────────────────
   tone: number;
