@@ -1,19 +1,78 @@
 "use client";
 
-import { Music, Rows3 } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Music, Rows3, Users } from "lucide-react";
+import { LoginButton } from "@/components/auth/login-button";
+import { Button } from "@/components/ui/button";
 import { SongContent } from "@/components/song/song-content";
+import { useSession } from "@/hooks/use-session";
 import type { ShareSnapshotPayload } from "@/lib/share-payload";
 
 type Props = {
   payload: ShareSnapshotPayload | null;
+  token: string;
 };
 
-export function PublicShareView({ payload }: Props) {
+export function PublicShareView({ payload, token }: Props) {
   if (!payload) return <InvalidShare />;
+  if (payload.type === "folder-invite" || payload.type === "setlist-invite") {
+    return <InviteShare payload={payload} token={token} />;
+  }
   return payload.type === "arrangement" ? (
     <ArrangementShare payload={payload} />
   ) : (
     <SetlistShare payload={payload} />
+  );
+}
+
+type InvitePayload = Extract<ShareSnapshotPayload, { type: "folder-invite" | "setlist-invite" }>;
+
+function InviteShare({ payload, token }: { payload: InvitePayload; token: string }) {
+  const router = useRouter();
+  const { status } = useSession();
+  const [joining, setJoining] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isFolder = payload.type === "folder-invite";
+  const label = isFolder ? "pasta" : "setlist";
+
+  async function handleJoin() {
+    setJoining(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/share/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Não foi possível entrar.");
+      router.push(data.resourceType === "folder" ? `/folder/${data.id}` : `/setlist/${data.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível entrar.");
+      setJoining(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-center">
+      <div className="flex items-center gap-2 text-primary">
+        <Users className="size-6" />
+        <span className="text-xs font-semibold tracking-wide uppercase">Convite de {label}</span>
+      </div>
+      <h1 className="text-2xl font-bold tracking-tight">{payload.title}</h1>
+      <p className="text-muted-foreground">
+        {payload.ownerName ? `Compartilhado por ${payload.ownerName}` : "Compartilhado com você"}
+      </p>
+      {status === "authenticated" ? (
+        <Button type="button" onClick={handleJoin} disabled={joining}>
+          {joining ? "Entrando..." : `Entrar na ${label}`}
+        </Button>
+      ) : (
+        <LoginButton />
+      )}
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+    </div>
   );
 }
 

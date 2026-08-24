@@ -4,6 +4,7 @@ import {
   index,
   integer,
   jsonb,
+  pgSchema,
   pgTable,
   primaryKey,
   text,
@@ -18,6 +19,16 @@ const positionColumn = () => integer("position").notNull().default(0);
 const timestampColumns = () => ({
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+});
+
+// Read-only mapping to the Neon Auth-owned table. This is the real source of
+// truth for user identity (see scripts/add-user-fk-cascade.sql) — the local
+// `user` table below is unused legacy and must not be queried for owner info.
+const neonAuthSchema = pgSchema("neon_auth");
+export const neonAuthUsers = neonAuthSchema.table("user", {
+  id: uuid("id").primaryKey(),
+  name: text("name"),
+  email: text("email"),
 });
 
 export const users = pgTable("user", {
@@ -91,6 +102,23 @@ export const userFolders = pgTable(
   (t) => ({
     idxUserFolderUserPosition: index("idx_user_folder_user_position")
       .on(t.userId, t.position, t.createdAt),
+  }),
+);
+
+export const folderMembers = pgTable(
+  "folder_member",
+  {
+    folderId: uuid("folder_id")
+      .notNull()
+      .references(() => userFolders.id, { onDelete: "cascade" }),
+    // FK to neon_auth."user" is applied by scripts/add-user-fk-cascade.sql,
+    // same pattern as user_folder.user_id above.
+    userId: uuid("user_id").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.folderId, t.userId] }),
+    idxFolderMemberUser: index("idx_folder_member_user").on(t.userId, t.createdAt),
   }),
 );
 
@@ -187,6 +215,21 @@ export const userSetlistItems = pgTable(
   (t) => ({
     idxUserSetlistItemSetlistPosition: index("idx_user_setlist_item_setlist_position")
       .on(t.setlistId, t.position, t.createdAt),
+  }),
+);
+
+export const setlistMembers = pgTable(
+  "setlist_member",
+  {
+    setlistId: text("setlist_id")
+      .notNull()
+      .references(() => userSetlists.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.setlistId, t.userId] }),
+    idxSetlistMemberUser: index("idx_setlist_member_user").on(t.userId, t.createdAt),
   }),
 );
 

@@ -182,6 +182,7 @@ export default function SetlistPage() {
 
   const onOpenSong = (song: StoredSong) => {
     const params = new URLSearchParams({ arrangementId: arrangementKey(song) });
+    if (detail?.viewerRole === "member" && detail.ownerId) params.set("ownerId", detail.ownerId);
     router.push(`/song/${song.artistSlug}/${song.slug}?${params.toString()}`);
   };
   const onBack = () => router.push("/");
@@ -200,6 +201,7 @@ export default function SetlistPage() {
       onRemoveItem={onRemoveItem}
       onMoveItem={onMoveItem}
       onShare={() => {}}
+      disabled={detail.viewerRole === "member"}
     />
   );
 }

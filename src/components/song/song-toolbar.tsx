@@ -50,21 +50,25 @@ export function ToolbarButton({
   title,
   children,
   className,
+  disabled,
 }: {
   active: boolean;
   onClick: () => void;
   title: string;
   children: ReactNode;
   className?: string;
+  disabled?: boolean;
 }) {
   return (
     <Button
       type="button"
       variant={active ? "default" : "outline"}
       size="icon"
+      disabled={disabled}
       className={cn(
         "relative z-10 size-10 shrink-0 rounded-xl shadow-md transition-all",
         active ? "shadow-primary/20 bg-primary/95 text-primary-foreground hover:bg-primary" : "bg-background/95 backdrop-blur",
+        disabled && "opacity-50",
         className,
       )}
       onClick={onClick}
@@ -181,18 +185,19 @@ function ToneControl({
   setExpanded: (v: string | null) => void;
   toggleMenu: (menu: string) => void;
 }) {
-  const { tone, setTone, currentSong, songData } = useSongViewContext();
+  const { tone, setTone, currentSong, songData, sharedContext } = useSongViewContext();
   const writtenKey = currentSong.cifraWrittenKey;
   const displayKey = writtenKey ?? currentSong.cifraSoundingKey ?? firstChordRoot(songData);
   const relToggle = writtenKey ? getRelativeKeyToggle(writtenKey, tone) : null;
+  const locked = Boolean(sharedContext);
 
   return (
     <ToolbarPopoverGroup
       open={expanded === "tone"}
       setExpanded={setExpanded}
-      popoverContent={<TonePopoverContent tone={tone} setTone={setTone} relToggle={relToggle} setExpanded={setExpanded} />}
+      popoverContent={<TonePopoverContent tone={tone} setTone={setTone} relToggle={relToggle} setExpanded={setExpanded} disabled={locked} />}
     >
-      <ToolbarButton active={tone !== 0} onClick={() => toggleMenu("tone")} title="Tom" className="flex-col gap-0 p-0">
+      <ToolbarButton active={tone !== 0} onClick={() => toggleMenu("tone")} title="Tom" className="flex-col gap-0 p-0" disabled={locked}>
         <ToneButtonLabel displayKey={displayKey} tone={tone} />
       </ToolbarButton>
     </ToolbarPopoverGroup>
@@ -204,16 +209,18 @@ function TonePopoverContent({
   setTone,
   relToggle,
   setExpanded,
+  disabled,
 }: {
   tone: number;
   setTone: (tone: number) => void;
   relToggle: ReturnType<typeof getRelativeKeyToggle> | null;
   setExpanded: (v: string | null) => void;
+  disabled?: boolean;
 }) {
   return (
     <>
-      <ExpandButton onClick={() => setTone(tone - 1)}><Minus className="size-3.5" /></ExpandButton>
-      <ExpandButton onClick={() => setTone(tone + 1)}><Plus className="size-3.5" /></ExpandButton>
+      <ExpandButton onClick={() => setTone(tone - 1)} disabled={disabled}><Minus className="size-3.5" /></ExpandButton>
+      <ExpandButton onClick={() => setTone(tone + 1)} disabled={disabled}><Plus className="size-3.5" /></ExpandButton>
       {relToggle && <RelativeToneButton relToggle={relToggle} setTone={setTone} setExpanded={setExpanded} />}
     </>
   );
@@ -272,7 +279,8 @@ function CapoControl({
   setExpanded: (v: string | null) => void;
   toggleMenu: (menu: string) => void;
 }) {
-  const { capo, setCapo } = useSongViewContext();
+  const { capo, setCapo, sharedContext } = useSongViewContext();
+  const locked = Boolean(sharedContext);
 
   return (
     <ToolbarPopoverGroup
@@ -280,12 +288,12 @@ function CapoControl({
       setExpanded={setExpanded}
       popoverContent={
         <>
-          <ExpandButton onClick={() => setCapo(Math.max(0, capo - 1))} disabled={capo <= 0}><Minus className="size-3.5" /></ExpandButton>
-          <ExpandButton onClick={() => setCapo(Math.min(12, capo + 1))} disabled={capo >= 12}><Plus className="size-3.5" /></ExpandButton>
+          <ExpandButton onClick={() => setCapo(Math.max(0, capo - 1))} disabled={locked || capo <= 0}><Minus className="size-3.5" /></ExpandButton>
+          <ExpandButton onClick={() => setCapo(Math.min(12, capo + 1))} disabled={locked || capo >= 12}><Plus className="size-3.5" /></ExpandButton>
         </>
       }
     >
-      <ToolbarButton active={capo !== 0} onClick={() => toggleMenu("capo")} title="Capotraste" className="flex-col gap-0 p-0">
+      <ToolbarButton active={capo !== 0} onClick={() => toggleMenu("capo")} title="Capotraste" className="flex-col gap-0 p-0" disabled={locked}>
         <CapoButtonContent capo={capo} />
       </ToolbarButton>
     </ToolbarPopoverGroup>
@@ -405,21 +413,22 @@ type ControlProps = {
 };
 
 function DisplayModeControls({ setExpanded }: { setExpanded: (v: string | null) => void }) {
-  const { showTabs, setShowTabs, simplified, setSimplified, nashvilleNumbers, setNashvilleNumbers, mirrored, setMirrored } = useSongViewContext();
+  const { showTabs, setShowTabs, simplified, setSimplified, nashvilleNumbers, setNashvilleNumbers, mirrored, setMirrored, sharedContext } = useSongViewContext();
+  const locked = Boolean(sharedContext);
   const close = () => setExpanded(null);
 
   return (
     <>
-      <ToolbarButton active={showTabs} onClick={() => { setShowTabs(!showTabs); close(); }} title={showTabs ? "Ocultar tablaturas" : "Mostrar tablaturas"} className="font-mono text-[10px] font-extrabold tracking-widest">
+      <ToolbarButton active={showTabs} onClick={() => { setShowTabs(!showTabs); close(); }} title={showTabs ? "Ocultar tablaturas" : "Mostrar tablaturas"} className="font-mono text-[10px] font-extrabold tracking-widest" disabled={locked}>
         TAB
       </ToolbarButton>
-      <ToolbarButton active={simplified} onClick={() => { setSimplified(!simplified); close(); }} title={simplified ? "Mostrar acordes originais" : "Simplificar acordes"}>
+      <ToolbarButton active={simplified} onClick={() => { setSimplified(!simplified); close(); }} title={simplified ? "Mostrar acordes originais" : "Simplificar acordes"} disabled={locked}>
         <Guitar className="size-4" />
       </ToolbarButton>
-      <ToolbarButton active={nashvilleNumbers} onClick={() => { setNashvilleNumbers(!nashvilleNumbers); close(); }} title={nashvilleNumbers ? "Mostrar cifras" : "Mostrar graus"} className="font-mono text-xs font-extrabold">
+      <ToolbarButton active={nashvilleNumbers} onClick={() => { setNashvilleNumbers(!nashvilleNumbers); close(); }} title={nashvilleNumbers ? "Mostrar cifras" : "Mostrar graus"} className="font-mono text-xs font-extrabold" disabled={locked}>
         Nº
       </ToolbarButton>
-      <ToolbarButton active={mirrored} onClick={() => { setMirrored(!mirrored); close(); }} title={mirrored ? "Mão direita (padrão)" : "Mão esquerda (canhoto)"}>
+      <ToolbarButton active={mirrored} onClick={() => { setMirrored(!mirrored); close(); }} title={mirrored ? "Mão direita (padrão)" : "Mão esquerda (canhoto)"} disabled={locked}>
         <FlipHorizontal className="size-4 -scale-x-100" />
       </ToolbarButton>
     </>

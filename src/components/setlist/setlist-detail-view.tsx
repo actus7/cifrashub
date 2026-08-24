@@ -158,6 +158,11 @@ function SetlistHero({ detail }: { detail: SetlistDetailView }) {
         {detail.description ? (
           <p className="mt-1 text-sm text-muted-foreground">{detail.description}</p>
         ) : null}
+        {detail.viewerRole === "member" ? (
+          <span className="mt-1 inline-block rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {detail.ownerName ? `Setlist de ${detail.ownerName}` : "Setlist compartilhada"}
+          </span>
+        ) : null}
       </div>
     </div>
   );

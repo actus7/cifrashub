@@ -2,7 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { userFolders } from "@/db/schema";
-import { readJsonBody, requireTrimmedText } from "@/lib/server/api-route";
+import { readJsonBody, requireApiUserId, requireTrimmedText } from "@/lib/server/api-route";
+import { resolveFolderAccess } from "@/lib/server/access";
 import { loadCloudFoldersAndSongs } from "@/lib/server/cloud-data";
 import { requireOwnedFolder } from "@/lib/server/folder-route";
 
@@ -21,6 +22,28 @@ function folderOwnerWhere(folderCtx: ResolvedFolderCtx) {
 async function respondWithFolders(userId: string) {
   const { folders } = await loadCloudFoldersAndSongs(userId);
   return NextResponse.json({ folders });
+}
+
+export async function GET(_req: Request, ctx: RouteCtx) {
+  const auth = await requireApiUserId();
+  if ("response" in auth) return auth.response;
+
+  const { id: folderId } = await ctx.params;
+  const access = await resolveFolderAccess(auth.userId, folderId);
+  if (access.role === "none" || !access.ownerId) {
+    return NextResponse.json({ error: "Pasta não encontrada" }, { status: 404 });
+  }
+
+  const { folders } = await loadCloudFoldersAndSongs(access.ownerId);
+  const folder = folders.find((f) => f.id === folderId);
+  if (!folder) return NextResponse.json({ error: "Pasta não encontrada" }, { status: 404 });
+
+  return NextResponse.json({
+    folder,
+    viewerRole: access.role,
+    ownerId: access.ownerId,
+    ownerName: access.role === "member" ? access.ownerName : null,
+  });
 }
 
 export async function PATCH(req: Request, ctx: RouteCtx) {

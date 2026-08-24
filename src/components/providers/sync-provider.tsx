@@ -5,6 +5,7 @@ import { useSession } from "@/hooks/use-session";
 import {
   cloudFetchLibrary,
   cloudFetchSetlists,
+  cloudFetchSharedSummary,
   cloudSync,
   cloudSyncDoneKey,
   DEFAULT_FOLDERS,
@@ -19,6 +20,7 @@ import {
   STORAGE_SETLISTS,
 } from "@/lib/storage";
 import { useLibraryStore } from "@/store/use-library-store";
+import type { SharedSummary } from "@/lib/cloud-api";
 import type { LocalSetlistStored, Folder, StoredSong, SetlistSummary } from "@/lib/types";
 import { localSetlistsToSummaries } from "@/lib/setlist-local";
 import { cloudSyncSignalKey } from "@/lib/sync-signal-key";
@@ -37,6 +39,7 @@ type CloudSyncContext = {
   setFolders: (folders: Folder[]) => void;
   setRecentes: (songs: StoredSong[]) => void;
   setSetlistSummaries: (setlists: SetlistSummary[]) => void;
+  setSharedSummary: (summary: SharedSummary) => void;
   userId: string;
   cancelled: () => boolean;
 };
@@ -139,6 +142,15 @@ async function loadCloudSetlists(ctx: CloudSyncContext) {
   }
 }
 
+async function loadSharedSummary(ctx: CloudSyncContext) {
+  try {
+    const summary = await cloudFetchSharedSummary();
+    if (!ctx.cancelled()) ctx.setSharedSummary(summary);
+  } catch (error) {
+    console.error("Failed to load shared summary", error);
+  }
+}
+
 async function performSyncOrFetch(isFirstSync: boolean, ctx: CloudSyncContext) {
   await loadInitialCloudLibrary(isFirstSync, ctx);
 
@@ -148,6 +160,7 @@ async function performSyncOrFetch(isFirstSync: boolean, ctx: CloudSyncContext) {
   }
 
   await loadCloudSetlists(ctx);
+  await loadSharedSummary(ctx);
 }
 
 function canRefreshCloud(isCloud: boolean) {
@@ -158,6 +171,7 @@ async function loadCloudSnapshot() {
   return Promise.allSettled([
     cloudFetchLibrary(),
     cloudFetchSetlists(),
+    cloudFetchSharedSummary(),
   ]);
 }
 
@@ -202,6 +216,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const setLocalSetlistsRaw = useLibraryStore((s) => s.setLocalSetlistsRaw);
   const setSetlistSummaries = useLibraryStore((s) => s.setSetlistSummaries);
   const setLibraryLoaded = useLibraryStore((s) => s.setLibraryLoaded);
+  const setSharedSummary = useLibraryStore((s) => s.setSharedSummary);
 
   const applyCloudLibrarySnapshot = useCallback(
     (payload: CloudSnapshot) => {
@@ -216,7 +231,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const refreshCloudState = useCallback(async () => {
     if (!canRefreshCloud(isCloud)) return;
 
-    const [libraryResult, setlistsResult] = await loadCloudSnapshot();
+    const [libraryResult, setlistsResult, sharedResult] = await loadCloudSnapshot();
 
     if (libraryResult.status === "fulfilled") {
       applyCloudLibrarySnapshot(libraryResult.value);
@@ -225,7 +240,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     if (setlistsResult.status === "fulfilled") {
       setSetlistSummaries(setlistsResult.value.setlists);
     }
-  }, [isCloud, applyCloudLibrarySnapshot, setSetlistSummaries]);
+
+    if (sharedResult.status === "fulfilled") {
+      setSharedSummary(sharedResult.value);
+    }
+  }, [isCloud, applyCloudLibrarySnapshot, setSetlistSummaries, setSharedSummary]);
 
   useEffect(() => {
     const setters = {
@@ -252,6 +271,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       setFolders,
       setRecentes,
       setSetlistSummaries,
+      setSharedSummary,
       userId,
     };
 
@@ -262,7 +282,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [status, userId, applyCloudLibrarySnapshot, setFolders, setLibraryLoaded, setLocalSetlistsRaw, setRecentes, setSetlistSummaries]);
+  }, [status, userId, applyCloudLibrarySnapshot, setFolders, setLibraryLoaded, setLocalSetlistsRaw, setRecentes, setSetlistSummaries, setSharedSummary]);
 
   useEffect(() => {
     if (!isCloud || !userId || !syncSignalKey) return;

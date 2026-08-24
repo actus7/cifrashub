@@ -40,6 +40,8 @@ type FolderViewProps = {
   onOpenSong: (song: StoredSong) => void;
   onRemoveSongFromFolder: (song: StoredSong) => void;
   onRemoveSongsFromFolder: (songs: StoredSong[]) => Promise<void> | void;
+  readOnly?: boolean;
+  ownerName?: string | null;
 };
 
 type FolderSelectionBarProps = {
@@ -56,6 +58,7 @@ type FolderSongsListProps = {
   onRemoveSongFromFolder: (song: StoredSong) => void;
   onToggleSongSelection: (song: StoredSong) => void;
   onSelectSong: (song: StoredSong) => void;
+  readOnly?: boolean;
 };
 
 type DeleteFolderDialogProps = {
@@ -85,6 +88,8 @@ export function FolderView({
   onOpenSong,
   onRemoveSongFromFolder,
   onRemoveSongsFromFolder,
+  readOnly,
+  ownerName,
 }: FolderViewProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteSongsDialogOpen, setDeleteSongsDialogOpen] = useState(false);
@@ -121,21 +126,23 @@ export function FolderView({
       <FolderTopBar onBack={onBack} />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-20 animate-in fade-in duration-300">
-        <FolderTitle folder={folder} onDelete={() => setDeleteDialogOpen(true)} />
+        <FolderTitle folder={folder} onDelete={() => setDeleteDialogOpen(true)} readOnly={readOnly} ownerName={ownerName} />
 
         {folderError && (
           <FolderError message={folderError} onDismiss={onDismissFolderError} />
         )}
 
-        <FolderSearch
-          query={folderSearchQuery}
-          onQueryChange={onFolderSearchQueryChange}
-          activeFolderSongs={folder.songs}
-          folderAddPendingKey={folderAddPendingKey}
-          onAddSong={onAddSongToFolder}
-        />
+        {!readOnly && (
+          <FolderSearch
+            query={folderSearchQuery}
+            onQueryChange={onFolderSearchQueryChange}
+            activeFolderSongs={folder.songs}
+            folderAddPendingKey={folderAddPendingKey}
+            onAddSong={onAddSongToFolder}
+          />
+        )}
 
-        {selectionMode && (
+        {selectionMode && !readOnly && (
           <FolderSelectionBar
             count={selectedSongKeys.size}
             onClear={clearSelection}
@@ -151,6 +158,7 @@ export function FolderView({
           onRemoveSongFromFolder={onRemoveSongFromFolder}
           onToggleSongSelection={toggleSongSelection}
           onSelectSong={selectSong}
+          readOnly={readOnly}
         />
       </main>
 
@@ -187,7 +195,17 @@ function FolderTopBar({ onBack }: { onBack: () => void }) {
   );
 }
 
-function FolderTitle({ folder, onDelete }: { folder: FolderType; onDelete: () => void }) {
+function FolderTitle({
+  folder,
+  onDelete,
+  readOnly,
+  ownerName,
+}: {
+  folder: FolderType;
+  onDelete: () => void;
+  readOnly?: boolean;
+  ownerName?: string | null;
+}) {
   return (
     <div className="mb-6 flex items-end justify-between gap-4 border-b border-border pb-4">
       <div>
@@ -198,8 +216,13 @@ function FolderTitle({ folder, onDelete }: { folder: FolderType; onDelete: () =>
         <p className="mt-1 text-sm text-muted-foreground">
           {folder.songs.length} músicas salvas offline
         </p>
+        {ownerName && (
+          <span className="mt-1 inline-block rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            Pasta de {ownerName}
+          </span>
+        )}
       </div>
-      {!folder.isDefault && folder.id !== "default" && (
+      {!readOnly && !folder.isDefault && folder.id !== "default" && (
         <Button
           type="button"
           variant="ghost"
@@ -263,6 +286,7 @@ function FolderSongsList({
   onRemoveSongFromFolder,
   onToggleSongSelection,
   onSelectSong,
+  readOnly,
 }: FolderSongsListProps) {
   if (songs.length === 0) return <FolderEmptyState />;
 
@@ -280,6 +304,7 @@ function FolderSongsList({
             onRemove={() => onRemoveSongFromFolder(song)}
             onToggleSelect={() => onToggleSongSelection(song)}
             onLongPressSelect={() => onSelectSong(song)}
+            readOnly={readOnly}
           />
         );
       })}

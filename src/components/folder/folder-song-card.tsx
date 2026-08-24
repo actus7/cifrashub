@@ -15,6 +15,7 @@ type FolderSongCardProps = {
   onRemove: () => void;
   onToggleSelect: () => void;
   onLongPressSelect: () => void;
+  readOnly?: boolean;
 };
 
 function useLongPress(onLongPressSelect: () => void) {
@@ -85,6 +86,7 @@ export function FolderSongCard({
   onRemove,
   onToggleSelect,
   onLongPressSelect,
+  readOnly,
 }: FolderSongCardProps) {
   const { clearLongPressTimer, consumeLongPress, startLongPressTimer } = useLongPress(onLongPressSelect);
 
@@ -104,10 +106,10 @@ export function FolderSongCard({
         aria-pressed={selectionMode ? selected : undefined}
         onClick={handleClick}
         onContextMenu={(e) => e.preventDefault()}
-        onPointerCancel={clearLongPressTimer}
-        onPointerDown={startLongPressTimer}
-        onPointerLeave={clearLongPressTimer}
-        onPointerUp={clearLongPressTimer}
+        onPointerCancel={readOnly ? undefined : clearLongPressTimer}
+        onPointerDown={readOnly ? undefined : startLongPressTimer}
+        onPointerLeave={readOnly ? undefined : clearLongPressTimer}
+        onPointerUp={readOnly ? undefined : clearLongPressTimer}
         className="w-full touch-manipulation select-none text-left"
       >
         <Card
@@ -127,7 +129,7 @@ export function FolderSongCard({
           </div>
         </Card>
       </button>
-      {!selectionMode && <RemoveSongButton onRemove={onRemove} />}
+      {!selectionMode && !readOnly && <RemoveSongButton onRemove={onRemove} />}
     </div>
   );
 }

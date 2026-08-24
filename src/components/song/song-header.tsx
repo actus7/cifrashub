@@ -164,6 +164,7 @@ function DesktopSongTitle({
   capo: number;
   onOpenArtistSongs: () => void;
 }) {
+  const { sharedContext } = useSongViewContext();
   return (
     <div className="hidden min-w-0 flex-1 items-start gap-3 sm:flex md:gap-5">
       <div className="min-w-0 w-fit max-w-[min(32rem,calc(100%-9rem))]">
@@ -190,6 +191,11 @@ function DesktopSongTitle({
         className="shrink-0 text-balance sm:max-w-[min(240px,36vw)] sm:pt-0.5"
       />
       <VersionBadge className="shrink-0 self-start sm:pt-0.5" />
+      {sharedContext ? (
+        <span className="shrink-0 self-start rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground sm:pt-1">
+          {sharedContext.ownerName ? `Compartilhado por ${sharedContext.ownerName}` : "Compartilhado"}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -385,6 +391,7 @@ function StaticHeaderActions() {
     onOpenSongEditor,
     isParsing,
     parseError,
+    sharedContext,
   } = useSongViewContext();
 
   return (
@@ -398,12 +405,12 @@ function StaticHeaderActions() {
       <IconActionButton title="Imprimir / PDF" onClick={onPrint} className="hidden sm:flex">
         <Printer className="size-[18px]" />
       </IconActionButton>
-      {onShareArrangement ? (
+      {onShareArrangement && !sharedContext ? (
         <IconActionButton title="Copiar link de compartilhamento" onClick={onShareArrangement} disabled={shareArrangementDisabled}>
           <Link2 className="size-[18px]" />
         </IconActionButton>
       ) : null}
-      {onOpenSongEditor ? (
+      {onOpenSongEditor && !sharedContext ? (
         <IconActionButton title="Editar cifra" onClick={onOpenSongEditor} disabled={isParsing || Boolean(parseError)}>
           <FileEdit className="size-[18px]" />
         </IconActionButton>
