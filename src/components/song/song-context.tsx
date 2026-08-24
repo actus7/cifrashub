@@ -98,6 +98,9 @@ export type SongViewContextValue = {
   onOpenSongEditor?: () => void;
   onShareArrangement?: () => void;
   shareArrangementDisabled?: boolean;
+
+  /** Presente quando a cifra foi aberta a partir de uma pasta/setlist compartilhada da qual o usuário é apenas membro (não dono). Controles de conteúdo devem travar. */
+  sharedContext?: { ownerName: string | null } | null;
 };
 
 const SongViewContext = createContext<SongViewContextValue | null>(null);

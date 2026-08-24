@@ -12,4 +12,6 @@ export type ShareSnapshotPayload =
         notes: string | null;
         song: StoredSong | null;
       }>;
-    };
+    }
+  | { type: "folder-invite"; folderId: string; ownerId: string; ownerName: string | null; title: string }
+  | { type: "setlist-invite"; setlistId: string; ownerId: string; ownerName: string | null; title: string };

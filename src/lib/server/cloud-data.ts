@@ -141,6 +141,10 @@ export async function loadCloudFoldersAndSongs(userId: string): Promise<{
   return { folders, recentes };
 }
 
+export function preferredArrangementRow(rows: SongRow[]): SongRow | undefined {
+  return rows.find((row) => row.folderId !== null) ?? rows.find((row) => row.isRecent) ?? rows[0];
+}
+
 export async function assertFolderOwner(userId: string, folderId: string) {
   const [row] = await db
     .select()

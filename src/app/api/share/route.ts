@@ -4,14 +4,16 @@ import { db } from "@/db";
 import { shareSnapshots, shareTokens, userSongs } from "@/db/schema";
 import { requireUserId } from "@/lib/server/api-auth";
 import { requireApiUserJson } from "@/lib/server/api-route";
-import { rowToStoredSong } from "@/lib/server/cloud-data";
-import { getSetlistDetail } from "@/lib/server/setlist-queries";
+import { assertFolderOwner, preferredArrangementRow, rowToStoredSong } from "@/lib/server/cloud-data";
+import { getUserDisplayName } from "@/lib/server/access";
+import { assertUserOwnsSetlist, getSetlistDetail } from "@/lib/server/setlist-queries";
 import type { ShareSnapshotPayload } from "@/lib/share-payload";
 
 type ShareRequestBody = {
   resourceType?: string;
   arrangementId?: string;
   setlistId?: string;
+  folderId?: string;
 };
 
 const MAX_SHARE_SETLIST_ITEMS = 50;
@@ -79,7 +81,58 @@ async function buildSharePayload(userId: string, body: ShareRequestBody) {
     return setlistSharePayload(userId, body.setlistId);
   }
 
+  if (body.resourceType === "folder-invite") {
+    return folderInvitePayload(userId, body.folderId);
+  }
+
+  if (body.resourceType === "setlist-invite") {
+    return setlistInvitePayload(userId, body.setlistId);
+  }
+
   return { response: NextResponse.json({ error: "resourceType inválido" }, { status: 400 }) };
+}
+
+async function folderInvitePayload(userId: string, folderId: string | undefined) {
+  const fid = folderId?.trim();
+  if (!fid) return shareError("folderId obrigatório", 400);
+
+  const folder = await assertFolderOwner(userId, fid);
+  if (!folder) return shareError("Pasta não encontrada", 404);
+
+  const ownerName = await getUserDisplayName(userId);
+  return {
+    resourceType: "folder-invite" as const,
+    payload: {
+      type: "folder-invite",
+      folderId: folder.id,
+      ownerId: userId,
+      ownerName,
+      title: folder.title,
+    } satisfies ShareSnapshotPayload,
+  };
+}
+
+async function setlistInvitePayload(userId: string, setlistId: string | undefined) {
+  const sid = setlistId?.trim();
+  if (!sid) return shareError("setlistId obrigatório", 400);
+
+  const owns = await assertUserOwnsSetlist(userId, sid);
+  if (!owns) return shareError("Setlist não encontrada", 404);
+
+  const detail = await getSetlistDetail(userId, sid);
+  if (!detail) return shareError("Setlist não encontrada", 404);
+
+  const ownerName = await getUserDisplayName(userId);
+  return {
+    resourceType: "setlist-invite" as const,
+    payload: {
+      type: "setlist-invite",
+      setlistId: sid,
+      ownerId: userId,
+      ownerName,
+      title: detail.title,
+    } satisfies ShareSnapshotPayload,
+  };
 }
 
 async function arrangementSharePayload(userId: string, arrangementId: string | undefined) {
@@ -101,10 +154,6 @@ function arrangementRows(userId: string, aid: string) {
     .select()
     .from(userSongs)
     .where(and(eq(userSongs.userId, userId), eq(userSongs.arrangementId, aid)));
-}
-
-function preferredArrangementRow(rows: Array<typeof userSongs.$inferSelect>) {
-  return rows.find((row) => row.folderId !== null) ?? rows.find((row) => row.isRecent) ?? rows[0];
 }
 
 function arrangementPayload(row: typeof userSongs.$inferSelect) {

@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { FolderView } from "@/components/folder/folder-view";
 import { useLibraryStore } from "@/store/use-library-store";
 import { useLibraryActions } from "@/hooks/use-library-actions";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { fetchChordsHtml } from "@/lib/fetch-proxy";
 import { processHtmlAndExtract } from "@/lib/parser";
 import { enrichStoredSongWithYoutube } from "@/hooks/use-song-loader";
@@ -12,6 +12,48 @@ import { cloudAddSongToFolder, cloudRemoveSongFromFolder, saveFolders } from "@/
 import { arrangementKey } from "@/lib/arrangement-key";
 import { useSession } from "@/hooks/use-session";
 import type { Folder, SearchResultSong, StoredSong } from "@/lib/types";
+
+type SharedFolderState = { folder: Folder; ownerId: string; ownerName: string | null } | null;
+
+function useSharedFolder(folderId: string | undefined, enabled: boolean) {
+  const [shared, setShared] = useState<SharedFolderState>(null);
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      if (!folderId || !enabled) {
+        setShared(null);
+        setChecked(true);
+        return;
+      }
+      setChecked(false);
+      fetch(`/api/folders/${folderId}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (cancelled) return;
+          if (data?.viewerRole === "member") {
+            setShared({ folder: data.folder, ownerId: data.ownerId, ownerName: data.ownerName });
+          } else {
+            setShared(null);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setShared(null);
+        })
+        .finally(() => {
+          if (!cancelled) setChecked(true);
+        });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [folderId, enabled]);
+
+  return { shared, checked };
+}
 
 async function removeCloudFolderSongs(
   folderId: string,
@@ -103,7 +145,9 @@ export default function FolderPage() {
 
   const folders = useLibraryStore((s) => s.folders);
   const setFolders = useLibraryStore((s) => s.setFolders);
-  const folder = folders.find((f) => f.id === folderId);
+  const ownFolder = folders.find((f) => f.id === folderId);
+  const { shared, checked } = useSharedFolder(folderId, isCloud && !ownFolder);
+  const folder = ownFolder ?? shared?.folder;
 
   const { notifyCloudMutation, handleDeleteFolder } = useLibraryActions();
 
@@ -112,6 +156,7 @@ export default function FolderPage() {
   const [folderError, setFolderError] = useState<string | null>(null);
 
   if (!folder) {
+    if (!ownFolder && !checked) return null;
     return <div className="p-8 text-center text-muted-foreground">Pasta não encontrada.</div>;
   }
 
@@ -161,6 +206,7 @@ export default function FolderPage() {
     const params = new URLSearchParams();
     params.set("folderId", folderId);
     params.set("arrangementId", arrangementKey(song));
+    if (shared) params.set("ownerId", shared.ownerId);
     router.push(`/song/${song.artistSlug}/${song.slug}?${params.toString()}`);
   };
 
@@ -183,6 +229,8 @@ export default function FolderPage() {
       onOpenSong={onOpenSong}
       onRemoveSongFromFolder={onRemoveSongFromFolder}
       onRemoveSongsFromFolder={onRemoveSongsFromFolder}
+      readOnly={Boolean(shared)}
+      ownerName={shared?.ownerName}
     />
   );
 }

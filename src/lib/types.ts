@@ -124,6 +124,9 @@ export interface SetlistItemView {
 
 export interface SetlistDetailView extends SetlistSummary {
   items: SetlistItemView[];
+  viewerRole?: "owner" | "member";
+  ownerId?: string;
+  ownerName?: string | null;
 }
 
 /** Setlist só em localStorage (visitante). */

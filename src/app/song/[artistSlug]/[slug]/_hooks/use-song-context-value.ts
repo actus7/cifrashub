@@ -19,12 +19,14 @@ export function useSongContextValue({
   folderState,
   actions,
   versionState,
+  sharedContext,
 }: {
   currentSong: StoredSong | null;
   songData: Section[];
   folderState: ReturnType<typeof useSongFolderActions>;
   actions: ReturnType<typeof useSongPageActions>;
   versionState: SongVersionState;
+  sharedContext?: { ownerName: string | null } | null;
 }) {
   const p = actions.player;
   const youtubeEmbedUrl = currentSong?.youtubeId ? `https://www.youtube.com/embed/${currentSong.youtubeId}` : null;
@@ -56,5 +58,6 @@ export function useSongContextValue({
     onResetCache: versionState.onResetCache,
     versionActionPending: versionState.versionActionPending,
     hasSavedVersion: versionState.hasSavedVersion,
-  }), [actions, currentSong, folderState, p, songData, versionState, youtubeEmbedUrl]);
+    sharedContext: sharedContext ?? null,
+  }), [actions, currentSong, folderState, p, sharedContext, songData, versionState, youtubeEmbedUrl]);
 }

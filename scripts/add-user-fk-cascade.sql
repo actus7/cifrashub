@@ -54,6 +54,14 @@ WHERE us.folder_id IS NOT NULL
     SELECT 1 FROM public.user_folder uf WHERE uf.id = us.folder_id
   );
 
+DELETE FROM public.folder_member fm
+WHERE NOT EXISTS (SELECT 1 FROM public.user_folder uf WHERE uf.id = fm.folder_id)
+   OR NOT EXISTS (SELECT 1 FROM neon_auth."user" u WHERE u.id = fm.user_id);
+
+DELETE FROM public.setlist_member sm
+WHERE NOT EXISTS (SELECT 1 FROM public.user_setlist sl WHERE sl.id = sm.setlist_id)
+   OR NOT EXISTS (SELECT 1 FROM neon_auth."user" u WHERE u.id = sm.user_id);
+
 DO $$
 DECLARE
   r record;
@@ -66,7 +74,9 @@ BEGIN
         to_regclass('public.user_folder'),
         to_regclass('public.user_song'),
         to_regclass('public.user_setlist'),
-        to_regclass('public.share_snapshot')
+        to_regclass('public.share_snapshot'),
+        to_regclass('public.folder_member'),
+        to_regclass('public.setlist_member')
       ], NULL))
   LOOP
     EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.table_name, r.conname);
@@ -92,3 +102,11 @@ ALTER TABLE public.user_setlist
 ALTER TABLE public.share_snapshot
   ADD CONSTRAINT share_snapshot_created_by_user_id_fkey
   FOREIGN KEY (created_by_user_id) REFERENCES neon_auth."user"(id) ON DELETE CASCADE;
+
+ALTER TABLE public.folder_member
+  ADD CONSTRAINT folder_member_user_id_fkey
+  FOREIGN KEY (user_id) REFERENCES neon_auth."user"(id) ON DELETE CASCADE;
+
+ALTER TABLE public.setlist_member
+  ADD CONSTRAINT setlist_member_user_id_fkey
+  FOREIGN KEY (user_id) REFERENCES neon_auth."user"(id) ON DELETE CASCADE;

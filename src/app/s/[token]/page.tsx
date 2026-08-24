@@ -34,6 +34,19 @@ export async function generateMetadata({
     };
   }
 
+  if (payload.type === "folder-invite" || payload.type === "setlist-invite") {
+    return {
+      title: `Convite: ${payload.title}`,
+      description: payload.ownerName
+        ? `Compartilhado por ${payload.ownerName}`
+        : "Convite de acesso compartilhado",
+      robots: {
+        index: false,
+        follow: false,
+      },
+    };
+  }
+
   return {
     title: payload.title,
     description: payload.description ?? `Setlist: ${payload.title}`,
@@ -48,5 +61,5 @@ export default async function SharedPage({ params }: PageProps) {
   const { token } = await params;
   const payload = await fetchSharePayload(token);
 
-  return <PublicShareView payload={payload} />;
+  return <PublicShareView payload={payload} token={token} />;
 }

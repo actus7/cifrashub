@@ -16,6 +16,7 @@ import { useLibraryStore } from "@/store/use-library-store";
 import { FolderGrid } from "./folder-grid";
 import { RecentList } from "./recent-list";
 import { SearchBar } from "./search-bar";
+import { SharedWithMeSection } from "./shared-with-me-section";
 
 function HomeHeader() {
   return (
@@ -169,6 +170,7 @@ function LibrarySections({
         onOpen={onOpenSetlist}
         onDelete={onDeleteSetlist}
       />
+      <SharedWithMeSection />
       <RecentList
         recentes={recentes}
         onSelect={onSelectRecent}

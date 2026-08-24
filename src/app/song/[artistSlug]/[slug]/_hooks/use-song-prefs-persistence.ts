@@ -95,7 +95,11 @@ type PendingPrefs = { identity: string; tone: number; capo: number; uiPrefs: Sto
  * - On component unmount, any pending (debounced) payload is sent via
  *   `keepalive` fetch so the browser can complete it during navigation.
  */
-export function usePersistCloudSongPrefs(currentSong: StoredSong | null, player: PlayerContextState) {
+export function usePersistCloudSongPrefs(
+  currentSong: StoredSong | null,
+  player: PlayerContextState,
+  isSharedContext = false,
+) {
   const { status } = useSession();
   const lastPersistKeyRef = useRef("");
   const pendingPayloadRef = useRef<CloudPrefsPayload | null>(null);
@@ -120,7 +124,7 @@ export function usePersistCloudSongPrefs(currentSong: StoredSong | null, player:
     const prev = prevArrangementIdRef.current;
     prevArrangementIdRef.current = arrangementId;
 
-    if (!arrangementId || prev) return; // only on first appearance
+    if (!arrangementId || prev || isSharedContext) return; // only on first appearance
     const pending = latestPrefsRef.current;
     if (!pending || pending.identity !== identity) return;
 
@@ -136,7 +140,7 @@ export function usePersistCloudSongPrefs(currentSong: StoredSong | null, player:
     void cloudUpdateSongPrefs(arrangementId, payload).catch((error) => {
       console.error("Failed to flush pending cloud prefs", error);
     });
-  }, [arrangementId, identity]);
+  }, [arrangementId, identity, isSharedContext]);
 
   // Debounced persist when arrangementId is already present.
   const payload = useMemo(
@@ -152,18 +156,18 @@ export function usePersistCloudSongPrefs(currentSong: StoredSong | null, player:
 
   useEffect(() => {
     const currentPayload = payloadRef.current;
-    if (!shouldPersistCloudPrefs(status, currentPayload, persistKey, lastPersistKeyRef) || !currentPayload) return;
+    if (isSharedContext || !shouldPersistCloudPrefs(status, currentPayload, persistKey, lastPersistKeyRef) || !currentPayload) return;
     pendingPayloadRef.current = currentPayload;
     const timeout = setTimeout(() => persistCloudPrefs(currentPayload, persistKey, lastPersistKeyRef, pendingPayloadRef), 800);
     return () => clearTimeout(timeout);
-  }, [persistKey, status]);
+  }, [isSharedContext, persistKey, status]);
 
   // Flush on unmount so the browser can finish the request during navigation.
   useEffect(() => {
     return () => {
-      if (pendingPayloadRef.current) flushPendingCloudPrefs(pendingPayloadRef.current);
+      if (!isSharedContext && pendingPayloadRef.current) flushPendingCloudPrefs(pendingPayloadRef.current);
     };
-  }, []);
+  }, [isSharedContext]);
 }
 
 function flushPendingCloudPrefs(payload: CloudPrefsPayload) {

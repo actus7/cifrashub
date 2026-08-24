@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { userSetlists } from "@/db/schema";
 import { readJsonBody, requireApiUserId } from "@/lib/server/api-route";
+import { resolveSetlistAccess } from "@/lib/server/access";
 import {
   getSetlistDetail,
   listSetlistsForUser,
@@ -43,9 +44,20 @@ export async function GET(_req: Request, ctx: RouteCtx) {
   if ("response" in auth) return auth.response;
 
   const { id } = await ctx.params;
-  const detail = await getSetlistDetail(auth.userId, id);
-  if (!detail) return setlistNotFound();
-  return NextResponse.json(detail);
+  const ownDetail = await getSetlistDetail(auth.userId, id);
+  if (ownDetail) return NextResponse.json({ ...ownDetail, viewerRole: "owner" });
+
+  const access = await resolveSetlistAccess(auth.userId, id);
+  if (access.role !== "member" || !access.ownerId) return setlistNotFound();
+
+  const sharedDetail = await getSetlistDetail(access.ownerId, id);
+  if (!sharedDetail) return setlistNotFound();
+  return NextResponse.json({
+    ...sharedDetail,
+    viewerRole: "member",
+    ownerId: access.ownerId,
+    ownerName: access.ownerName,
+  });
 }
 
 export async function PATCH(req: Request, ctx: RouteCtx) {

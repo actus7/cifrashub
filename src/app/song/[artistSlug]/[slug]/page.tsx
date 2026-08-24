@@ -25,7 +25,7 @@ export default function SongPage() {
     songState.arrangementId,
   );
   usePersistCurrentSongPrefs(songState.currentSong, songState.setCurrentSong, actions.player);
-  usePersistCloudSongPrefs(songState.currentSong, actions.player);
+  usePersistCloudSongPrefs(songState.currentSong, actions.player, songState.isSharedContext);
   useApplyEditResult(
     artistSlug,
     slug,
@@ -54,6 +54,7 @@ export default function SongPage() {
     folderState,
     actions,
     versionState,
+    sharedContext: songState.isSharedContext ? { ownerName: songState.sharedOwnerName } : null,
   });
 
   if (songState.isLoading) return <SongPageSkeleton />;

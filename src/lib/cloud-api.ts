@@ -135,6 +135,15 @@ export async function cloudFetchSetlists(): Promise<{ setlists: SetlistSummary[]
   return apiJson("/api/setlists");
 }
 
+export type SharedSummary = {
+  folders: Array<{ id: string; title: string; ownerName: string | null }>;
+  setlists: Array<{ id: string; title: string; description: string | null; ownerName: string | null }>;
+};
+
+export async function cloudFetchSharedSummary(): Promise<SharedSummary> {
+  return apiJson("/api/shared/summary");
+}
+
 export async function cloudCreateSetlist(
   title: string,
   description?: string | null,
