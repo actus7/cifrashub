@@ -8,6 +8,7 @@ import { useSession } from "@/hooks/use-session";
 import { buildLocalSetlistDetail } from "@/lib/setlist-local";
 import {
   cloudAddSetlistItem,
+  cloudCreateSetlistShareLink,
   cloudGetSetlist,
   cloudRemoveSetlistItem,
   cloudReorderSetlistItems,
@@ -92,6 +93,9 @@ export default function SetlistPage() {
 
   const [detail, setDetail] = useState<SetlistDetailView | null>(null);
   const [loading, setLoading] = useState(true);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -180,6 +184,26 @@ export default function SetlistPage() {
     updateLocalSetlist((items) => localItemsWithPositions(items, patches));
   };
 
+  const onShare = async () => {
+    if (shareBusy) return;
+
+    setShareBusy(true);
+    setShareError(null);
+    try {
+      const { token } = await cloudCreateSetlistShareLink(setId);
+      setShareUrl(`${window.location.origin}/s/${token}`);
+    } catch (err) {
+      setShareError(err instanceof Error && err.message ? err.message : "Não foi possível gerar o link.");
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const onDismissShare = () => {
+    setShareUrl(null);
+    setShareError(null);
+  };
+
   const onOpenSong = (song: StoredSong) => {
     const params = new URLSearchParams({ arrangementId: arrangementKey(song) });
     if (detail?.viewerRole === "member" && detail.ownerId) params.set("ownerId", detail.ownerId);
@@ -200,7 +224,11 @@ export default function SetlistPage() {
       onAddItem={onAddItem}
       onRemoveItem={onRemoveItem}
       onMoveItem={onMoveItem}
-      onShare={() => {}}
+      onShare={isCloud && detail.viewerRole !== "member" ? onShare : undefined}
+      shareBusy={shareBusy}
+      shareUrl={shareUrl}
+      shareError={shareError}
+      onDismissShare={onDismissShare}
       disabled={detail.viewerRole === "member"}
     />
   );

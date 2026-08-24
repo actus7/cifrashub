@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { userSongs } from "@/db/schema";
@@ -7,16 +7,7 @@ import { readJsonBody } from "@/lib/server/api-route";
 import { loadCloudFoldersAndSongs } from "@/lib/server/cloud-data";
 import { requireOwnedFolder } from "@/lib/server/folder-route";
 import { nextPosition } from "@/lib/server/positions";
-import {
-  resolveArrangementId,
-  sourceArtistSlugForRow,
-  sourceSlugForRow,
-} from "@/lib/server/song-persist";
-import {
-  buildStoredSongRow,
-  toneCapoUiFromStored,
-  youtubeIdForRow,
-} from "@/lib/server/stored-song-row";
+import { buildStoredSongRow } from "@/lib/server/stored-song-row";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 type OwnedFolderCtx = Awaited<ReturnType<typeof requireOwnedFolder>>;
@@ -35,16 +26,6 @@ async function respondWithFolders(userId: string) {
   return NextResponse.json({ folders });
 }
 
-async function existingSongId(folderCtx: ResolvedFolderCtx, arrangementId: string) {
-  const existing = await db
-    .select({ id: userSongs.id })
-    .from(userSongs)
-    .where(folderSongWhere(folderCtx, arrangementId))
-    .limit(1);
-
-  return existing[0]?.id ?? null;
-}
-
 async function nextFolderSongPosition(folderCtx: ResolvedFolderCtx) {
   const rows = await db
     .select({ position: userSongs.position })
@@ -52,37 +33,6 @@ async function nextFolderSongPosition(folderCtx: ResolvedFolderCtx) {
     .where(and(eq(userSongs.userId, folderCtx.userId), eq(userSongs.folderId, folderCtx.folderId)));
 
   return nextPosition(rows);
-}
-
-async function updateFolderSong(id: string, song: StoredSong) {
-  const rowSong = toneCapoUiFromStored(song);
-
-  await db
-    .update(userSongs)
-    .set({
-      songId: song.id,
-      title: song.title,
-      artist: song.artist,
-      artistSlug: song.artistSlug,
-      slug: song.slug,
-      youtubeId: youtubeIdForRow(song),
-      songData: song.songData,
-      tone: rowSong.tone,
-      capo: rowSong.capo,
-      uiPrefs: rowSong.uiPrefs,
-      sourceArtistSlug: sourceArtistSlugForRow(song),
-      sourceSlug: sourceSlugForRow(song),
-      isRecent: false,
-      updatedAt: new Date(),
-    })
-    .where(eq(userSongs.id, id));
-}
-
-async function insertFolderSong(folderCtx: ResolvedFolderCtx, song: StoredSong) {
-  const position = await nextFolderSongPosition(folderCtx);
-  await db.insert(userSongs).values({
-    ...buildStoredSongRow(folderCtx.userId, folderCtx.folderId, song, position, false),
-  });
 }
 
 function hasStoredSongIdentity(song: StoredSong) {
@@ -98,13 +48,38 @@ function isValidStoredSong(song: StoredSong | null | undefined): song is StoredS
   return hasStoredSongIdentity(song) && hasStoredSongContent(song);
 }
 
+/**
+ * Upsert atômico: um SELECT-depois-INSERT/UPDATE deixava uma janela onde duas
+ * gravações concorrentes da mesma música na mesma pasta (dois cliques, duas
+ * abas) podiam colidir na unique constraint (user_id, folder_id, arrangement_id).
+ */
 async function upsertFolderSong(folderCtx: ResolvedFolderCtx, song: StoredSong) {
-  const existingId = await existingSongId(folderCtx, resolveArrangementId(song));
-  if (existingId) {
-    await updateFolderSong(existingId, song);
-    return;
-  }
-  await insertFolderSong(folderCtx, song);
+  const position = await nextFolderSongPosition(folderCtx);
+  const row = buildStoredSongRow(folderCtx.userId, folderCtx.folderId, song, position, false);
+
+  await db
+    .insert(userSongs)
+    .values(row)
+    .onConflictDoUpdate({
+      target: [userSongs.userId, userSongs.folderId, userSongs.arrangementId],
+      targetWhere: sql`${userSongs.folderId} is not null`,
+      set: {
+        songId: row.songId,
+        title: row.title,
+        artist: row.artist,
+        artistSlug: row.artistSlug,
+        slug: row.slug,
+        youtubeId: row.youtubeId,
+        songData: row.songData,
+        tone: row.tone,
+        capo: row.capo,
+        uiPrefs: row.uiPrefs,
+        sourceArtistSlug: row.sourceArtistSlug,
+        sourceSlug: row.sourceSlug,
+        isRecent: false,
+        updatedAt: new Date(),
+      },
+    });
 }
 
 export async function GET(_req: Request, ctx: RouteCtx) {

@@ -1,8 +1,9 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { userSongs } from "@/db/schema";
 import type { StoredSong } from "@/lib/types";
 import { buildStoredSongRow } from "@/lib/server/stored-song-row";
+import { resolveArrangementId } from "@/lib/server/song-persist";
 import { arrangementKey } from "@/lib/arrangement-key";
 
 export function dedupeSongsByArrangement(
@@ -28,31 +29,71 @@ function addUniqueSongKey(seen: Set<string>, key: string) {
   return true;
 }
 
-export async function clearRecentSongsForUser(userId: string) {
-  await db
-    .delete(userSongs)
-    .where(
-      and(
-        eq(userSongs.userId, userId),
-        isNull(userSongs.folderId),
-        eq(userSongs.isRecent, true),
-      ),
-    );
+function recentSongsWhere(userId: string) {
+  return and(
+    eq(userSongs.userId, userId),
+    isNull(userSongs.folderId),
+    eq(userSongs.isRecent, true),
+  );
 }
 
+export async function clearRecentSongsForUser(userId: string) {
+  await db.delete(userSongs).where(recentSongsWhere(userId));
+}
+
+/**
+ * Cada música é upsertada individualmente (INSERT ... ON CONFLICT), em vez de apagar
+ * tudo e reinserir tudo: duas chamadas concorrentes para o mesmo usuário (ex.: dois
+ * efeitos de "adicionar aos recentes" disparando quase juntos — inclusive o duplo
+ * disparo do React Strict Mode em dev) colidiam na unique constraint
+ * (user_id, arrangement_id) porque um "delete geral + insert geral" de uma chamada
+ * podia terminar bem no meio do "delete geral + insert geral" da outra. Upsert por
+ * linha é seguro mesmo com chamadas concorrentes: cada INSERT resolve seu próprio
+ * conflito, não existe mais uma janela de "todas as linhas apagadas, nenhuma inserida
+ * ainda" para a outra chamada pisar.
+ */
 export async function replaceRecentSongsForUser(
   userId: string,
   songs: StoredSong[],
 ) {
-  await clearRecentSongsForUser(userId);
+  const arrangementIds = songs.map((song) => resolveArrangementId(song));
 
-  if (songs.length > 0) {
-    await db
-      .insert(userSongs)
-      .values(
-        songs.map((song, index) =>
-          buildStoredSongRow(userId, null, song, index, true),
-        ),
-      );
-  }
+  await db
+    .delete(userSongs)
+    .where(
+      arrangementIds.length > 0
+        ? and(recentSongsWhere(userId), notInArray(userSongs.arrangementId, arrangementIds))
+        : recentSongsWhere(userId),
+    );
+
+  await Promise.all(songs.map((song, index) => upsertRecentSong(userId, song, index)));
+}
+
+function upsertRecentSong(userId: string, song: StoredSong, position: number) {
+  const row = buildStoredSongRow(userId, null, song, position, true);
+
+  return db
+    .insert(userSongs)
+    .values(row)
+    .onConflictDoUpdate({
+      target: [userSongs.userId, userSongs.arrangementId],
+      targetWhere: sql`${userSongs.folderId} is null and ${userSongs.isRecent} = true`,
+      set: {
+        songId: row.songId,
+        title: row.title,
+        artist: row.artist,
+        artistSlug: row.artistSlug,
+        slug: row.slug,
+        youtubeId: row.youtubeId,
+        songData: row.songData,
+        tone: row.tone,
+        capo: row.capo,
+        uiPrefs: row.uiPrefs,
+        sourceArtistSlug: row.sourceArtistSlug,
+        sourceSlug: row.sourceSlug,
+        isRecent: true,
+        position,
+        updatedAt: new Date(),
+      },
+    });
 }

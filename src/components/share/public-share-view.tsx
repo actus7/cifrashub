@@ -7,6 +7,7 @@ import { LoginButton } from "@/components/auth/login-button";
 import { Button } from "@/components/ui/button";
 import { SongContent } from "@/components/song/song-content";
 import { useSession } from "@/hooks/use-session";
+import { useLibraryStore } from "@/store/use-library-store";
 import type { ShareSnapshotPayload } from "@/lib/share-payload";
 
 type Props = {
@@ -28,6 +29,24 @@ export function PublicShareView({ payload, token }: Props) {
 
 type InvitePayload = Extract<ShareSnapshotPayload, { type: "folder-invite" | "setlist-invite" }>;
 
+function addJoinedResourceToStore(resourceType: "folder" | "setlist", id: string, payload: InvitePayload) {
+  const { sharedFolders, sharedSetlists, setSharedSummary } = useLibraryStore.getState();
+  const entry = { id, title: payload.title, ownerName: payload.ownerName };
+
+  if (resourceType === "folder") {
+    setSharedSummary({
+      folders: [...sharedFolders.filter((f) => f.id !== id), entry],
+      setlists: sharedSetlists,
+    });
+    return;
+  }
+
+  setSharedSummary({
+    folders: sharedFolders,
+    setlists: [...sharedSetlists.filter((s) => s.id !== id), { ...entry, description: null }],
+  });
+}
+
 function InviteShare({ payload, token }: { payload: InvitePayload; token: string }) {
   const router = useRouter();
   const { status } = useSession();
@@ -47,6 +66,7 @@ function InviteShare({ payload, token }: { payload: InvitePayload; token: string
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Não foi possível entrar.");
+      addJoinedResourceToStore(data.resourceType, data.id, payload);
       router.push(data.resourceType === "folder" ? `/folder/${data.id}` : `/setlist/${data.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível entrar.");

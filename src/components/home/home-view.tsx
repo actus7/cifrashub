@@ -10,7 +10,6 @@ import { SetlistsHomeSection } from "@/components/setlist/setlists-home-section"
 import { useLibraryActions } from "@/hooks/use-library-actions";
 import { arrangementKey } from "@/lib/arrangement-key";
 import { useSearchDebounced } from "@/hooks/use-search";
-import { cloudCreateSetlist, cloudDeleteSetlist } from "@/lib/storage";
 import type { SearchResultArtist, SearchResultSong, StoredSong } from "@/lib/types";
 import { useLibraryStore } from "@/store/use-library-store";
 import { FolderGrid } from "./folder-grid";
@@ -191,7 +190,8 @@ export function HomeView() {
   const recentes = useLibraryStore((s) => s.recentes);
   const libraryLoaded = useLibraryStore((s) => s.libraryLoaded);
 
-  const { doCreateFolder, clearAllRecentes, removeFromRecentes } = useLibraryActions();
+  const { doCreateFolder, doCreateSetlist, doDeleteSetlist, clearAllRecentes, removeFromRecentes } =
+    useLibraryActions();
 
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -217,18 +217,7 @@ export function HomeView() {
     router.push(`/song/${song.artistSlug}/${song.slug}?${params.toString()}`);
   };
 
-  const onCreateSetlist = async (title: string) => {
-    try {
-      if (title.trim()) await cloudCreateSetlist(title.trim(), null);
-    } catch {}
-  };
-
   const onOpenSetlist = (id: string) => router.push(`/setlist/${id}`);
-  const onDeleteSetlist = async (id: string) => {
-    try {
-      await cloudDeleteSetlist(id);
-    } catch {}
-  };
 
   return (
     <div className="flex min-h-screen flex-col bg-background selection:bg-primary/30">
@@ -260,9 +249,9 @@ export function HomeView() {
                 onCancelCreateFolder={handleCancelCreateFolder}
                 onSubmitCreateFolder={handleSubmitCreateFolder}
                 onOpenFolder={onOpenFolder}
-                onCreateSetlist={onCreateSetlist}
+                onCreateSetlist={doCreateSetlist}
                 onOpenSetlist={onOpenSetlist}
-                onDeleteSetlist={onDeleteSetlist}
+                onDeleteSetlist={doDeleteSetlist}
                 onSelectRecent={onSelectRecent}
                 removeFromRecentes={removeFromRecentes}
                 clearAllRecentes={clearAllRecentes}

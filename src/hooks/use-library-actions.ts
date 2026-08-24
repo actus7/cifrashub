@@ -3,12 +3,17 @@ import { useLibraryStore } from "@/store/use-library-store";
 import { useSession } from "@/hooks/use-session";
 import {
   cloudCreateFolder,
+  cloudCreateSetlist,
   cloudDeleteFolder,
+  cloudDeleteSetlist,
   cloudSaveRecentes,
   cloudClearRecentes,
+  loadLocalSetlists,
   saveFolders,
+  saveLocalSetlists,
   saveRecentes,
 } from "@/lib/storage";
+import { createLocalSetlist, localSetlistsToSummaries } from "@/lib/setlist-local";
 import { songIdentityKey } from "@/lib/song-identity-key";
 import type { Folder, StoredSong } from "@/lib/types";
 import { cloudSyncSignalKey } from "@/lib/sync-signal-key";
@@ -172,11 +177,51 @@ function syncCloudRecentes(
     });
 }
 
+function useSetlistActions({ isCloud }: CloudState) {
+  const setSetlistSummaries = useLibraryStore((s) => s.setSetlistSummaries);
+
+  const doCreateSetlist = useCallback(
+    async (title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed) return;
+
+      if (isCloud) {
+        const { setlists } = await cloudCreateSetlist(trimmed, null);
+        setSetlistSummaries(setlists);
+        return;
+      }
+
+      const next = createLocalSetlist(loadLocalSetlists() ?? [], trimmed);
+      saveLocalSetlists(next);
+      setSetlistSummaries(localSetlistsToSummaries(next));
+    },
+    [isCloud, setSetlistSummaries],
+  );
+
+  const doDeleteSetlist = useCallback(
+    async (id: string) => {
+      if (isCloud) {
+        const { setlists } = await cloudDeleteSetlist(id);
+        setSetlistSummaries(setlists);
+        return;
+      }
+
+      const next = (loadLocalSetlists() ?? []).filter((setlist) => setlist.id !== id);
+      saveLocalSetlists(next);
+      setSetlistSummaries(localSetlistsToSummaries(next));
+    },
+    [isCloud, setSetlistSummaries],
+  );
+
+  return { doCreateSetlist, doDeleteSetlist };
+}
+
 export function useLibraryActions() {
   const cloudState = useCloudState();
   return {
     ...useFolderActions(cloudState),
     ...useRecentActions(cloudState),
+    ...useSetlistActions(cloudState),
     notifyCloudMutation: cloudState.notifyCloudMutation,
   };
 }

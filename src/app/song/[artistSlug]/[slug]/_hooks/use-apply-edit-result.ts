@@ -1,8 +1,15 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import { useSession } from "@/hooks/use-session";
+import { arrangementKey } from "@/lib/arrangement-key";
 import { readEditResult, type EditOrigin } from "@/lib/cifras-edit-bridge";
 import { replaceSongByArrangement } from "@/lib/replace-song-by-arrangement";
-import { cloudAddSongToFolder, cloudSaveRecentes, saveFolders, saveRecentes } from "@/lib/storage";
+import {
+  cloudAddSongToFolder,
+  cloudSaveRecentes,
+  cloudSyncSongContent,
+  saveFolders,
+  saveRecentes,
+} from "@/lib/storage";
 import type { Section, StoredSong } from "@/lib/types";
 import { useLibraryStore } from "@/store/use-library-store";
 
@@ -92,12 +99,19 @@ async function persistEditedContentCloud(folderId: string | null, song: StoredSo
   if (folderId) {
     const { folders } = await cloudAddSongToFolder(folderId, song);
     useLibraryStore.getState().setFolders(folders);
-    return;
+  } else {
+    const { recentes, setRecentes } = useLibraryStore.getState();
+    const nextRecentes = replaceSongByArrangement(recentes, song).slice(0, 15);
+    const { recentes: synced } = await cloudSaveRecentes(nextRecentes);
+    setRecentes(synced);
   }
-  const { recentes, setRecentes } = useLibraryStore.getState();
-  const nextRecentes = replaceSongByArrangement(recentes, song).slice(0, 15);
-  const { recentes: synced } = await cloudSaveRecentes(nextRecentes);
-  setRecentes(synced);
+
+  // A música pode existir em outras linhas além da que acabamos de tocar aqui em
+  // cima (outra pasta, ou a cópia de recentes quando isso rodou pelo branch da
+  // pasta) — propaga o conteúdo editado para todas elas.
+  await cloudSyncSongContent(arrangementKey(song), song).catch((error) => {
+    console.error("Failed to sync edited content across placements", error);
+  });
 }
 
 function persistEditedContentLocal(folderId: string | null, song: StoredSong) {

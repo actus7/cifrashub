@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cifrashub-v1';
+const CACHE_NAME = 'cifrashub-v2';
 
 const PRECACHE_URLS = [
   '/',
