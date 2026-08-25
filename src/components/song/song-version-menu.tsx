@@ -113,6 +113,7 @@ function VersionPopoverContent({
     onResetCache,
     versionActionPending,
     hasSavedVersion,
+    sharedContext,
   } = useSongViewContext();
 
   const [confirmResetSaved, setConfirmResetSaved] = useState(false);
@@ -153,31 +154,35 @@ function VersionPopoverContent({
           }}
         />
 
-        <div className="mx-2 my-1.5 h-px bg-border" />
+        {sharedContext ? null : (
+          <>
+            <div className="mx-2 my-1.5 h-px bg-border" />
 
-        <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Ações
-        </p>
+            <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Ações
+            </p>
 
-        <VersionAction
-          icon={History}
-          label="Restaurar personalizada"
-          helper="Volta a cifra salva ao conteúdo original"
-          disabled={versionActionPending || !hasSavedVersion}
-          pending={versionActionPending}
-          onClick={() => setConfirmResetSaved(true)}
-        />
-        <VersionAction
-          icon={RefreshCw}
-          label="Limpar cache e atualizar"
-          helper="Busca a cifra direto do Cifra Club e renova o cache"
-          disabled={versionActionPending}
-          pending={versionActionPending}
-          onClick={() => {
-            onResetCache();
-            setExpanded(null);
-          }}
-        />
+            <VersionAction
+              icon={History}
+              label="Restaurar personalizada"
+              helper="Volta a cifra salva ao conteúdo original"
+              disabled={versionActionPending || !hasSavedVersion}
+              pending={versionActionPending}
+              onClick={() => setConfirmResetSaved(true)}
+            />
+            <VersionAction
+              icon={RefreshCw}
+              label="Limpar cache e atualizar"
+              helper="Busca a cifra direto do Cifra Club e renova o cache"
+              disabled={versionActionPending}
+              pending={versionActionPending}
+              onClick={() => {
+                onResetCache();
+                setExpanded(null);
+              }}
+            />
+          </>
+        )}
       </div>
 
       <AlertDialog open={confirmResetSaved} onOpenChange={setConfirmResetSaved}>

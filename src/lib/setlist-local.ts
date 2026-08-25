@@ -9,6 +9,17 @@ import type {
   StoredSong,
 } from "@/lib/types";
 
+export function createLocalSetlist(
+  existing: LocalSetlistStored[],
+  title: string,
+): LocalSetlistStored[] {
+  const id =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return [...existing, { id, title, description: null, items: [] }];
+}
+
 export function localSetlistsToSummaries(
   list: LocalSetlistStored[],
 ): SetlistSummary[] {

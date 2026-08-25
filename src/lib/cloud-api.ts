@@ -165,6 +165,15 @@ export async function cloudDeleteSetlist(
   });
 }
 
+export async function cloudCreateSetlistShareLink(
+  setlistId: string,
+): Promise<{ token: string; snapshotId: string }> {
+  return apiJson("/api/share", {
+    method: "POST",
+    body: JSON.stringify({ resourceType: "setlist-invite", setlistId }),
+  });
+}
+
 export async function cloudGetSetlist(id: string): Promise<SetlistDetailView> {
   return apiJson(`/api/setlists/${encodeURIComponent(id)}`);
 }
@@ -204,9 +213,27 @@ export async function cloudReorderSetlistItems(
 export async function cloudUpdateSongPrefs(
   arrangementId: string,
   prefs: { tone: number; capo: number; uiPrefs: StoredSongUiPrefs },
+  song?: StoredSong,
 ): Promise<{ ok: true }> {
   return apiJson("/api/songs/prefs", {
     method: "PATCH",
-    body: JSON.stringify({ arrangementId, ...prefs }),
+    body: JSON.stringify({ arrangementId, ...prefs, song }),
+  });
+}
+
+/**
+ * Sincroniza o conteúdo editado de uma música em TODAS as linhas existentes
+ * para esse arranjo (pasta(s) + recentes) — não só na que estava "ativa" ao
+ * salvar. Sem isso, editar uma música aberta sem contexto de pasta (ex.: pelo
+ * setlist) só atualiza a cópia de "recentes", e telas que priorizam a cópia
+ * de pasta continuam mostrando a versão antiga.
+ */
+export async function cloudSyncSongContent(
+  arrangementId: string,
+  song: StoredSong,
+): Promise<{ ok: true }> {
+  return apiJson("/api/songs/prefs", {
+    method: "PATCH",
+    body: JSON.stringify({ arrangementId, song }),
   });
 }

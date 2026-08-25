@@ -105,12 +105,17 @@ export function usePersistCloudSongPrefs(
   const pendingPayloadRef = useRef<CloudPrefsPayload | null>(null);
   const latestPrefsRef = useRef<PendingPrefs | null>(null);
   const prevArrangementIdRef = useRef<string | undefined>(currentSong?.arrangementId);
+  const currentSongRef = useRef(currentSong);
 
   const arrangementId = currentSong?.arrangementId;
   const identity = currentSong ? songIdentityKey(currentSong) : "";
   const tone = player.tone;
   const capo = player.capo;
   const ui = uiPrefs(player);
+
+  useEffect(() => {
+    currentSongRef.current = currentSong;
+  }, [currentSong]);
 
   // Always keep the latest prefs so we can flush when arrangementId appears.
   useEffect(() => {
@@ -137,7 +142,7 @@ export function usePersistCloudSongPrefs(
     // Mark as flushed so the debounce effect doesn't re-send identical prefs.
     lastPersistKeyRef.current = JSON.stringify(payload);
     latestPrefsRef.current = null;
-    void cloudUpdateSongPrefs(arrangementId, payload).catch((error) => {
+    void cloudUpdateSongPrefs(arrangementId, payload, currentSongRef.current ?? undefined).catch((error) => {
       console.error("Failed to flush pending cloud prefs", error);
     });
   }, [arrangementId, identity, isSharedContext]);
@@ -158,26 +163,31 @@ export function usePersistCloudSongPrefs(
     const currentPayload = payloadRef.current;
     if (isSharedContext || !shouldPersistCloudPrefs(status, currentPayload, persistKey, lastPersistKeyRef) || !currentPayload) return;
     pendingPayloadRef.current = currentPayload;
-    const timeout = setTimeout(() => persistCloudPrefs(currentPayload, persistKey, lastPersistKeyRef, pendingPayloadRef), 800);
+    const timeout = setTimeout(
+      () => persistCloudPrefs(currentPayload, persistKey, lastPersistKeyRef, pendingPayloadRef, currentSongRef.current),
+      800,
+    );
     return () => clearTimeout(timeout);
   }, [isSharedContext, persistKey, status]);
 
   // Flush on unmount so the browser can finish the request during navigation.
   useEffect(() => {
     return () => {
-      if (!isSharedContext && pendingPayloadRef.current) flushPendingCloudPrefs(pendingPayloadRef.current);
+      if (!isSharedContext && pendingPayloadRef.current) {
+        flushPendingCloudPrefs(pendingPayloadRef.current, currentSongRef.current);
+      }
     };
   }, [isSharedContext]);
 }
 
-function flushPendingCloudPrefs(payload: CloudPrefsPayload) {
+function flushPendingCloudPrefs(payload: CloudPrefsPayload, song: StoredSong | null) {
   try {
     fetch("/api/songs/prefs", {
       method: "PATCH",
       credentials: "include",
       keepalive: true,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, song: song ?? undefined }),
     });
   } catch {
     // swallow — best-effort on unload
@@ -198,10 +208,11 @@ function persistCloudPrefs(
   persistKey: string,
   lastPersistKeyRef: MutableRefObject<string>,
   pendingPayloadRef: MutableRefObject<CloudPrefsPayload | null>,
+  song: StoredSong | null,
 ) {
   lastPersistKeyRef.current = persistKey;
   pendingPayloadRef.current = null;
-  void cloudUpdateSongPrefs(payload.arrangementId, payload).catch((error) => {
+  void cloudUpdateSongPrefs(payload.arrangementId, payload, song ?? undefined).catch((error) => {
     console.error("Failed to persist song prefs in cloud", error);
   });
 }

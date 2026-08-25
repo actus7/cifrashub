@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   ChevronDown,
@@ -10,7 +11,9 @@ import {
   ListMusic,
   Loader2,
   Trash2,
+  X,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { flattenLibrarySongs } from "@/lib/library-flat";
 import { arrangementKey } from "@/lib/arrangement-key";
@@ -32,6 +35,9 @@ type SetlistDetailViewProps = {
   onMoveItem: (itemId: string, direction: -1 | 1) => Promise<void> | void;
   onShare?: () => void;
   shareBusy?: boolean;
+  shareUrl?: string | null;
+  shareError?: string | null;
+  onDismissShare?: () => void;
   disabled?: boolean;
 };
 
@@ -83,6 +89,9 @@ export function SetlistDetailViewScreen({
   onMoveItem,
   onShare,
   shareBusy,
+  shareUrl,
+  shareError,
+  onDismissShare,
   disabled,
 }: SetlistDetailViewProps) {
   const library = flattenLibrarySongs(folders, recentes);
@@ -100,6 +109,13 @@ export function SetlistDetailViewScreen({
       />
 
       <main className="mx-auto w-full max-w-lg flex-1 px-4 pb-24 pt-6">
+        {shareUrl || shareError ? (
+          <ShareLinkPanel
+            url={shareUrl ?? null}
+            error={shareError ?? null}
+            onDismiss={onDismissShare ?? (() => {})}
+          />
+        ) : null}
         <SetlistHero detail={detail} />
         <AddSongSelect addable={addable} disabled={disabled} onAddItem={onAddItem} />
         <SetlistItems
@@ -136,14 +152,72 @@ function SetlistHeader({ onBack, onShare, shareBusy, disabled }: SetlistHeaderPr
             disabled={disabled || shareBusy}
             onClick={onShare}
           >
-            <Link2 className="size-4" />
-            {shareBusy ? "…" : "Link"}
+            {shareBusy ? <Loader2 className="size-4 animate-spin" /> : <Link2 className="size-4" />}
+            Link
           </Button>
         </div>
       ) : (
         <div className="size-8" />
       )}
     </header>
+  );
+}
+
+function ShareLinkPanel({
+  url,
+  error,
+  onDismiss,
+}: {
+  url: string | null;
+  error: string | null;
+  onDismiss: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard indisponível: o link já está visível para copiar manualmente */
+    }
+  };
+
+  if (error) {
+    return (
+      <Alert variant="destructive" className="mb-4 animate-in fade-in">
+        <AlertTriangle className="size-4" />
+        <AlertTitle className="sr-only">Erro</AlertTitle>
+        <AlertDescription className="flex flex-1 items-start gap-2 pr-8">
+          <span className="flex-1 text-sm">{error}</span>
+          <Button type="button" variant="ghost" size="icon-sm" className="shrink-0" onClick={onDismiss}>
+            <X className="size-4" />
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Alert className="mb-4 animate-in fade-in">
+      <Link2 className="size-4" />
+      <AlertTitle>Link de convite gerado</AlertTitle>
+      <AlertDescription className="flex flex-1 flex-wrap items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs text-foreground">
+          {url}
+        </code>
+        <div className="flex shrink-0 gap-1">
+          <Button type="button" size="sm" variant="outline" onClick={() => void handleCopy()}>
+            {copied ? "Copiado!" : "Copiar"}
+          </Button>
+          <Button type="button" variant="ghost" size="icon-sm" onClick={onDismiss}>
+            <X className="size-4" />
+          </Button>
+        </div>
+      </AlertDescription>
+    </Alert>
   );
 }
 
