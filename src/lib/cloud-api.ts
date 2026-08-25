@@ -174,6 +174,12 @@ export async function cloudCreateSetlistShareLink(
   });
 }
 
+export async function cloudLeaveSetlist(id: string): Promise<{ ok: true }> {
+  return apiJson(`/api/setlists/${encodeURIComponent(id)}/membership`, {
+    method: "DELETE",
+  });
+}
+
 export async function cloudGetSetlist(id: string): Promise<SetlistDetailView> {
   return apiJson(`/api/setlists/${encodeURIComponent(id)}`);
 }
