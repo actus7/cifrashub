@@ -10,6 +10,7 @@ import {
   Link2,
   ListMusic,
   Loader2,
+  LogOut,
   Trash2,
   X,
 } from "lucide-react";
@@ -34,6 +35,7 @@ type SetlistDetailViewProps = {
   onRemoveItem: (itemId: string) => Promise<void> | void;
   onMoveItem: (itemId: string, direction: -1 | 1) => Promise<void> | void;
   onShare?: () => void;
+  onLeave?: () => Promise<void> | void;
   shareBusy?: boolean;
   shareUrl?: string | null;
   shareError?: string | null;
@@ -44,8 +46,10 @@ type SetlistDetailViewProps = {
 type SetlistHeaderProps = {
   onBack: () => void;
   onShare?: () => void;
+  onLeave?: () => Promise<void> | void;
   shareBusy?: boolean;
   disabled?: boolean;
+  isMember?: boolean;
 };
 
 type AddSongSelectProps = {
@@ -88,6 +92,7 @@ export function SetlistDetailViewScreen({
   onRemoveItem,
   onMoveItem,
   onShare,
+  onLeave,
   shareBusy,
   shareUrl,
   shareError,
@@ -104,8 +109,10 @@ export function SetlistDetailViewScreen({
       <SetlistHeader
         onBack={onBack}
         onShare={onShare}
+        onLeave={onLeave}
         shareBusy={shareBusy}
         disabled={disabled}
+        isMember={detail.viewerRole === "member"}
       />
 
       <main className="mx-auto w-full max-w-lg flex-1 px-4 pb-24 pt-6">
@@ -130,7 +137,19 @@ export function SetlistDetailViewScreen({
   );
 }
 
-function SetlistHeader({ onBack, onShare, shareBusy, disabled }: SetlistHeaderProps) {
+function SetlistHeader({ onBack, onShare, onLeave, shareBusy, disabled, isMember }: SetlistHeaderProps) {
+  const [leaving, setLeaving] = useState(false);
+
+  const handleLeave = async () => {
+    if (leaving || !onLeave) return;
+    setLeaving(true);
+    try {
+      await onLeave();
+    } finally {
+      setLeaving(false);
+    }
+  };
+
   return (
     <header className="flex items-center justify-between gap-2 border-b border-border/60 p-4">
       <Button
@@ -142,8 +161,8 @@ function SetlistHeader({ onBack, onShare, shareBusy, disabled }: SetlistHeaderPr
         <ArrowLeft className="size-5" />
         Voltar
       </Button>
-      {onShare ? (
-        <div className="flex gap-1">
+      <div className="flex gap-1">
+        {onShare ? (
           <Button
             type="button"
             variant="outline"
@@ -155,10 +174,22 @@ function SetlistHeader({ onBack, onShare, shareBusy, disabled }: SetlistHeaderPr
             {shareBusy ? <Loader2 className="size-4 animate-spin" /> : <Link2 className="size-4" />}
             Link
           </Button>
-        </div>
-      ) : (
-        <div className="size-8" />
-      )}
+        ) : null}
+        {isMember && onLeave ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-destructive hover:text-destructive"
+            disabled={leaving}
+            onClick={() => void handleLeave()}
+          >
+            {leaving ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />}
+            Sair
+          </Button>
+        ) : null}
+        {!onShare && !isMember ? <div className="size-8" /> : null}
+      </div>
     </header>
   );
 }

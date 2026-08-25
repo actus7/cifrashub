@@ -10,6 +10,7 @@ import {
   cloudAddSetlistItem,
   cloudCreateSetlistShareLink,
   cloudGetSetlist,
+  cloudLeaveSetlist,
   cloudRemoveSetlistItem,
   cloudReorderSetlistItems,
   loadLocalSetlists,
@@ -211,6 +212,16 @@ export default function SetlistPage() {
   };
   const onBack = () => router.push("/");
 
+  const onLeave = async () => {
+    if (!isCloud) return;
+    await cloudLeaveSetlist(setId);
+    useLibraryStore.getState().setSharedSummary({
+      folders: useLibraryStore.getState().sharedFolders,
+      setlists: useLibraryStore.getState().sharedSetlists.filter((s) => s.id !== setId),
+    });
+    router.push("/");
+  };
+
   if (loading) return <LoadingState />;
   if (!detail) return <NotFoundState onBack={onBack} />;
 
@@ -225,6 +236,7 @@ export default function SetlistPage() {
       onRemoveItem={onRemoveItem}
       onMoveItem={onMoveItem}
       onShare={isCloud && detail.viewerRole !== "member" ? onShare : undefined}
+      onLeave={isCloud && detail.viewerRole === "member" ? onLeave : undefined}
       shareBusy={shareBusy}
       shareUrl={shareUrl}
       shareError={shareError}
