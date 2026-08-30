@@ -95,7 +95,7 @@ async function batchUpdatePositions(
 ) {
   if (orderedIds.length === 0) return;
   const cases = orderedIds
-    .map((id, i) => sql`when ${id} then ${i}`)
+    .map((id, i) => sql`when ${id} then ${i}::integer`)
     .reduce((acc, c) => sql`${acc} ${c}`);
 
   await db
