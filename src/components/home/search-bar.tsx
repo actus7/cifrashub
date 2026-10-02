@@ -3,7 +3,6 @@
 import { Loader2, Music, Search, UserRound, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { SearchResultArtist, SearchResultSong } from "@/lib/types";
 
@@ -74,7 +73,7 @@ function SearchInputAction({ value, onChange, isSearching }: Omit<SearchInputPro
 function SearchResults({ results, onSelect, onSelectArtist }: SearchResultsProps) {
   return (
     <div className="absolute top-full right-0 left-0 z-50 mt-2 overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl shadow-black/20 animate-in fade-in slide-in-from-top-1 duration-150">
-      <ScrollArea className="max-h-80">
+      <div className="max-h-80 overflow-y-auto overscroll-contain">
         <div className="flex flex-col p-1.5">
           {results.map((result, i) => (
             <SearchResultItem
@@ -85,7 +84,7 @@ function SearchResults({ results, onSelect, onSelectArtist }: SearchResultsProps
             />
           ))}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
