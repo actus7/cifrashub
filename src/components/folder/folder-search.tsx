@@ -3,7 +3,6 @@
 import { Check, Loader2, Plus, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useSearchDebounced } from "@/hooks/use-search";
 import type { SearchResultSong, StoredSong } from "@/lib/types";
@@ -88,7 +87,7 @@ function FolderSearchResults({
 
   return (
     <div className="absolute top-full right-0 left-0 z-20 mt-2 overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl">
-      <ScrollArea className="max-h-[300px]">
+      <div className="max-h-[300px] overflow-y-auto overscroll-contain">
         <div className="flex flex-col gap-0.5 p-2">
           {songResults.length === 0 && !isSearching ? (
             <p className="p-4 text-center text-sm text-muted-foreground">
@@ -106,7 +105,7 @@ function FolderSearchResults({
             ))
           )}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
