@@ -11,7 +11,7 @@
 - Execute `npm run test` to run the Vitest suite once.
 - Execute `npm run test:watch` while iterating on a failing spec.
 - Execute `npm run typecheck` for TypeScript validation.
-- Execute `npm run audit` to fail on moderate or higher dependency vulnerabilities.
+- Execute `npm run audit` to fail on moderate or higher dependency vulnerabilities (advisories without a published fix are allow-listed in `scripts/audit.cjs`).
 - Execute `npm run verify` before opening a PR; it runs lint, typecheck, tests, build, and audit.
 - Add or update tests alongside parser, sync, API, storage, or domain-rule changes.
 
@@ -43,3 +43,13 @@
 - Documentation index: `.context/docs/README.md`
 - Agent playbooks: `.context/agents/README.md`
 - Contributor guide: `CONTRIBUTING.md`
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

@@ -2,7 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { cachedCifras } from "@/db/schema";
-import { cifraClubHeaders, readCifraSlugParams } from "@/lib/server/cifra-route";
+import { readCifraSlugParams } from "@/lib/server/cifra-route";
+import { fetchCifraFromSources } from "@/lib/server/cifra-sources";
 
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const CDN_CACHE_CONTROL = "public, s-maxage=86400, stale-while-revalidate=604800";
@@ -11,14 +12,6 @@ type CachedCifra = {
   html: string;
   updatedAt: Date;
 };
-
-function isCloudflareBlock(text: string): boolean {
-  return (
-    text.includes("cf-browser-verification") ||
-    text.includes("Just a moment...") ||
-    text.includes("Attention Required!")
-  );
-}
 
 async function findCachedCifra(
   artistSlug: string,
@@ -62,45 +55,13 @@ async function saveCachedHtml(
   }
 }
 
-async function fetchCifraClubHtml(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, {
-      headers: cifraClubHeaders,
-      cache: "no-store",
-      signal: AbortSignal.timeout(25_000),
-    });
-
-    if (!res.ok) return null;
-
-    const text = await res.text();
-    return isCloudflareBlock(text) ? null : text;
-  } catch {
-    return null;
-  }
-}
-
-function cifraClubUrls(artistSlug: string, slug: string) {
-  return [
-    `https://www.cifraclub.com.br/${artistSlug}/${slug}/imprimir.html`,
-    `https://www.cifraclub.com.br/${artistSlug}/${slug}/`,
-  ];
-}
-
-async function fetchFreshCifra(artistSlug: string, slug: string) {
-  for (const url of cifraClubUrls(artistSlug, slug)) {
-    const html = await fetchCifraClubHtml(url);
-    if (html) return { html, url };
-  }
-  return null;
-}
-
 function invalidParamsResponse() {
   return NextResponse.json({ html: null, error: "Parâmetros inválidos" }, { status: 400 });
 }
 
 function unavailableResponse() {
   return NextResponse.json(
-    { html: null, error: "Cifra Club não retornou a cifra." },
+    { html: null, error: "Nenhuma fonte de cifras retornou esta música." },
     { status: 502 },
   );
 }
@@ -113,7 +74,7 @@ function htmlResponse(html: string) {
 }
 
 async function freshCifraResponse(artistSlug: string, slug: string) {
-  const fresh = await fetchFreshCifra(artistSlug, slug);
+  const fresh = await fetchCifraFromSources(artistSlug, slug);
   if (!fresh) return null;
 
   await saveCachedHtml(artistSlug, slug, fresh.url, fresh.html);
@@ -162,7 +123,7 @@ function noStoreHtmlResponse(html: string) {
 }
 
 async function forcedFreshCifraResponse(artistSlug: string, slug: string) {
-  const fresh = await fetchFreshCifra(artistSlug, slug);
+  const fresh = await fetchCifraFromSources(artistSlug, slug);
   if (!fresh) return unavailableResponse();
 
   await saveCachedHtml(artistSlug, slug, fresh.url, fresh.html);
