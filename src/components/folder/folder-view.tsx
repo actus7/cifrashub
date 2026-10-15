@@ -260,7 +260,8 @@ function FolderError({ message, onDismiss }: { message: string; onDismiss: () =>
 
 function FolderSelectionBar({ count, onClear, onDelete }: FolderSelectionBarProps) {
   return (
-    <div className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-background/95 p-3 shadow-sm backdrop-blur animate-in fade-in slide-in-from-top-2">
+    // Fixed overlay: rendering it in the flow pushed the list down under the finger.
+    <div className="fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-2xl border border-border bg-background/95 p-3 shadow-lg backdrop-blur animate-in fade-in slide-in-from-bottom-2">
       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
         <CheckSquare className="size-4 text-primary" />
         {count} selecionada{count === 1 ? "" : "s"}
@@ -291,7 +292,7 @@ function FolderSongsList({
   if (songs.length === 0) return <FolderEmptyState />;
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+    <div className={selectionMode ? "grid grid-cols-1 gap-3 pb-24 md:grid-cols-2" : "grid grid-cols-1 gap-3 md:grid-cols-2"}>
       {songs.map((song) => {
         const key = arrangementKey(song);
         return (
