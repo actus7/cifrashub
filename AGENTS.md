@@ -11,7 +11,7 @@
 - Execute `npm run test` to run the Vitest suite once.
 - Execute `npm run test:watch` while iterating on a failing spec.
 - Execute `npm run typecheck` for TypeScript validation.
-- Execute `npm run audit` to fail on moderate or higher dependency vulnerabilities.
+- Execute `npm run audit` to fail on moderate or higher dependency vulnerabilities (advisories without a published fix are allow-listed in `scripts/audit.cjs`).
 - Execute `npm run verify` before opening a PR; it runs lint, typecheck, tests, build, and audit.
 - Add or update tests alongside parser, sync, API, storage, or domain-rule changes.
 
