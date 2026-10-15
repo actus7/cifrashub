@@ -302,15 +302,17 @@ function isHtmlLyricCandidate(line: string) {
     && !line.includes("‹TAB_LINE›");
 }
 
+// The full Cifra Club page (served by the Wayback fallback) opens with the logo
+// <h1 class="header-logo"> and nav <h2>s; the song lives in h1.t1 / h2.t3.
 function extractDisplayTitle(doc: Document, fallbackTitle: string, slug: string): string {
-  return doc.querySelector("h1")?.textContent?.trim()
+  return (doc.querySelector("h1.t1") ?? doc.querySelector("h1:not(.header-logo)"))?.textContent?.trim()
     ?? titleTagPart(doc, 0)
     ?? fallbackTitle
     ?? titleFromSlug(slug);
 }
 
 function extractDisplayArtist(doc: Document, fallbackArtist: string, artistSlug: string): string {
-  return doc.querySelector("h2")?.textContent?.trim()
+  return (doc.querySelector("h2.t3") ?? doc.querySelector("h2"))?.textContent?.trim()
     ?? titleTagPart(doc, 1)
     ?? fallbackArtist
     ?? titleFromSlug(artistSlug);
