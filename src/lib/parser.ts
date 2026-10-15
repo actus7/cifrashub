@@ -336,7 +336,7 @@ const CONTENT_SELECTORS = [
 const MIN_MULTI_PRE_TEXT = 200;
 
 function contentNodeFromDocument(doc: Document): Element | null {
-  return selectedContentNode(doc) ?? multiPreAncestor(doc) ?? longestPreNode(doc);
+  return selectedContentNode(doc) ?? joinedSongPres(doc) ?? longestPreNode(doc);
 }
 
 function selectedContentNode(doc: Document): Element | null {
@@ -349,22 +349,25 @@ function selectedContentNode(doc: Document): Element | null {
 
 /**
  * New Cifra Club format: song content split across multiple `<pre>` elements
- * inside a common ancestor container. Find pres that contain song content
- * (section labels, chord `<b>` children, or tab-like patterns), then return
- * their closest common ancestor if combined text exceeds threshold.
+ * (one per printed page). Join only those pres, newline-separated, so the
+ * surrounding page chrome (tuning, "Página 1 / 4") stays out of the song.
  */
-function multiPreAncestor(doc: Document): Element | null {
+function joinedSongPres(doc: Document): Element | null {
   const allPres = Array.from(doc.querySelectorAll("pre"));
   if (allPres.length < 2) return null;
 
   const songPres = allPres.filter(isSongContentPre);
   if (songPres.length < 2) return null;
 
-  const ancestor = findCommonAncestor(songPres);
-  if (!ancestor) return null;
-
   const combinedText = songPres.reduce((sum, pre) => sum + (pre.textContent ?? "").trim().length, 0);
-  return combinedText >= MIN_MULTI_PRE_TEXT ? ancestor : null;
+  if (combinedText < MIN_MULTI_PRE_TEXT) return null;
+
+  const joined = doc.createElement("pre");
+  songPres.forEach((pre, index) => {
+    if (index > 0) joined.append("\n");
+    joined.append(...Array.from(pre.childNodes, (node) => node.cloneNode(true)));
+  });
+  return joined;
 }
 
 /** A `<pre>` that contains song content: section labels, chord tags, or tab lines. */
@@ -376,35 +379,6 @@ function isSongContentPre(pre: Element): boolean {
   if (/^[eBGDAE1-6]?\|.*-{2,}/im.test(text)) return true;
   if (/-{6,}/.test(text)) return true;
   return false;
-}
-
-/** Walk up from each element to find the closest common ancestor. */
-function findCommonAncestor(elements: Element[]): Element | null {
-  if (elements.length === 0) return null;
-
-  // Collect ancestor chains for each element.
-  const chains = elements.map((el) => {
-    const chain: Element[] = [];
-    let current: Element | null = el;
-    while (current) {
-      chain.push(current);
-      current = current.parentElement;
-    }
-    return chain;
-  });
-
-  // Find the deepest common ancestor by comparing chains from the root.
-  const minLen = Math.min(...chains.map((c) => c.length));
-  let common: Element | null = null;
-  for (let depth = 1; depth <= minLen; depth++) {
-    const candidate = chains[0]![chains[0]!.length - depth]!;
-    if (chains.every((chain) => chain[chain.length - depth] === candidate)) {
-      common = candidate;
-    } else {
-      break;
-    }
-  }
-  return common;
 }
 
 function longestPreNode(doc: Document): Element | null {

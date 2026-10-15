@@ -24,7 +24,23 @@ export function readCifraSlugParams(request: Request) {
 
 export const cifraClubHeaders = {
   "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
   "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
 };
+
+const UPSTREAM_TIMEOUT_MS = 15_000;
+
+/** GET an upstream HTML page; null on network error or non-2xx status. */
+export async function fetchUpstreamHtml(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: cifraClubHeaders,
+      cache: "no-store",
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+    return res.ok ? await res.text() : null;
+  } catch {
+    return null;
+  }
+}
