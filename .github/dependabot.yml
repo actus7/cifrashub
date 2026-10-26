@@ -1,0 +1,10 @@
+version: 2
+updates:
+  # Keeps SHA-pinned actions current; review each bump before merging.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
