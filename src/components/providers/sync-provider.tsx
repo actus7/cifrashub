@@ -155,12 +155,16 @@ async function performSyncOrFetch(isFirstSync: boolean, ctx: CloudSyncContext) {
   await loadInitialCloudLibrary(isFirstSync, ctx);
 
   const guestSetlists = loadLocalSetlists();
-  if (guestSetlists?.length) {
-    await migrateGuestSetlistsProgressive(guestSetlists, saveLocalSetlists);
-  }
-
-  await loadCloudSetlists(ctx);
-  await loadSharedSummary(ctx);
+  const [setlistsResult] = await Promise.allSettled([
+    (async () => {
+      if (guestSetlists?.length) {
+        await migrateGuestSetlistsProgressive(guestSetlists, saveLocalSetlists);
+      }
+      await loadCloudSetlists(ctx);
+    })(),
+    loadSharedSummary(ctx),
+  ]);
+  if (setlistsResult.status === "rejected") throw setlistsResult.reason;
 }
 
 function canRefreshCloud(isCloud: boolean) {

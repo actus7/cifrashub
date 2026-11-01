@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { arrangementKey } from "@/lib/arrangement-key";
 import { SetlistDetailViewScreen } from "@/components/setlist/setlist-detail-view";
 import { useSession } from "@/hooks/use-session";
 import { buildLocalSetlistDetail } from "@/lib/setlist-local";
+import { isStaleResponse } from "@/lib/stale-response";
 import {
   cloudAddSetlistItem,
   cloudCreateSetlistShareLink,
@@ -71,17 +73,6 @@ function LoadingState() {
   return <div className="p-8 text-center text-muted-foreground">Carregando setlist...</div>;
 }
 
-async function resolveSetlistDetail(
-  isCloud: boolean,
-  setId: string,
-  folders: ReturnType<typeof useLibraryStore.getState>["folders"],
-  recentes: ReturnType<typeof useLibraryStore.getState>["recentes"],
-) {
-  return isCloud
-    ? cloudGetSetlist(setId)
-    : localSetlistDetail(setId, folders, recentes);
-}
-
 export default function SetlistPage() {
   const router = useRouter();
   const setId = useSetlistId();
@@ -98,25 +89,59 @@ export default function SetlistPage() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
 
+  const mutationSeqRef = useRef(0);
+  const busyRef = useRef(false);
+
+  const fetchCloudDetail = async (isCancelled: () => boolean = () => false) => {
+    const startedSeq = mutationSeqRef.current;
+    try {
+      const nextDetail = await cloudGetSetlist(setId);
+      if (!isCancelled() && !isStaleResponse(startedSeq, mutationSeqRef.current)) setDetail(nextDetail);
+    } catch {
+      if (!isCancelled() && !isStaleResponse(startedSeq, mutationSeqRef.current)) setDetail(null);
+    } finally {
+      if (!isCancelled()) setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (status === "loading") return;
+    if (status === "loading" || !isCloud) return;
 
     let cancelled = false;
-    void resolveSetlistDetail(isCloud, setId, folders, recentes)
-      .then((nextDetail) => {
-        if (!cancelled) setDetail(nextDetail);
-      })
-      .catch(() => {
-        if (!cancelled) setDetail(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
+    void Promise.resolve().then(() => fetchCloudDetail(() => cancelled));
     return () => {
       cancelled = true;
     };
-  }, [folders, isCloud, recentes, setId, status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchCloudDetail only closes over setId
+  }, [isCloud, setId, status]);
+
+  useEffect(() => {
+    if (status === "loading" || isCloud) return;
+
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      setDetail(localSetlistDetail(setId, folders, recentes));
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCloud, setId, status, folders, recentes]);
+
+  const runCloudMutation = async (mutate: () => Promise<SetlistDetailView>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    mutationSeqRef.current += 1;
+    try {
+      setDetail(await mutate());
+    } catch {
+      toast.error("Não foi possível atualizar a setlist.");
+      await fetchCloudDetail();
+    } finally {
+      busyRef.current = false;
+    }
+  };
 
   const updateLocalSetlist = (
     updateItems: (items: LocalSetlistStored["items"]) => LocalSetlistStored["items"],
@@ -135,7 +160,7 @@ export default function SetlistPage() {
     if (!detail) return;
 
     if (isCloud) {
-      setDetail(await cloudAddSetlistItem(setId, arrangementId, null));
+      await runCloudMutation(() => cloudAddSetlistItem(setId, arrangementId, null));
       return;
     }
 
@@ -161,7 +186,7 @@ export default function SetlistPage() {
     if (!detail) return;
 
     if (isCloud) {
-      setDetail(await cloudRemoveSetlistItem(setId, itemId));
+      await runCloudMutation(() => cloudRemoveSetlistItem(setId, itemId));
       return;
     }
 
@@ -178,7 +203,7 @@ export default function SetlistPage() {
     const orderedItemIds = next.map((item) => item.itemId);
 
     if (isCloud) {
-      setDetail(await cloudReorderSetlistItems(setId, orderedItemIds));
+      await runCloudMutation(() => cloudReorderSetlistItems(setId, orderedItemIds));
       return;
     }
 

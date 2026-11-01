@@ -53,6 +53,17 @@ async function fetchSharedSong(ownerId: string, arrangementId: string): Promise<
   }
 }
 
+function waitForLibrary(): Promise<void> {
+  if (useLibraryStore.getState().libraryLoaded) return Promise.resolve();
+  return new Promise((resolve) => {
+    const unsubscribe = useLibraryStore.subscribe((state) => {
+      if (!state.libraryLoaded) return;
+      unsubscribe();
+      resolve();
+    });
+  });
+}
+
 export function useLoadedSong(artistSlug: string | undefined, slug: string | undefined) {
   const searchParams = useSearchParams();
   const folderId = searchParams.get("folderId");
@@ -71,12 +82,11 @@ export function useLoadedSong(artistSlug: string | undefined, slug: string | und
   const { addToRecentes } = useLibraryActions();
   const folders = useLibraryStore((s) => s.folders);
   const recentes = useLibraryStore((s) => s.recentes);
-  const libraryLoaded = useLibraryStore((s) => s.libraryLoaded);
 
   const refs = useLoadedSongRefs({ addToRecentes, arrangementId, folderId, folders, ownerId, recentes });
   const lastRequestedRef = useRef("");
 
-  const applyResult = useCallback(async (result: Awaited<ReturnType<typeof loadSongResult>>) => {
+  const applyResult = useCallback(async (result: Awaited<ReturnType<typeof loadSongResult>>, requestKey: string) => {
     if (isLoadSongError(result)) {
       setError(result.error);
       return;
@@ -84,6 +94,7 @@ export function useLoadedSong(artistSlug: string | undefined, slug: string | und
 
     const owner = refs.ownerId.current;
     const shared = owner ? await fetchSharedSong(owner, refs.arrangementId.current ?? "") : null;
+    if (lastRequestedRef.current !== requestKey) return;
     if (shared) {
       initialCachedSongDataRef.current = shared.song.songData;
       savedSongDataRef.current = shared.song.songData;
@@ -109,18 +120,21 @@ export function useLoadedSong(artistSlug: string | undefined, slug: string | und
   }, [applySongPrefs, refs]);
 
   const load = useCallback(async () => {
-    const requestKey = songRequestKey(artistSlug, slug, libraryLoaded);
+    const requestKey = songRequestKey(artistSlug, slug, arrangementId, ownerId);
     if (!requestKey) return;
     lastRequestedRef.current = requestKey;
     setIsLoading(true);
     setError(null);
 
+    // Fetch the chord HTML right away; only applying it needs the library (saved versions).
     const result = await loadSongResult(artistSlug!, slug!);
+    await waitForLibrary();
     if (lastRequestedRef.current !== requestKey) return;
 
-    await applyResult(result);
+    await applyResult(result, requestKey);
+    if (lastRequestedRef.current !== requestKey) return;
     setIsLoading(false);
-  }, [applyResult, artistSlug, libraryLoaded, slug]);
+  }, [applyResult, arrangementId, artistSlug, ownerId, slug]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -138,8 +152,13 @@ export function useLoadedSong(artistSlug: string | undefined, slug: string | und
   };
 }
 
-function songRequestKey(artistSlug: string | undefined, slug: string | undefined, libraryLoaded: boolean) {
-  return artistSlug && slug && libraryLoaded ? `${artistSlug}/${slug}` : null;
+function songRequestKey(
+  artistSlug: string | undefined,
+  slug: string | undefined,
+  arrangementId: string | null,
+  ownerId: string | null,
+) {
+  return artistSlug && slug ? `${artistSlug}/${slug}?${arrangementId ?? ""}&${ownerId ?? ""}` : null;
 }
 
 function applyLoadedSong(
