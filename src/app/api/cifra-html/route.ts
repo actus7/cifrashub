@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { cachedCifras } from "@/db/schema";
+import { requireApiUserId } from "@/lib/server/api-route";
 import { readCifraSlugParams } from "@/lib/server/cifra-route";
 import { fetchCifraFromSources } from "@/lib/server/cifra-sources";
 
@@ -106,8 +107,8 @@ function fallbackCifraResponse(cached: CachedCifra | null) {
 }
 
 function fetchErrorResponse(e: unknown) {
-  const message = e instanceof Error ? e.message : "Falha ao buscar cifra";
-  return NextResponse.json({ html: null, error: message }, { status: 502 });
+  console.error("Falha ao buscar cifra:", e);
+  return NextResponse.json({ html: null, error: "Falha ao buscar cifra" }, { status: 502 });
 }
 
 function readSourceParam(request: Request): string | null {
@@ -135,7 +136,9 @@ export async function GET(request: Request) {
   if ("response" in params) return invalidParamsResponse();
 
   try {
-    if (readSourceParam(request) === "fresh") {
+    // Forced refresh costs upstream fetches + a DB write: signed-in users only.
+    // Anonymous callers silently get the normal cached path.
+    if (readSourceParam(request) === "fresh" && "userId" in (await requireApiUserId())) {
       return await forcedFreshCifraResponse(params.artistSlug, params.slug);
     }
     return await cachedCifraResponse(params.artistSlug, params.slug);
@@ -145,6 +148,9 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const auth = await requireApiUserId();
+  if ("response" in auth) return auth.response;
+
   const params = readCifraSlugParams(request);
   if ("response" in params) return invalidParamsResponse();
 
@@ -155,8 +161,8 @@ export async function DELETE(request: Request) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Falha ao limpar cache";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    console.error("Falha ao limpar cache:", e);
+    return NextResponse.json({ ok: false, error: "Falha ao limpar cache" }, { status: 500 });
   }
 }
 
