@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { userSongs } from "@/db/schema";
 import { requireApiUserJson } from "@/lib/server/api-route";
 import { buildStoredSongRow, toneCapoUiFromStored } from "@/lib/server/stored-song-row";
+import { prefsUpdateSet, type ValidatedPrefs } from "@/lib/server/prefs-update";
+import { sanitizeUiPrefs, validateStoredSong } from "@/lib/server/song-validation";
 import type { StoredSong, StoredSongUiPrefs } from "@/lib/types";
 
 type PrefsRequestBody = {
@@ -13,13 +15,8 @@ type PrefsRequestBody = {
   uiPrefs?: StoredSongUiPrefs | null;
   /** Snapshot da música atual — usado só de fallback (ver insertAsRecentIfMissing). */
   song?: StoredSong;
-};
-
-type ValidatedPrefs = {
-  arrangementId: string;
-  tone: number;
-  capo: number;
-  uiPrefs: StoredSongUiPrefs | null;
+  /** Só quando true o conteúdo (songData) é sobrescrito; prefs puras nunca tocam a cifra. */
+  syncContent?: boolean;
 };
 
 function validationError(message: string): never {
@@ -34,13 +31,11 @@ function validateInteger(value: unknown, field: string) {
   return typeof value === "number" && Number.isInteger(value) ? value : validationError(`${field} inválido`);
 }
 
-function isNullableObject(value: unknown) {
-  return value === null || value === undefined || typeof value === "object";
-}
-
 function validateUiPrefs(uiPrefs: unknown) {
-  if (!isNullableObject(uiPrefs)) validationError("uiPrefs inválido");
-  return uiPrefs ?? null;
+  if (uiPrefs !== null && (typeof uiPrefs !== "object" || Array.isArray(uiPrefs))) {
+    validationError("uiPrefs inválido");
+  }
+  return sanitizeUiPrefs(uiPrefs);
 }
 
 function buildPrefs(body: PrefsRequestBody): ValidatedPrefs {
@@ -75,7 +70,7 @@ function isValidSongSnapshot(song: StoredSong | undefined): song is StoredSong {
  * onConflictDoUpdate cobre a corrida rara de a música ter sido salva em paralelo entre
  * o UPDATE e este INSERT.
  */
-async function insertAsRecentIfMissing(userId: string, prefs: ValidatedPrefs, song: StoredSong) {
+async function insertAsRecentIfMissing(userId: string, prefs: ValidatedPrefs, song: StoredSong, syncContent: boolean) {
   const row = {
     ...buildStoredSongRow(userId, null, song, 0, true),
     arrangementId: prefs.arrangementId,
@@ -94,7 +89,7 @@ async function insertAsRecentIfMissing(userId: string, prefs: ValidatedPrefs, so
         tone: prefs.tone,
         capo: prefs.capo,
         uiPrefs: prefs.uiPrefs,
-        songData: song.songData,
+        ...(syncContent ? { songData: song.songData } : {}),
         updatedAt: new Date(),
       },
     });
@@ -115,22 +110,22 @@ export async function PATCH(req: Request) {
   // aparecer em todos os outros lugares que referenciam o mesmo arranjo —
   // senão a tela que prioriza a linha de pasta continua mostrando a versão
   // antiga depois de um refresh.
+  if (request.body.song != null) {
+    const validated = validateStoredSong(request.body.song);
+    if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
+  }
   const song = isValidSongSnapshot(request.body.song) ? request.body.song : null;
+
+  const syncContent = request.body.syncContent === true;
 
   const updated = await db
     .update(userSongs)
-    .set({
-      tone: prefs.tone,
-      capo: prefs.capo,
-      uiPrefs: prefs.uiPrefs,
-      ...(song ? { songData: song.songData } : {}),
-      updatedAt: new Date(),
-    })
+    .set(prefsUpdateSet(prefs, song, syncContent, new Date()))
     .where(and(eq(userSongs.userId, request.userId), eq(userSongs.arrangementId, prefs.arrangementId)))
     .returning({ id: userSongs.id });
 
   if (updated.length === 0 && song) {
-    await insertAsRecentIfMissing(request.userId, prefs, song);
+    await insertAsRecentIfMissing(request.userId, prefs, song, syncContent);
   }
 
   return NextResponse.json({ ok: true, updated: updated.length });

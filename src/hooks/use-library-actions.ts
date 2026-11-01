@@ -6,7 +6,8 @@ import {
   cloudCreateSetlist,
   cloudDeleteFolder,
   cloudDeleteSetlist,
-  cloudSaveRecentes,
+  cloudTouchRecent,
+  cloudRemoveRecent,
   cloudClearRecentes,
   loadLocalSetlists,
   saveFolders,
@@ -14,6 +15,7 @@ import {
   saveRecentes,
 } from "@/lib/storage";
 import { createLocalSetlist, localSetlistsToSummaries } from "@/lib/setlist-local";
+import { arrangementKey } from "@/lib/arrangement-key";
 import { songIdentityKey } from "@/lib/song-identity-key";
 import type { Folder, StoredSong } from "@/lib/types";
 import { cloudSyncSignalKey } from "@/lib/sync-signal-key";
@@ -119,62 +121,78 @@ function deleteLocalFolder(folderId: string, folders: Folder[], setFolders: (fol
   setFolders(next);
 }
 
+let recentesSeq = 0;
+
 function useRecentActions({ isCloud, notifyCloudMutation }: CloudState) {
-  const recentes = useLibraryStore((s) => s.recentes);
   const setRecentes = useLibraryStore((s) => s.setRecentes);
 
-  const syncRecentes = useCallback(
-    (next: StoredSong[], errorMessage: string) => {
+  // Aplica a resposta (ou rollback) só se nenhuma outra mutação começou depois.
+  const runCloudRecentes = useCallback(
+    (
+      optimistic: StoredSong[],
+      request: () => Promise<{ recentes: StoredSong[] }>,
+      errorMessage: string,
+    ) => {
+      const previous = useLibraryStore.getState().recentes;
+      const seq = ++recentesSeq;
+      setRecentes(optimistic);
+      void request()
+        .then(({ recentes: synced }) => {
+          if (seq !== recentesSeq) return;
+          setRecentes(synced);
+          notifyCloudMutation();
+        })
+        .catch((error) => {
+          console.error(errorMessage, error);
+          if (seq === recentesSeq) setRecentes(previous);
+        });
+    },
+    [notifyCloudMutation, setRecentes],
+  );
+
+  const clearAllRecentes = useCallback(() => {
+    if (isCloud) {
+      runCloudRecentes([], cloudClearRecentes, "Failed to clear recentes in cloud");
+      return;
+    }
+    saveRecentes([]);
+    setRecentes([]);
+  }, [isCloud, runCloudRecentes, setRecentes]);
+
+  const removeFromRecentes = useCallback(
+    (song: StoredSong) => {
+      const k = songIdentityKey(song);
+      const next = useLibraryStore.getState().recentes.filter((s) => songIdentityKey(s) !== k);
       if (isCloud) {
-        syncCloudRecentes(next, recentes, setRecentes, notifyCloudMutation, errorMessage);
+        runCloudRecentes(
+          next,
+          () => cloudRemoveRecent(arrangementKey(song)),
+          "Failed to remove from recentes in cloud",
+        );
         return;
       }
       saveRecentes(next);
       setRecentes(next);
     },
-    [isCloud, notifyCloudMutation, recentes, setRecentes],
-  );
-
-  const clearAllRecentes = useCallback(() => {
-    syncRecentes([], "Failed to clear recentes in cloud");
-  }, [syncRecentes]);
-
-  const removeFromRecentes = useCallback(
-    (song: StoredSong) => {
-      const k = songIdentityKey(song);
-      syncRecentes(recentes.filter((s) => songIdentityKey(s) !== k), "Failed to remove from recentes in cloud");
-    },
-    [recentes, syncRecentes],
+    [isCloud, runCloudRecentes, setRecentes],
   );
 
   const addToRecentes = useCallback(
     (songObj: StoredSong) => {
       const k = songIdentityKey(songObj);
-      syncRecentes([songObj, ...recentes.filter((s) => songIdentityKey(s) !== k)].slice(0, 15), "Failed to add to recentes in cloud");
+      const current = useLibraryStore.getState().recentes;
+      const next = [songObj, ...current.filter((s) => songIdentityKey(s) !== k)].slice(0, 15);
+      if (isCloud) {
+        runCloudRecentes(next, () => cloudTouchRecent(songObj), "Failed to add to recentes in cloud");
+        return;
+      }
+      saveRecentes(next);
+      setRecentes(next);
     },
-    [recentes, syncRecentes],
+    [isCloud, runCloudRecentes, setRecentes],
   );
 
   return { clearAllRecentes, removeFromRecentes, addToRecentes };
-}
-
-function syncCloudRecentes(
-  next: StoredSong[],
-  previous: StoredSong[],
-  setRecentes: (songs: StoredSong[]) => void,
-  notifyCloudMutation: () => void,
-  errorMessage: string,
-) {
-  setRecentes(next);
-  void (next.length === 0 ? cloudClearRecentes() : cloudSaveRecentes(next))
-    .then(({ recentes: synced }) => {
-      setRecentes(synced);
-      notifyCloudMutation();
-    })
-    .catch((error) => {
-      console.error(errorMessage, error);
-      setRecentes(previous);
-    });
 }
 
 function useSetlistActions({ isCloud }: CloudState) {

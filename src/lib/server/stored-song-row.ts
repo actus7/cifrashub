@@ -12,7 +12,7 @@ export function youtubeIdForRow(s: Pick<StoredSong, "youtubeId">): string | null
   return isValidYoutubeId(v) ? v : null;
 }
 
-const UI_PREF_KEYS = [
+export const UI_PREF_KEYS = [
   "simplified",
   "showTabs",
   "nashvilleNumbers",

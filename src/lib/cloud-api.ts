@@ -116,6 +116,23 @@ export async function cloudRemoveSongFromFolder(
   );
 }
 
+export async function cloudTouchRecent(
+  song: StoredSong,
+): Promise<{ recentes: StoredSong[] }> {
+  return apiJson("/api/recentes", {
+    method: "PUT",
+    body: JSON.stringify({ song }),
+  });
+}
+
+export async function cloudRemoveRecent(
+  arrangementId: string,
+): Promise<{ recentes: StoredSong[] }> {
+  const q = new URLSearchParams({ arrangementId });
+  return apiJson(`/api/recentes?${q.toString()}`, { method: "DELETE" });
+}
+
+/** @deprecated use cloudTouchRecent */
 export async function cloudSaveRecentes(
   songs: StoredSong[],
 ): Promise<{ recentes: StoredSong[] }> {
@@ -257,6 +274,6 @@ export async function cloudSyncSongContent(
 ): Promise<{ ok: true }> {
   return apiJson("/api/songs/prefs", {
     method: "PATCH",
-    body: JSON.stringify({ arrangementId, song }),
+    body: JSON.stringify({ arrangementId, song, syncContent: true }),
   });
 }
