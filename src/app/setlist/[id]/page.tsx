@@ -7,6 +7,7 @@ import { arrangementKey } from "@/lib/arrangement-key";
 import { SetlistDetailViewScreen } from "@/components/setlist/setlist-detail-view";
 import { useSession } from "@/hooks/use-session";
 import { buildLocalSetlistDetail, normalizeNote } from "@/lib/setlist-local";
+import { songHref } from "@/lib/setlist-navigation";
 import { isStaleResponse } from "@/lib/stale-response";
 import {
   cloudAddSetlistItem,
@@ -247,9 +248,10 @@ export default function SetlistPage() {
   };
 
   const onOpenSong = (song: StoredSong) => {
-    const params = new URLSearchParams({ arrangementId: arrangementKey(song) });
-    if (detail?.viewerRole === "member" && detail.ownerId) params.set("ownerId", detail.ownerId);
-    router.push(`/song/${song.artistSlug}/${song.slug}?${params.toString()}`);
+    const key = arrangementKey(song);
+    const position = detail?.items.find((i) => i.song && arrangementKey(i.song) === key)?.position ?? 0;
+    const ownerId = detail?.viewerRole === "member" ? detail.ownerId : null;
+    router.push(songHref(song, { setlistId: setId, position, ownerId }));
   };
   const onBack = () => router.push("/");
 
