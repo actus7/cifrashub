@@ -1,10 +1,8 @@
+import { findChordTokens, type ChordToken } from "./chord-grammar";
 import type { LyricBlock } from "./types";
 
-const CHORD_PATTERN =
-  "([A-G][#b]?(?:maj|min|M)?(?:m(?!aj))?(?:\\d{1,2})?(?:sus[24]?|add\\d?|dim|aug)?(?:/[A-G][#b]?)?)\\b";
-
 export function parseChordLinePair(chordLine: string, lyricLine: string): LyricBlock[] {
-  const matches = [...chordLine.matchAll(new RegExp(CHORD_PATTERN, "g"))];
+  const matches = findChordTokens(chordLine);
   if (matches.length === 0) return plainLyricBlocks(lyricLine);
 
   const blocks = leadingLyricBlocks(matches, lyricLine);
@@ -22,14 +20,14 @@ function plainLyricBlocks(lyricLine: string): LyricBlock[] {
     : [];
 }
 
-function leadingLyricBlocks(matches: RegExpMatchArray[], lyricLine: string): LyricBlock[] {
+function leadingLyricBlocks(matches: ChordToken[], lyricLine: string): LyricBlock[] {
   const firstIndex = firstMatchIndex(matches);
   const prefix = lyricLine.slice(0, firstIndex);
   if (firstIndex <= 0 || !prefix.trim()) return [];
   return [{ chord: "", text: prefix.trimEnd(), spaceAfter: prefixHasTrailingSpace(prefix, firstIndex) }];
 }
 
-function firstMatchIndex(matches: RegExpMatchArray[]) {
+function firstMatchIndex(matches: ChordToken[]) {
   return matches[0]?.index ?? 0;
 }
 
@@ -38,14 +36,14 @@ function prefixHasTrailingSpace(prefix: string, firstIndex: number) {
 }
 
 function chordMatchToBlock(
-  matches: RegExpMatchArray[],
+  matches: ChordToken[],
   index: number,
   lyricLine: string,
 ): LyricBlock | null {
   const match = matches[index];
-  if (!match || match.index === undefined) return null;
+  if (!match) return null;
 
-  const chord = match[1] as string;
+  const chord = match.chord;
   const textSegment = chordTextSegment(matches, index, lyricLine, match.index, chord.length);
   const text = textSegment.trimEnd();
 
@@ -57,7 +55,7 @@ function chordMatchToBlock(
 }
 
 function chordTextSegment(
-  matches: RegExpMatchArray[],
+  matches: ChordToken[],
   index: number,
   lyricLine: string,
   start: number,
@@ -72,12 +70,12 @@ function chordBlockSpaceAfter(textSegment: string, text: string, index: number, 
 }
 
 function matchEnd(
-  next: RegExpMatchArray | undefined,
+  next: ChordToken | undefined,
   lyricLine: string,
   start: number,
   chordLength: number,
 ): number {
-  return next?.index !== undefined
+  return next
     ? next.index
     : Math.max(lyricLine.length, start + chordLength);
 }

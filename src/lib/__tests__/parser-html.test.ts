@@ -26,8 +26,8 @@ describe("processHtmlAndExtract", () => {
     expect(chordsOf(0)).toEqual(["G", "D", "Em"]);
   });
 
-  it("records current (buggy) handling of sharps/7M/extensions — see plan 002", () => {
-    expect(chordsOf(1)).toEqual(["F#m", "D/F", "Am7"]);
+  it("parses sharps, 7M and extensions", () => {
+    expect(chordsOf(1)).toEqual(["F#m", "D/F#", "C7M", "Am7(9)"]);
   });
 });
 
