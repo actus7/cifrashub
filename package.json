@@ -25,7 +25,7 @@
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build && npm run audit",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:push:ci": "drizzle-kit push --force",
+    "db:push:ci": "drizzle-kit push --verbose",
     "db:studio": "drizzle-kit studio",
     "generate-icons": "node scripts/generate-icons.cjs",
     "postinstall": "node scripts/patch-better-auth.cjs"

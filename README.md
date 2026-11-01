@@ -113,6 +113,8 @@ Acesse [http://localhost:3000](http://localhost:3000).
 
 > **Atenção:** se `DATABASE_URL` não estiver configurada em Production, o build falha com mensagem clara indicando quais variáveis estão faltando.
 
+> **Migrações:** os builds de produção aplicam mudanças de schema automaticamente via `drizzle-kit push` (sem `--force`: mudanças destrutivas abortam o build). Veja [docs/runbooks/db-migrations.md](docs/runbooks/db-migrations.md).
+
 ---
 
 ## English
