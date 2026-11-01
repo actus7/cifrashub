@@ -116,6 +116,16 @@ export async function cloudRemoveSongFromFolder(
   );
 }
 
+export async function cloudRemoveFolderSongs(
+  folderId: string,
+  arrangementIds: string[],
+): Promise<{ folders: Folder[] }> {
+  return apiJson(`/api/folders/${encodeURIComponent(folderId)}/songs`, {
+    method: "DELETE",
+    body: JSON.stringify({ arrangementIds }),
+  });
+}
+
 export async function cloudSaveRecentes(
   songs: StoredSong[],
 ): Promise<{ recentes: StoredSong[] }> {
