@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, count, eq, gt, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { shareSnapshots, shareTokens, userSongs } from "@/db/schema";
@@ -54,8 +54,8 @@ export async function POST(req: Request) {
 
 async function shareRateLimitResponse(userId: string) {
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  const recentShares = await db
-    .select({ id: shareSnapshots.id })
+  const [{ total } = { total: 0 }] = await db
+    .select({ total: count() })
     .from(shareSnapshots)
     .where(
       and(
@@ -64,7 +64,7 @@ async function shareRateLimitResponse(userId: string) {
       ),
     );
 
-  if (recentShares.length < MAX_SHARES_PER_HOUR) return null;
+  if (total < MAX_SHARES_PER_HOUR) return null;
 
   return NextResponse.json(
     { error: "Limite de compartilhamentos por hora atingido. Tente novamente mais tarde." },
