@@ -8,6 +8,7 @@ import { loadCloudFoldersAndSongs } from "@/lib/server/cloud-data";
 import { requireOwnedFolder } from "@/lib/server/folder-route";
 import { nextPosition } from "@/lib/server/positions";
 import { buildStoredSongRow } from "@/lib/server/stored-song-row";
+import { validateStoredSong } from "@/lib/server/song-validation";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 type OwnedFolderCtx = Awaited<ReturnType<typeof requireOwnedFolder>>;
@@ -33,19 +34,6 @@ async function nextFolderSongPosition(folderCtx: ResolvedFolderCtx) {
     .where(and(eq(userSongs.userId, folderCtx.userId), eq(userSongs.folderId, folderCtx.folderId)));
 
   return nextPosition(rows);
-}
-
-function hasStoredSongIdentity(song: StoredSong) {
-  return Boolean(song.id && song.title);
-}
-
-function hasStoredSongContent(song: StoredSong) {
-  return Boolean(song.songData && Array.isArray(song.songData));
-}
-
-function isValidStoredSong(song: StoredSong | null | undefined): song is StoredSong {
-  if (!song) return false;
-  return hasStoredSongIdentity(song) && hasStoredSongContent(song);
 }
 
 /**
@@ -99,11 +87,12 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if ("response" in json) return json.response;
   const body = json.body;
 
-  if (!isValidStoredSong(body)) {
-    return NextResponse.json({ error: "Dados da música inválidos" }, { status: 400 });
+  const validated = validateStoredSong(body);
+  if (!validated.ok) {
+    return NextResponse.json({ error: validated.error }, { status: 400 });
   }
 
-  await upsertFolderSong(folderCtx, body);
+  await upsertFolderSong(folderCtx, validated.song);
   return respondWithFolders(folderCtx.userId);
 }
 

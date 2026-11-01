@@ -24,6 +24,11 @@ import {
   replaceRecentSongsForUser,
 } from "@/lib/server/recent-songs";
 import { arrangementKey } from "@/lib/arrangement-key";
+import {
+  MAX_SONGS_PER_FOLDER,
+  MAX_SYNC_FOLDERS,
+  validateStoredSong,
+} from "@/lib/server/song-validation";
 
 type SyncBody = {
   folders?: Folder[];
@@ -41,6 +46,26 @@ type SongSyncState = {
   toUpdate: SongUpdate[];
   toInsert: SongInsert[];
 };
+
+function validateSyncBody(body: SyncBody): string | null {
+  const folders = body?.folders ?? [];
+  const recentes = body?.recentes ?? [];
+  if (!Array.isArray(folders) || !Array.isArray(recentes)) return "Payload inválido";
+  if (folders.length > MAX_SYNC_FOLDERS) return "Pastas demais";
+  if (recentes.length > MAX_SONGS_PER_FOLDER) return "Recentes demais";
+  for (const folder of folders) {
+    if (!folder || typeof folder.title !== "string" || !Array.isArray(folder.songs)) {
+      return "Pasta inválida";
+    }
+    if (folder.songs.length > MAX_SONGS_PER_FOLDER) return "Músicas demais na pasta";
+  }
+  const songs = [...folders.flatMap((f) => f.songs), ...recentes];
+  for (const song of songs) {
+    const result = validateStoredSong(song);
+    if (!result.ok) return result.error;
+  }
+  return null;
+}
 
 function songFolderKey(folderId: string | null, arrangementId: string) {
   return `${folderId ?? ""}|${arrangementId}`;
@@ -242,6 +267,8 @@ export async function GET() {
 export async function POST(req: Request) {
   const request = await requireApiUserJson<SyncBody>(req);
   if ("response" in request) return request.response;
+  const invalid = validateSyncBody(request.body);
+  if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
   await syncUserLibrary(request.userId, request.body);
 
   return NextResponse.json(await loadCloudFoldersAndSongs(request.userId));

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { StoredSong } from "@/lib/types";
 import { requireApiUserId, requireApiUserJson } from "@/lib/server/api-route";
+import { validateStoredSong } from "@/lib/server/song-validation";
 import {
   MAX_RECENTES,
   clearRecentSongsForUser,
@@ -23,12 +24,12 @@ export async function PUT(req: Request) {
   const request = await requireApiUserJson<{ song?: StoredSong }>(req);
   if ("response" in request) return request.response;
 
-  const song = request.body.song;
-  if (!song || typeof song !== "object" || !song.id) {
-    return NextResponse.json({ error: "song inválida" }, { status: 400 });
+  const validated = validateStoredSong(request.body.song);
+  if (!validated.ok) {
+    return NextResponse.json({ error: validated.error }, { status: 400 });
   }
 
-  await touchRecentSong(request.userId, song);
+  await touchRecentSong(request.userId, validated.song);
   return NextResponse.json({ recentes: await loadRecentSongs(request.userId) });
 }
 
@@ -45,7 +46,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "songs deve ser array" }, { status: 400 });
   }
 
-  const trimmed = dedupeSongsByArrangement(songs, { requireId: true }).slice(0, MAX_RECENTES);
+  for (const s of songs) {
+    const validated = validateStoredSong(s);
+    if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
+  }
+
+  const trimmed =dedupeSongsByArrangement(songs, { requireId: true }).slice(0, MAX_RECENTES);
   await replaceRecentSongsForUser(request.userId, trimmed);
 
   return NextResponse.json({ recentes: await loadRecentSongs(request.userId) });
