@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
+import { toast } from "sonner";
+import { migrateGuestSetlists } from "@/lib/guest-setlist-migration";
 import { useSession } from "@/hooks/use-session";
 import {
   cloudFetchLibrary,
@@ -44,39 +46,17 @@ type CloudSyncContext = {
   cancelled: () => boolean;
 };
 
-async function migrateGuestSetlist(sl: LocalSetlistStored) {
-  const { setlist } = await cloudCreateSetlist(sl.title, sl.description ?? null);
-
-  for (const item of sl.items) {
-    await tryAddGuestSetlistItem(setlist.id, item);
-  }
-}
-
-async function tryAddGuestSetlistItem(
-  setlistId: string,
-  item: LocalSetlistStored["items"][number],
-) {
-  try {
-    await cloudAddSetlistItem(setlistId, item.arrangementId, item.notes ?? null);
-  } catch {
-    /* arranjo não está na biblioteca */
-  }
-}
-
 async function migrateGuestSetlistsProgressive(
   guest: LocalSetlistStored[],
   save: (next: LocalSetlistStored[]) => void,
 ) {
-  let remaining = [...guest];
-
-  for (const sl of guest) {
-    try {
-      await migrateGuestSetlist(sl);
-      remaining = remaining.filter((x) => x.id !== sl.id);
-      save(remaining);
-    } catch {
-      break;
-    }
+  const { partial } = await migrateGuestSetlists(guest, {
+    createSetlist: cloudCreateSetlist,
+    addItem: cloudAddSetlistItem,
+    save,
+  });
+  if (partial.length > 0) {
+    toast.warning("Algumas músicas de setlists offline não foram migradas e continuam salvas neste aparelho.");
   }
 }
 
