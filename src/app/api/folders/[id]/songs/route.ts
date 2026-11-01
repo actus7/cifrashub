@@ -7,7 +7,7 @@ import { readJsonBody } from "@/lib/server/api-route";
 import { loadCloudFoldersAndSongs } from "@/lib/server/cloud-data";
 import { requireOwnedFolder } from "@/lib/server/folder-route";
 import { nextPosition } from "@/lib/server/positions";
-import { buildStoredSongRow } from "@/lib/server/stored-song-row";
+import { buildStoredSongRow, songRowUpdateSet } from "@/lib/server/stored-song-row";
 import { validateStoredSong } from "@/lib/server/song-validation";
 
 type RouteCtx = { params: Promise<{ id: string }> };
@@ -51,22 +51,7 @@ async function upsertFolderSong(folderCtx: ResolvedFolderCtx, song: StoredSong) 
     .onConflictDoUpdate({
       target: [userSongs.userId, userSongs.folderId, userSongs.arrangementId],
       targetWhere: sql`${userSongs.folderId} is not null`,
-      set: {
-        songId: row.songId,
-        title: row.title,
-        artist: row.artist,
-        artistSlug: row.artistSlug,
-        slug: row.slug,
-        youtubeId: row.youtubeId,
-        songData: row.songData,
-        tone: row.tone,
-        capo: row.capo,
-        uiPrefs: row.uiPrefs,
-        sourceArtistSlug: row.sourceArtistSlug,
-        sourceSlug: row.sourceSlug,
-        isRecent: false,
-        updatedAt: new Date(),
-      },
+      set: { ...songRowUpdateSet(row), isRecent: false },
     });
 }
 

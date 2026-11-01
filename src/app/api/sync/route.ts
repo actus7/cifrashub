@@ -9,15 +9,10 @@ import {
   ensureDefaultFolder,
   loadCloudFoldersAndSongs,
 } from "@/lib/server/cloud-data";
-import {
-  resolveArrangementId,
-  sourceArtistSlugForRow,
-  sourceSlugForRow,
-} from "@/lib/server/song-persist";
+import { resolveArrangementId } from "@/lib/server/song-persist";
 import {
   buildStoredSongRow,
-  toneCapoUiFromStored,
-  youtubeIdForRow,
+  songRowUpdateSet,
 } from "@/lib/server/stored-song-row";
 import {
   dedupeSongsByArrangement,
@@ -193,26 +188,11 @@ function syncExistingSong(
   return true;
 }
 
-function updateStoredSongRow({ id, song }: SongUpdate) {
-  const row = toneCapoUiFromStored(song);
+function updateStoredSongRow(userId: string, { id, song }: SongUpdate) {
+  const row = buildStoredSongRow(userId, null, song, 0, false);
   return db
     .update(userSongs)
-    .set({
-      songId: song.id,
-      title: song.title,
-      artist: song.artist,
-      artistSlug: song.artistSlug,
-      slug: song.slug,
-      youtubeId: youtubeIdForRow(song),
-      songData: song.songData,
-      tone: row.tone,
-      capo: row.capo,
-      uiPrefs: row.uiPrefs,
-      sourceArtistSlug: sourceArtistSlugForRow(song),
-      sourceSlug: sourceSlugForRow(song),
-      isRecent: false,
-      updatedAt: new Date(),
-    })
+    .set({ ...songRowUpdateSet(row), isRecent: false })
     .where(eq(userSongs.id, id));
 }
 
@@ -234,7 +214,7 @@ async function syncUserLibrary(userId: string, body: SyncBody) {
   const songSync = createSongSyncState(await cloudSongsForUser(userId));
 
   await collectFolderSongs(userId, body.folders ?? [], cloudFolderRows, songSync);
-  await persistSongSync(songSync);
+  await persistSongSync(userId, songSync);
   await mergeRecentSongs(userId, dedupeSongsByArrangement(body.recentes ?? []));
 }
 
@@ -252,8 +232,8 @@ function cloudSongsForUser(userId: string) {
     .where(eq(userSongs.userId, userId));
 }
 
-async function persistSongSync(songSync: SongSyncState) {
-  await Promise.all(songSync.toUpdate.map(updateStoredSongRow));
+async function persistSongSync(userId: string, songSync: SongSyncState) {
+  await Promise.all(songSync.toUpdate.map((update) => updateStoredSongRow(userId, update)));
   if (songSync.toInsert.length > 0) await db.insert(userSongs).values(songSync.toInsert);
 }
 

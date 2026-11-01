@@ -47,6 +47,27 @@ export function toneCapoUiFromStored(s: StoredSong): {
   };
 }
 
+type StoredSongRow = ReturnType<typeof buildStoredSongRow>;
+
+/** Columns refreshed when an existing song row is upserted/updated (shared by sync, folders, recents). */
+export function songRowUpdateSet(row: StoredSongRow) {
+  return {
+    songId: row.songId,
+    title: row.title,
+    artist: row.artist,
+    artistSlug: row.artistSlug,
+    slug: row.slug,
+    youtubeId: row.youtubeId,
+    songData: row.songData,
+    tone: row.tone,
+    capo: row.capo,
+    uiPrefs: row.uiPrefs,
+    sourceArtistSlug: row.sourceArtistSlug,
+    sourceSlug: row.sourceSlug,
+    updatedAt: new Date(),
+  };
+}
+
 export function buildStoredSongRow(
   userId: string,
   folderId: string | null,

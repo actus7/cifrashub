@@ -2,7 +2,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { userSetlistItems, userSetlists, userSongs } from "@/db/schema";
 import type { StoredSong } from "@/lib/types";
-import { rowToStoredSong } from "@/lib/server/cloud-data";
+import { preferredArrangementRow, rowToStoredSong } from "@/lib/server/cloud-data";
 
 type SetlistListRow = {
   id: string;
@@ -118,7 +118,7 @@ function setlistItemWithSong(
 }
 
 function preferredSetlistSong(rows: SongRow[]): StoredSong | null {
-  const row = rows.find((song) => song.folderId !== null) ?? rows.find((song) => song.isRecent) ?? rows[0];
+  const row = preferredArrangementRow(rows);
   return row ? rowToStoredSong(row) : null;
 }
 

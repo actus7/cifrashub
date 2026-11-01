@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { userSetlistItems, userSetlists, userSongs } from "@/db/schema";
 import { rowToStoredSong } from "@/lib/server/cloud-data";
 import type { StoredSong } from "@/lib/types";
-import { buildStoredSongRow } from "@/lib/server/stored-song-row";
+import { buildStoredSongRow, songRowUpdateSet } from "@/lib/server/stored-song-row";
 import { resolveArrangementId } from "@/lib/server/song-persist";
 import { arrangementKey } from "@/lib/arrangement-key";
 
@@ -184,22 +184,6 @@ function upsertRecentSong(userId: string, song: StoredSong, position: number) {
     .onConflictDoUpdate({
       target: [userSongs.userId, userSongs.arrangementId],
       targetWhere: sql`${userSongs.folderId} is null and ${userSongs.isRecent} = true`,
-      set: {
-        songId: row.songId,
-        title: row.title,
-        artist: row.artist,
-        artistSlug: row.artistSlug,
-        slug: row.slug,
-        youtubeId: row.youtubeId,
-        songData: row.songData,
-        tone: row.tone,
-        capo: row.capo,
-        uiPrefs: row.uiPrefs,
-        sourceArtistSlug: row.sourceArtistSlug,
-        sourceSlug: row.sourceSlug,
-        isRecent: true,
-        position,
-        updatedAt: new Date(),
-      },
+      set: { ...songRowUpdateSet(row), isRecent: true, position },
     });
 }

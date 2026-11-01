@@ -1,27 +1,11 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { userFolders, userSongs } from "@/db/schema";
+import { UI_PREF_KEYS } from "@/lib/server/stored-song-row";
 import type { Folder, StoredSong } from "@/lib/types";
 
 type SongRow = typeof userSongs.$inferSelect;
 type FolderRow = typeof userFolders.$inferSelect;
-
-type UiPrefs = NonNullable<SongRow["uiPrefs"]>;
-
-const uiPrefKeys = [
-  "simplified",
-  "showTabs",
-  "nashvilleNumbers",
-  "mirrored",
-  "fontSizeOffset",
-  "columns",
-  "spacingOffset",
-  "zenMode",
-  "autoScroll",
-  "scrollSpeed",
-  "metronomeActive",
-  "bpm",
-] as const satisfies ReadonlyArray<keyof UiPrefs>;
 
 function optionalSongFields(row: SongRow): Partial<StoredSong> {
   return Object.fromEntries(
@@ -37,7 +21,7 @@ function storedUiPrefs(uiPrefs: SongRow["uiPrefs"]): Partial<StoredSong> {
   if (!uiPrefs) return {};
 
   return Object.fromEntries(
-    uiPrefKeys
+    UI_PREF_KEYS
       .map((key) => [key, uiPrefs[key]] as const)
       .filter((entry) => entry[1] !== undefined),
   ) as Partial<StoredSong>;

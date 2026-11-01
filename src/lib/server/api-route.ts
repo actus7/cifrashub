@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
-import { requireUserId } from "@/lib/server/api-auth";
+import { neonAuth } from "@/lib/auth-server";
 
 export async function requireApiUserId(): Promise<
   { userId: string } | { response: NextResponse }
 > {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return { response: authResult.error };
-  return { userId: authResult.userId };
+  const { data: session } = await neonAuth.getSession();
+  const userId = session?.user?.id;
+  if (!userId) {
+    return { response: NextResponse.json({ error: "Nao autorizado" }, { status: 401 }) };
+  }
+  return { userId };
 }
 
 export async function readJsonBody<T>(
