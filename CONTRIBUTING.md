@@ -56,6 +56,10 @@ src/
   lib/          # Utilitários e lógica de negócio
 ```
 
+## Lockfile
+
+Regenere o `package-lock.json` no Linux/WSL, nunca no Windows: o npm do Windows descarta entradas opcionais de outras plataformas e quebra o `npm ci` no CI.
+
 ## Perguntas?
 
 Abra uma [Discussion](../../discussions) ou uma issue com a label `question`.
