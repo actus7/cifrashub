@@ -116,3 +116,17 @@ the characterization tests pin against — re-run the 002 test suite afterwards)
 `~/cifrashub-rc` deleted; all `rc-*.sh` helper scripts and their outputs removed from the
 worktree. Worktree is clean (no untracked files, no `node_modules` installed on the Windows
 drive). Nothing pushed — local commits only, per plan.
+
+## Audit fix
+
+`happy-dom` bumped `^20.14.6` -> `^21.0.4` (21.0.4 is the lowest version outside both advisory ranges; 21.0.3 is still in GHSA-834v-8h66-3h79). Lockfile regenerated on Linux (WSL, node 24.18.0, npm 12.0.2, `--allow-remote=all` as in Step 2).
+
+| Gate | Exit | Notes |
+|---|---|---|
+| `npm ci` | 0 | |
+| lint | 0 | same 1 pre-existing warning (`share-query.ts`) |
+| typecheck | 0 | |
+| test | 0 | 28 files, 212 tests passed |
+| audit | 0 | |
+| drift | 0 | "No schema changes"; `drizzle/` identical to worktree (`diff -rq`) |
+| build | 0 | stub env |
