@@ -55,7 +55,9 @@ if (process.env.VERCEL_ENV === "production") {
   // 1. Migração SQL (backfill de dados + criação de tabelas). Idempotente.
   execSync("node scripts/migrate.cjs pre", { stdio: "inherit" });
   // 2. drizzle-kit push alinha o schema restante (colunas, defaults, tipos).
-  execSync("npm run db:push:ci", { stdio: "inherit" });
+  // Sem --force, diffs destrutivos pedem confirmacao; com stdin fechado o prompt
+  // falha (ou o timeout mata o processo) e o build de producao aborta — fail-closed intencional.
+  execSync("npm run db:push:ci", { stdio: ["ignore", "inherit", "inherit"], timeout: 5 * 60 * 1000 });
   execSync("node scripts/migrate.cjs post", { stdio: "inherit" });
 }
 execSync("npm run build", { stdio: "inherit" });
