@@ -1,4 +1,4 @@
-import type { SectionType } from "./types";
+import type { Section, SectionType } from "./types";
 
 const NOTES = [
   "C",
@@ -197,4 +197,16 @@ const SECTION_MATCHERS: Array<[RegExp, SectionType]> = [
 export function classifySection(label: string): SectionType {
   const lower = label.toLowerCase();
   return SECTION_MATCHERS.find(([pattern]) => pattern.test(lower))?.[1] ?? "verse";
+}
+
+export function firstChordRoot(songData: Section[]): string | undefined {
+  for (const section of songData) {
+    for (const line of section.content) {
+      for (const block of line) {
+        const root = block.chord?.match(/^([A-G][#b]?)/)?.[1];
+        if (root) return root;
+      }
+    }
+  }
+  return undefined;
 }

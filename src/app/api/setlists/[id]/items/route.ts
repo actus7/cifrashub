@@ -2,8 +2,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { userSetlistItems } from "@/db/schema";
-import { requireUserId } from "@/lib/server/api-auth";
-import { readJsonBody } from "@/lib/server/api-route";
+import { readJsonBody, requireApiUserId } from "@/lib/server/api-route";
 import { nextPosition } from "@/lib/server/positions";
 import {
   assertUserOwnsArrangement,
@@ -14,8 +13,8 @@ import {
 type RouteCtx = { params: Promise<{ id: string }> };
 
 async function requireOwnedSetlist(ctx: RouteCtx) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return { error: authResult.error };
+  const authResult = await requireApiUserId();
+  if ("response" in authResult) return { error: authResult.response };
 
   const { id: setlistId } = await ctx.params;
   const ownsSetlist = await assertUserOwnsSetlist(authResult.userId, setlistId);

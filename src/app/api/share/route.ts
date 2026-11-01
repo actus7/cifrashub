@@ -2,8 +2,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { shareSnapshots, shareTokens, userSongs } from "@/db/schema";
-import { requireUserId } from "@/lib/server/api-auth";
-import { requireApiUserJson } from "@/lib/server/api-route";
+import { requireApiUserId, requireApiUserJson } from "@/lib/server/api-route";
 import { assertFolderOwner, preferredArrangementRow, rowToStoredSong } from "@/lib/server/cloud-data";
 import { tokenExpiry } from "@/lib/server/share-expiry";
 import { getUserDisplayName } from "@/lib/server/access";
@@ -200,8 +199,8 @@ async function setlistSharePayload(userId: string, setlistId: string | undefined
 }
 
 export async function DELETE(req: Request) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return authResult.error;
+  const authResult = await requireApiUserId();
+  if ("response" in authResult) return authResult.response;
 
   const { searchParams } = new URL(req.url);
   const token = searchParams.get("token");

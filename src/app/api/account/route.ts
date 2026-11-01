@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/db";
-import { neonAuth } from "@/lib/auth-server";
+import { requireApiUserId } from "@/lib/server/api-route";
 import { clearAuthCookies } from "@/lib/server/auth-cookies";
 
 export async function DELETE() {
-  const { data: session } = await neonAuth.getSession();
-  const userId = session?.user?.id;
-
-  if (!userId) {
-    return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
-  }
+  const auth = await requireApiUserId();
+  if ("response" in auth) return auth.response;
+  const { userId } = auth;
 
   try {
     await sql.transaction((tx) => [

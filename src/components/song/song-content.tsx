@@ -2,7 +2,7 @@
 
 import { memo, type KeyboardEvent } from "react";
 import { ChevronDown } from "lucide-react";
-import { chordToNashville, simplifyChord, transposeChord, transposeRootNote } from "@/lib/music";
+import { chordToNashville, firstChordRoot, simplifyChord, transposeChord, transposeRootNote } from "@/lib/music";
 import { cn } from "@/lib/utils";
 import type { LyricLine, Section } from "@/lib/types";
 
@@ -26,18 +26,6 @@ type ContentChunk =
 
 function lineChunkType(line: LyricLine): ContentChunk["type"] {
   return line.length > 0 && Boolean(line[0]?.isTab) ? "tabs" : "lyrics";
-}
-
-function firstChordRoot(songData: Section[]): string | undefined {
-  for (const section of songData) {
-    for (const line of section.content) {
-      for (const block of line) {
-        const root = block.chord?.match(/^([A-G][#b]?)/)?.[1];
-        if (root) return root;
-      }
-    }
-  }
-  return undefined;
 }
 
 function appendLineChunk(chunks: ContentChunk[], line: LyricLine) {

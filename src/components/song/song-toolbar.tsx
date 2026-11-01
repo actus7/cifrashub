@@ -15,34 +15,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getRelativeKeyToggle, transposeRootNote } from "@/lib/music";
-import type { Section } from "@/lib/types";
+import { firstChordRoot, getRelativeKeyToggle, transposeRootNote } from "@/lib/music";
 import { useSongViewContext } from "./song-context";
 import { VersionToolbarControl } from "./song-version-menu";
-
-function firstChordRoot(songData: Section[]): string | undefined {
-  for (const section of songData) {
-    const root = firstSectionChordRoot(section);
-    if (root) return root;
-  }
-  return undefined;
-}
-
-function firstSectionChordRoot(section: Section) {
-  for (const line of section.content) {
-    const root = firstLineChordRoot(line);
-    if (root) return root;
-  }
-  return undefined;
-}
-
-function firstLineChordRoot(line: Section["content"][number]) {
-  for (const block of line) {
-    const root = block.chord?.match(/^([A-G][#b]?)/)?.[1];
-    if (root) return root;
-  }
-  return undefined;
-}
 
 export function ToolbarButton({
   active,
