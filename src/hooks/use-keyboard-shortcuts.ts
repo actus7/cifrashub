@@ -7,6 +7,8 @@ type ShortcutHandlers = {
   onToggleZen: () => void;
   onScrollDown: () => void;
   onScrollUp: () => void;
+  onNextSong?: () => void;
+  onPrevSong?: () => void;
 };
 
 type ShortcutAction = (handlers: ShortcutHandlers) => void;
@@ -15,6 +17,8 @@ const SHORTCUT_ACTIONS: Record<string, ShortcutAction> = {
   Space: handlers => handlers.onToggleAutoScroll(),
   ArrowDown: handlers => handlers.onScrollDown(),
   ArrowUp: handlers => handlers.onScrollUp(),
+  PageDown: handlers => handlers.onNextSong?.(),
+  PageUp: handlers => handlers.onPrevSong?.(),
 };
 
 function isEditableTarget(target: EventTarget | null) {
@@ -46,6 +50,10 @@ export function useSongKeyboardShortcuts(options: {
 
       const action = shortcutAction(e);
       if (!action) return;
+      // Page keys only act (and swallow the event) when setlist navigation is active.
+      const h = handlersRef.current;
+      if (e.code === "PageDown" && !h.onNextSong) return;
+      if (e.code === "PageUp" && !h.onPrevSong) return;
 
       e.preventDefault();
       action(handlersRef.current);

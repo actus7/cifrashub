@@ -250,6 +250,17 @@ export async function cloudReorderSetlistItems(
   });
 }
 
+export async function cloudUpdateSetlistItemNote(
+  setlistId: string,
+  itemId: string,
+  notes: string | null,
+): Promise<SetlistDetailView> {
+  return apiJson(`/api/setlists/${encodeURIComponent(setlistId)}/items`, {
+    method: "PATCH",
+    body: JSON.stringify({ itemId, notes }),
+  });
+}
+
 export async function cloudUpdateSongPrefs(
   arrangementId: string,
   prefs: { tone: number; capo: number; uiPrefs: StoredSongUiPrefs },
