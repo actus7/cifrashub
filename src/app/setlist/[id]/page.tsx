@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { arrangementKey } from "@/lib/arrangement-key";
 import { SetlistDetailViewScreen } from "@/components/setlist/setlist-detail-view";
 import { useSession } from "@/hooks/use-session";
-import { buildLocalSetlistDetail } from "@/lib/setlist-local";
+import { buildLocalSetlistDetail, normalizeNote } from "@/lib/setlist-local";
 import { isStaleResponse } from "@/lib/stale-response";
 import {
   cloudAddSetlistItem,
@@ -15,6 +15,7 @@ import {
   cloudLeaveSetlist,
   cloudRemoveSetlistItem,
   cloudReorderSetlistItems,
+  cloudUpdateSetlistItemNote,
   loadLocalSetlists,
   saveLocalSetlists,
 } from "@/lib/storage";
@@ -210,6 +211,21 @@ export default function SetlistPage() {
     updateLocalSetlist((items) => localItemsWithPositions(items, patches));
   };
 
+  const onEditNote = async (itemId: string, notes: string) => {
+    if (!detail) return;
+    const normalized = normalizeNote(notes);
+    if (normalized === undefined) return;
+
+    if (isCloud) {
+      await runCloudMutation(() => cloudUpdateSetlistItemNote(setId, itemId, normalized));
+      return;
+    }
+
+    updateLocalSetlist((items) =>
+      items.map((item) => (item.itemId === itemId ? { ...item, notes: normalized } : item)),
+    );
+  };
+
   const onShare = async () => {
     if (shareBusy) return;
 
@@ -260,6 +276,7 @@ export default function SetlistPage() {
       onAddItem={onAddItem}
       onRemoveItem={onRemoveItem}
       onMoveItem={onMoveItem}
+      onEditNote={onEditNote}
       onShare={isCloud && detail.viewerRole !== "member" ? onShare : undefined}
       onLeave={isCloud && detail.viewerRole === "member" ? onLeave : undefined}
       shareBusy={shareBusy}
