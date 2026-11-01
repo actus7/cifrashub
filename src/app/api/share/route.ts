@@ -5,6 +5,7 @@ import { shareSnapshots, shareTokens, userSongs } from "@/db/schema";
 import { requireUserId } from "@/lib/server/api-auth";
 import { requireApiUserJson } from "@/lib/server/api-route";
 import { assertFolderOwner, preferredArrangementRow, rowToStoredSong } from "@/lib/server/cloud-data";
+import { tokenExpiry } from "@/lib/server/share-expiry";
 import { getUserDisplayName } from "@/lib/server/access";
 import { assertUserOwnsSetlist, getSetlistDetail } from "@/lib/server/setlist-queries";
 import type { ShareSnapshotPayload } from "@/lib/share-payload";
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
     .values({
       snapshotId: snapshot!.id,
       permission: "read",
+      expiresAt: tokenExpiry(payloadResult.resourceType),
     })
     .returning();
 

@@ -174,6 +174,23 @@ export async function cloudCreateSetlistShareLink(
   });
 }
 
+export type ResourceMember = { userId: string; name: string | null; joinedAt: string };
+
+export async function cloudListFolderMembers(folderId: string): Promise<{ members: ResourceMember[] }> {
+  return apiJson(`/api/folders/${encodeURIComponent(folderId)}/members`);
+}
+
+export async function cloudListSetlistMembers(setlistId: string): Promise<{ members: ResourceMember[] }> {
+  return apiJson(`/api/setlists/${encodeURIComponent(setlistId)}/members`);
+}
+
+export async function cloudRemoveSetlistMember(setlistId: string, userId: string): Promise<{ ok: true }> {
+  return apiJson(
+    `/api/setlists/${encodeURIComponent(setlistId)}/members?userId=${encodeURIComponent(userId)}`,
+    { method: "DELETE" },
+  );
+}
+
 export async function cloudLeaveSetlist(id: string): Promise<{ ok: true }> {
   return apiJson(`/api/setlists/${encodeURIComponent(id)}/membership`, {
     method: "DELETE",
