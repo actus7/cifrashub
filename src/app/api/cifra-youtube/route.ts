@@ -17,8 +17,8 @@ function cifraClubResponseError(status: number) {
 }
 
 function fetchErrorResponse(error: unknown) {
-  const message = error instanceof Error ? error.message : "Falha ao buscar página";
-  return NextResponse.json({ youtubeId: null, error: message }, { status: 502 });
+  console.error("Falha ao buscar página da cifra:", error);
+  return NextResponse.json({ youtubeId: null, error: "Falha ao buscar página" }, { status: 502 });
 }
 
 async function fetchCifraPage(artistSlug: string, slug: string) {

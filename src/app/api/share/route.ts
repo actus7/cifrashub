@@ -105,7 +105,6 @@ async function folderInvitePayload(userId: string, folderId: string | undefined)
     payload: {
       type: "folder-invite",
       folderId: folder.id,
-      ownerId: userId,
       ownerName,
       title: folder.title,
     } satisfies ShareSnapshotPayload,
@@ -128,7 +127,6 @@ async function setlistInvitePayload(userId: string, setlistId: string | undefine
     payload: {
       type: "setlist-invite",
       setlistId: sid,
-      ownerId: userId,
       ownerName,
       title: detail.title,
     } satisfies ShareSnapshotPayload,

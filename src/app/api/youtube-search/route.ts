@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireApiUserId } from "@/lib/server/api-route";
 import { isValidYoutubeId } from "@/lib/youtube";
 
 const MAX_Q = 180;
@@ -95,8 +96,8 @@ async function fetchYoutubeSearch(q: string, apiKey: string) {
 }
 
 function networkErrorResponse(error: unknown) {
-  const message = error instanceof Error ? error.message : "Falha na busca";
-  return jsonError("network", 502, message);
+  console.error("YouTube search failed:", error);
+  return jsonError("network", 502, "Falha na busca");
 }
 
 async function youtubeSearchResponse(q: string, apiKey: string) {
@@ -108,12 +109,15 @@ async function youtubeSearchResponse(q: string, apiKey: string) {
 }
 
 function youtubeSearchResult({ data, res }: Awaited<ReturnType<typeof fetchYoutubeSearch>>) {
-  return res.ok
-    ? successResponse(candidatesFromResponse(data))
-    : jsonError("youtube_api", 502, data.error?.message ?? res.statusText);
+  if (res.ok) return successResponse(candidatesFromResponse(data));
+  console.error("YouTube API error:", data.error?.message ?? res.statusText);
+  return jsonError("youtube_api", 502, "Falha na busca");
 }
 
 export async function GET(request: Request) {
+  const auth = await requireApiUserId();
+  if ("response" in auth) return auth.response;
+
   const { searchParams } = new URL(request.url);
   const q = sanitizeQ(searchParams.get("q"));
   if (!q) return jsonError("invalid_query", 400);
