@@ -240,6 +240,6 @@ export async function cloudSyncSongContent(
 ): Promise<{ ok: true }> {
   return apiJson("/api/songs/prefs", {
     method: "PATCH",
-    body: JSON.stringify({ arrangementId, song }),
+    body: JSON.stringify({ arrangementId, song, syncContent: true }),
   });
 }
