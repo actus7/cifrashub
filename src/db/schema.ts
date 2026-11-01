@@ -102,6 +102,9 @@ export const userFolders = pgTable(
   (t) => ({
     idxUserFolderUserPosition: index("idx_user_folder_user_position")
       .on(t.userId, t.position, t.createdAt),
+    uqUserFolderDefault: uniqueIndex("uq_user_folder_default")
+      .on(t.userId)
+      .where(sql`${t.isDefault} = true`),
   }),
 );
 

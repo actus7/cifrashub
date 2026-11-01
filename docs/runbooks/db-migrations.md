@@ -35,3 +35,7 @@ baseline is needed. Every step below requires explicit human approval; none is a
    `when` (`created_at`) values derived from `drizzle/meta/_journal.json` and the migration SQL files.
 3. Replace `db:push:ci` with `drizzle-kit migrate` in `scripts/vercel-build.cjs`.
 4. Check `scripts/migrate.cjs pre/post` for overlap with the versioned migrations.
+
+## Before deploying migration 0003 (`uq_user_folder_default`)
+
+Migration 0003 creates a unique partial index allowing one default folder per user. Existing duplicate default "Favoritos" folders would make index creation fail and break the deploy. Before this migration reaches production, a human must run `scripts/merge-duplicate-favoritos.ts` (dry-run first, review the output, then apply).

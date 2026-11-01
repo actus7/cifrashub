@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { userFolders, userSongs } from "@/db/schema";
 import type { Folder, StoredSong } from "@/lib/types";
@@ -74,6 +74,21 @@ function songsForUser(userId: string) {
     .where(eq(userSongs.userId, userId));
 }
 
+export function pickDefaultFolderToPromote<
+  T extends { isDefault: boolean; title: string },
+>(folders: T[]): T | undefined {
+  return (
+    folders.find((folder) => folder.isDefault) ??
+    folders.find((folder) => folder.title === "Favoritos") ??
+    folders[0]
+  );
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  const e = error as { code?: string; cause?: { code?: string } } | null;
+  return e?.code === "23505" || e?.cause?.code === "23505";
+}
+
 async function ensureDefaultFolderRows(
   userId: string,
   existing: FolderRow[],
@@ -87,19 +102,28 @@ async function ensureDefaultFolderRows(
         position: 0,
         isDefault: true,
       })
+      .onConflictDoNothing({
+        target: userFolders.userId,
+        where: sql`${userFolders.isDefault} = true`,
+      })
       .returning();
-    return created ? [created] : [];
+    // Lost the race to a concurrent insert: return what the winner created.
+    return created ? [created] : foldersForUser(userId);
   }
 
   if (existing.some((folder) => folder.isDefault)) return existing;
 
-  const defaultFolder =
-    existing.find((folder) => folder.title === "Favoritos") ?? existing[0]!;
+  const defaultFolder = pickDefaultFolderToPromote(existing)!;
   const updatedAt = new Date();
-  await db
-    .update(userFolders)
-    .set({ isDefault: true, updatedAt })
-    .where(eq(userFolders.id, defaultFolder.id));
+  try {
+    await db
+      .update(userFolders)
+      .set({ isDefault: true, updatedAt })
+      .where(eq(userFolders.id, defaultFolder.id));
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    return foldersForUser(userId);
+  }
 
   return existing.map((folder) =>
     folder.id === defaultFolder.id
