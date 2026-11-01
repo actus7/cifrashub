@@ -22,6 +22,20 @@
       "when": 1793541779309,
       "tag": "0002_groovy_randall",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793545828020,
+      "tag": "0003_sour_night_nurse",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793547578609,
+      "tag": "0004_worried_sunfire",
+      "breakpoints": true
     }
   ]
 }

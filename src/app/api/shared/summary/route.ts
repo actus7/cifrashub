@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { folderMembers, setlistMembers, userFolders, userSetlists } from "@/db/schema";
 import { requireApiUserId } from "@/lib/server/api-route";
-import { getUserDisplayName } from "@/lib/server/access";
+import { getUserDisplayNames } from "@/lib/server/access";
 
 type SharedFolderRow = { id: string; title: string; ownerId: string };
 type SharedSetlistRow = { id: string; title: string; description: string | null; ownerId: string };
@@ -17,10 +17,21 @@ export async function GET() {
     sharedSetlistRows(auth.userId),
   ]);
 
-  const [folders, setlists] = await Promise.all([
-    Promise.all(folderRows.map(decorateFolder)),
-    Promise.all(setlistRows.map(decorateSetlist)),
+  const names = await getUserDisplayNames([
+    ...folderRows.map((r) => r.ownerId),
+    ...setlistRows.map((r) => r.ownerId),
   ]);
+  const folders = folderRows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    ownerName: names.get(row.ownerId) ?? null,
+  }));
+  const setlists = setlistRows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    ownerName: names.get(row.ownerId) ?? null,
+  }));
 
   return NextResponse.json({ folders, setlists });
 }
@@ -44,17 +55,4 @@ function sharedSetlistRows(userId: string): Promise<SharedSetlistRow[]> {
     .from(setlistMembers)
     .innerJoin(userSetlists, eq(userSetlists.id, setlistMembers.setlistId))
     .where(eq(setlistMembers.userId, userId));
-}
-
-async function decorateFolder(row: SharedFolderRow) {
-  return { id: row.id, title: row.title, ownerName: await getUserDisplayName(row.ownerId) };
-}
-
-async function decorateSetlist(row: SharedSetlistRow) {
-  return {
-    id: row.id,
-    title: row.title,
-    description: row.description,
-    ownerName: await getUserDisplayName(row.ownerId),
-  };
 }

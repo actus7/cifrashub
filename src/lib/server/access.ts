@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   folderMembers,
@@ -37,6 +37,18 @@ export function displayNameFromUserRow(
   row: { name: string | null; email: string | null } | undefined,
 ): string | null {
   return row?.name?.trim() || null;
+}
+
+export async function getUserDisplayNames(ids: string[]): Promise<Map<string, string | null>> {
+  const unique = [...new Set(ids)];
+  const names = new Map<string, string | null>(unique.map((id) => [id, null]));
+  if (unique.length === 0) return names;
+  const rows = await db
+    .select({ id: neonAuthUsers.id, name: neonAuthUsers.name, email: neonAuthUsers.email })
+    .from(neonAuthUsers)
+    .where(inArray(neonAuthUsers.id, unique));
+  for (const row of rows) names.set(row.id, displayNameFromUserRow(row));
+  return names;
 }
 
 async function lookupUserName(userId: string): Promise<string | null> {

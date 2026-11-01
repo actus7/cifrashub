@@ -1,4 +1,7 @@
-const CACHE_NAME = 'cifrashub-v2';
+const STATIC_CACHE = 'cifrashub-static-v3';
+const PAGES_CACHE = 'cifrashub-pages-v3';
+const KNOWN_CACHES = [STATIC_CACHE, PAGES_CACHE];
+const MAX_PAGE_ENTRIES = 50;
 
 const PRECACHE_URLS = [
   '/',
@@ -18,7 +21,7 @@ function handleInstall(event) {
 }
 
 function precacheAssets() {
-  return caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS));
+  return caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE_URLS));
 }
 
 function handleActivate(event) {
@@ -33,7 +36,7 @@ function cleanOldCaches() {
 }
 
 function isOldCache(key) {
-  return key !== CACHE_NAME;
+  return !KNOWN_CACHES.includes(key);
 }
 
 function deleteCache(key) {
@@ -77,18 +80,32 @@ function cacheFirstWithStore(request) {
 
 function networkFirst(request) {
   return fetch(request)
-    .then((response) => storeIfOk(request, response))
+    .then((response) => storeIfOk(PAGES_CACHE, request, response))
     .catch(() => caches.match(request).then((cached) => cached || caches.match('/')));
 }
 
 function fetchAndStore(request) {
-  return fetch(request).then((response) => storeIfOk(request, response));
+  return fetch(request).then((response) => storeIfOk(STATIC_CACHE, request, response));
 }
 
-function storeIfOk(request, response) {
-  if (response.ok) {
+function isCacheable(response) {
+  const control = (response.headers.get('Cache-Control') || '').toLowerCase();
+  return response.ok && !control.includes('no-store') && !control.includes('private');
+}
+
+function storeIfOk(cacheName, request, response) {
+  if (isCacheable(response)) {
     const clone = response.clone();
-    caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+    caches.open(cacheName).then((cache) =>
+      cache.put(request, clone).then(() => (cacheName === PAGES_CACHE ? trimCache(cache) : undefined)),
+    );
   }
   return response;
+}
+
+// Cache.keys() returns entries in insertion order, so the oldest come first.
+function trimCache(cache) {
+  return cache.keys().then((keys) =>
+    Promise.all(keys.slice(0, Math.max(0, keys.length - MAX_PAGE_ENTRIES)).map((key) => cache.delete(key))),
+  );
 }

@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { userSongs } from "@/db/schema";
@@ -9,6 +9,8 @@ import { requireOwnedFolder } from "@/lib/server/folder-route";
 import { nextPosition } from "@/lib/server/positions";
 import { buildStoredSongRow, songRowUpdateSet } from "@/lib/server/stored-song-row";
 import { validateStoredSong } from "@/lib/server/song-validation";
+
+const MAX_BULK_REMOVE = 500;
 
 type RouteCtx = { params: Promise<{ id: string }> };
 type OwnedFolderCtx = Awaited<ReturnType<typeof requireOwnedFolder>>;
@@ -88,14 +90,32 @@ export async function DELETE(req: Request, ctx: RouteCtx) {
   const { searchParams } = new URL(req.url);
   const arrangementId =
     searchParams.get("arrangementId") ?? searchParams.get("songId");
-  if (!arrangementId) {
-    return NextResponse.json(
-      { error: "arrangementId obrigatório" },
-      { status: 400 },
-    );
+  if (arrangementId) {
+    await db.delete(userSongs).where(folderSongWhere(folderCtx, arrangementId));
+    return respondWithFolders(folderCtx.userId);
   }
 
-  await db.delete(userSongs).where(folderSongWhere(folderCtx, arrangementId));
+  const json = await readJsonBody<{ arrangementIds?: unknown }>(req);
+  if ("response" in json) return json.response;
+  const ids = json.body?.arrangementIds;
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    ids.length > MAX_BULK_REMOVE ||
+    !ids.every((id) => typeof id === "string" && id)
+  ) {
+    return NextResponse.json({ error: "arrangementId obrigatório" }, { status: 400 });
+  }
+
+  await db
+    .delete(userSongs)
+    .where(
+      and(
+        eq(userSongs.userId, folderCtx.userId),
+        eq(userSongs.folderId, folderCtx.folderId),
+        inArray(userSongs.arrangementId, ids as string[]),
+      ),
+    );
 
   return respondWithFolders(folderCtx.userId);
 }

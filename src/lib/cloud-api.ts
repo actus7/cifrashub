@@ -132,6 +132,16 @@ export async function cloudRemoveRecent(
   return apiJson(`/api/recentes?${q.toString()}`, { method: "DELETE" });
 }
 
+export async function cloudRemoveFolderSongs(
+  folderId: string,
+  arrangementIds: string[],
+): Promise<{ folders: Folder[] }> {
+  return apiJson(`/api/folders/${encodeURIComponent(folderId)}/songs`, {
+    method: "DELETE",
+    body: JSON.stringify({ arrangementIds }),
+  });
+}
+
 /** @deprecated use cloudTouchRecent */
 export async function cloudSaveRecentes(
   songs: StoredSong[],

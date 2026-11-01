@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "uq_user_folder_default" ON "user_folder" USING btree ("user_id") WHERE "user_folder"."is_default" = true;

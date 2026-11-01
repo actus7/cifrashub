@@ -85,12 +85,12 @@ export async function fetchSongsByArtist(
   artistName: string,
 ): Promise<SearchResultSong[]> {
   const queries = [artistName, artistSlug].filter(Boolean);
-  const merged: SearchResultSong[] = [];
-
-  for (const query of queries) {
-    const songs = await fetchArtistQuerySongs(query);
-    merged.push(...songs.filter((song) => songMatchesArtist(song, artistSlug, artistName)));
-  }
+  const normalized = queries.map((q) => q.trim().toLowerCase());
+  const distinct = queries.filter((_, i) => normalized.indexOf(normalized[i]) === i);
+  const results = await Promise.all(distinct.map(fetchArtistQuerySongs));
+  const merged = results.flatMap((songs) =>
+    songs.filter((song) => songMatchesArtist(song, artistSlug, artistName)),
+  );
 
   return uniqueSongs(merged);
 }

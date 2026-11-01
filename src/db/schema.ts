@@ -102,6 +102,9 @@ export const userFolders = pgTable(
   (t) => ({
     idxUserFolderUserPosition: index("idx_user_folder_user_position")
       .on(t.userId, t.position, t.createdAt),
+    uqUserFolderDefault: uniqueIndex("uq_user_folder_default")
+      .on(t.userId)
+      .where(sql`${t.isDefault} = true`),
   }),
 );
 
@@ -241,7 +244,7 @@ export const shareSnapshots = pgTable("share_snapshot", {
   payload: jsonb("payload").notNull().$type<unknown>(),
   createdByUserId: uuid("created_by_user_id").notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-});
+}, (t) => [index("idx_share_snapshot_creator_created").on(t.createdByUserId, t.createdAt)]);
 
 export const shareTokens = pgTable("share_token", {
   token: text("token")
@@ -254,7 +257,7 @@ export const shareTokens = pgTable("share_token", {
   expiresAt: timestamp("expires_at", { mode: "date" }),
   revokedAt: timestamp("revoked_at", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-});
+}, (t) => [index("idx_share_token_snapshot").on(t.snapshotId)]);
 
 export const userFoldersRelations = relations(userFolders, ({ many }) => ({
   songs: many(userSongs),
