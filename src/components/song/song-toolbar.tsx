@@ -18,7 +18,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useKeyDetect } from "@/hooks/use-key-detect";
 import { useIsSubscriber } from "@/hooks/use-subscription";
-import { usePlayerStore } from "@/store/use-player-store";
 import { cn } from "@/lib/utils";
 import { firstChordRoot, getRelativeKeyToggle, transposeRootNote } from "@/lib/music";
 import { useSongViewContext } from "./song-context";
@@ -203,20 +202,20 @@ function firstChordKey(songData: SongViewValue["songData"]): string | undefined 
   return undefined;
 }
 
-/** Assinatura: escuta a voz por alguns segundos (com a cifra rolando) e transpõe para o tom cantado. */
+/** Assinatura: escuta a voz por alguns segundos e transpõe para o tom cantado. */
 function KeyDetectControl() {
   const isSubscriber = useIsSubscriber();
   const { tone, setTone, currentSong, songData, sharedContext } = useSongViewContext();
   const displayKey = songDisplayKey(currentSong, songData);
   // O tom do store é relativo aos acordes escritos, então a detecção parte do tom escrito (com o modo).
   const { state, start, cancel } = useKeyDetect(currentSong.cifraWrittenKey ?? firstChordKey(songData));
-  const autoScrollBefore = useRef<boolean | null>(null);
   const toneBefore = useRef(tone);
+  const handled = useRef<typeof state | null>(null);
 
   useEffect(() => {
-    if (state.status === "listening" || autoScrollBefore.current === null) return;
-    usePlayerStore.getState().setAutoScroll(autoScrollBefore.current);
-    autoScrollBefore.current = null;
+    // Cada resultado é aplicado uma vez só, mesmo que o efeito rode de novo.
+    if (handled.current === state) return;
+    handled.current = state;
     if (state.status === "error") toast.error(state.message);
     if (state.status !== "done") return;
     const previous = toneBefore.current;
@@ -236,8 +235,6 @@ function KeyDetectControl() {
       return;
     }
     toneBefore.current = tone;
-    autoScrollBefore.current = usePlayerStore.getState().autoScroll;
-    usePlayerStore.getState().setAutoScroll(true);
     void start();
   };
 
