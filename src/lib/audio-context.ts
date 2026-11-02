@@ -1,3 +1,6 @@
+/** Nível de microfone (0–1) acima do qual há som de verdade (abaixo é silêncio/ruído da sala). */
+export const SOUND_LEVEL = 0.08;
+
 /** Fábrica cross-browser de AudioContext. */
 export function createAudioContext(): AudioContext | null {
   const Win = window as Window & {

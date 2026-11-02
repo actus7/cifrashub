@@ -20,6 +20,7 @@
 - Prefer `npm run db:generate` to create versioned Drizzle migrations in `drizzle/`.
 - Use `npm run db:push` only for controlled local or reviewed environments.
 - Do not run database changes against production without explicit human approval.
+- Production builds apply schema changes automatically with `drizzle-kit push` (without `--force`, so destructive diffs abort the build). CI fails if `src/db/schema.ts` changes without a committed migration. See `docs/runbooks/db-migrations.md`.
 
 ## PR instructions
 - Follow Conventional Commits, for example `feat(song): add stage controls` or `chore(ci): add verification workflow`.

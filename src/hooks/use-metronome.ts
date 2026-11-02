@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { PLAYER_PREF_DEFAULTS } from "@/lib/player-pref-defaults";
 import { createAudioContext, ensureResumed } from "@/lib/audio-context";
+
+
 
 export function useMetronome(
   active: boolean,
@@ -26,7 +29,8 @@ export function useMetronome(
       ctxRef.current = createAudioContext();
     }
 
-    const msPerBeat = 60000 / bpm;
+    const safeBpm = Number.isFinite(bpm) ? Math.min(300, Math.max(20, bpm)) : PLAYER_PREF_DEFAULTS.bpm;
+    const msPerBeat = 60000 / safeBpm;
     const interval = setInterval(() => {
       const ctx = ctxRef.current;
       if (!ctx) return;

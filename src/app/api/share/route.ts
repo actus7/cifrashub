@@ -1,10 +1,10 @@
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, count, eq, gt, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { shareSnapshots, shareTokens, userSongs } from "@/db/schema";
-import { requireUserId } from "@/lib/server/api-auth";
-import { requireApiUserJson } from "@/lib/server/api-route";
+import { requireApiUserId, requireApiUserJson } from "@/lib/server/api-route";
 import { assertFolderOwner, preferredArrangementRow, rowToStoredSong } from "@/lib/server/cloud-data";
+import { tokenExpiry } from "@/lib/server/share-expiry";
 import { getUserDisplayName } from "@/lib/server/access";
 import { assertUserOwnsSetlist, getSetlistDetail } from "@/lib/server/setlist-queries";
 import type { ShareSnapshotPayload } from "@/lib/share-payload";
@@ -43,6 +43,7 @@ export async function POST(req: Request) {
     .values({
       snapshotId: snapshot!.id,
       permission: "read",
+      expiresAt: tokenExpiry(payloadResult.resourceType),
     })
     .returning();
 
@@ -54,8 +55,8 @@ export async function POST(req: Request) {
 
 async function shareRateLimitResponse(userId: string) {
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  const recentShares = await db
-    .select({ id: shareSnapshots.id })
+  const [{ total } = { total: 0 }] = await db
+    .select({ total: count() })
     .from(shareSnapshots)
     .where(
       and(
@@ -64,7 +65,7 @@ async function shareRateLimitResponse(userId: string) {
       ),
     );
 
-  if (recentShares.length < MAX_SHARES_PER_HOUR) return null;
+  if (total < MAX_SHARES_PER_HOUR) return null;
 
   return NextResponse.json(
     { error: "Limite de compartilhamentos por hora atingido. Tente novamente mais tarde." },
@@ -105,7 +106,6 @@ async function folderInvitePayload(userId: string, folderId: string | undefined)
     payload: {
       type: "folder-invite",
       folderId: folder.id,
-      ownerId: userId,
       ownerName,
       title: folder.title,
     } satisfies ShareSnapshotPayload,
@@ -128,7 +128,6 @@ async function setlistInvitePayload(userId: string, setlistId: string | undefine
     payload: {
       type: "setlist-invite",
       setlistId: sid,
-      ownerId: userId,
       ownerName,
       title: detail.title,
     } satisfies ShareSnapshotPayload,
@@ -200,8 +199,8 @@ async function setlistSharePayload(userId: string, setlistId: string | undefined
 }
 
 export async function DELETE(req: Request) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return authResult.error;
+  const authResult = await requireApiUserId();
+  if ("response" in authResult) return authResult.response;
 
   const { searchParams } = new URL(req.url);
   const token = searchParams.get("token");

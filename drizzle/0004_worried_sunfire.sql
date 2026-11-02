@@ -1,0 +1,2 @@
+CREATE INDEX "idx_share_snapshot_creator_created" ON "share_snapshot" USING btree ("created_by_user_id","created_at");--> statement-breakpoint
+CREATE INDEX "idx_share_token_snapshot" ON "share_token" USING btree ("snapshot_id");

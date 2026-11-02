@@ -1,0 +1,219 @@
+"use client";
+
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { AudioLines, Radio, Square } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { ExperimentalBadge } from "@/components/ui/experimental";
+import type { useSetlistNavigation } from "@/hooks/use-setlist-navigation";
+import { focusLyricLine } from "@/hooks/use-lyrics-follow";
+import { useSongFollow } from "@/hooks/use-song-follow";
+import { MicLevelMeter } from "@/components/ui/mic-level-meter";
+import { useStage } from "@/hooks/use-stage";
+import { useIsSubscriber } from "@/hooks/use-subscription";
+import type { StageCommand } from "@/lib/stage-commands";
+import { cn } from "@/lib/utils";
+import { useSongViewContext } from "./song-context";
+
+type Nav = NonNullable<ReturnType<typeof useSetlistNavigation>>;
+
+/** Na última linha da letra, sem nova linha por este tempo, o palco passa para a próxima música. */
+const AUTO_NEXT_MS = 8_000;
+
+function lyricLineCount() {
+  return document.querySelectorAll("[data-follow]").length;
+}
+
+function exitStageUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("stage");
+  return `${url.pathname}${url.search}`;
+}
+
+function StageShell({ children, live }: { children: ReactNode; live: boolean }) {
+  return (
+    <div data-scroll-inset="bottom" className="no-print fixed inset-x-0 bottom-[52px] z-40 flex items-center justify-between gap-2 border-t bg-background/95 px-3 py-1.5 text-sm backdrop-blur">
+      <span className={cn("flex items-center gap-1.5 font-semibold", live ? "text-primary" : "text-muted-foreground")}>
+        <Radio className={cn("size-4", live && "animate-pulse")} /> {live ? "Ao vivo" : "Palco"}
+        <ExperimentalBadge />
+      </span>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Frases faladas que não são letra vão ao Jev (rota do servidor), uma por vez e sempre a mais nova:
+ * sem fila e sem intervalo fixo, como no kit Jev (slides-seguem), mas sem esperar 600 ms entre chamadas.
+ */
+function useVoiceCommands(setlistId: string, execute: (command: StageCommand) => void) {
+  const inFlight = useRef(false);
+  const latest = useRef<string | null>(null);
+  const executeRef = useRef(execute);
+  useEffect(() => {
+    executeRef.current = execute;
+  });
+
+  const send = useRef(async () => {});
+  useEffect(() => {
+    send.current = async () => {
+      const phrase = latest.current;
+      if (inFlight.current || !phrase) return;
+      latest.current = null;
+      inFlight.current = true;
+      try {
+        const res = await fetch(`/api/setlists/${encodeURIComponent(setlistId)}/stage/command`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phrase }),
+        });
+        const body = res.ok ? ((await res.json()) as { command: StageCommand | null }) : null;
+        if (body?.command) executeRef.current(body.command);
+      } catch {
+        // ponytail: sem rede, o comando falado se perde; os botões continuam funcionando.
+      } finally {
+        inFlight.current = false;
+        if (latest.current) void send.current();
+      }
+    };
+  }, [setlistId]);
+
+  return (phrase: string) => {
+    latest.current = phrase;
+    void send.current();
+  };
+}
+
+const COMMAND_LABEL: Record<StageCommand["type"], string> = {
+  next: "Próxima música",
+  prev: "Música anterior",
+  tone_up: "Subindo meio tom",
+  tone_down: "Descendo meio tom",
+  pause: "IA pausada",
+  go_to: "Trocando de música",
+};
+
+/** Dono: a IA ouve a voz, segue a letra, publica posição/linha/tom e passa para a próxima música no fim. */
+function OwnerStage({ nav }: { nav: Nav }) {
+  // Comandos de voz usam o Jev (IA paga): só para assinantes. O resto do palco é para todos.
+  const isSubscriber = useIsSubscriber();
+  const router = useRouter();
+  const { tone, setTone } = useSongViewContext();
+  const { publish } = useStage(nav.setlistId, { poll: false });
+  const [lineIndex, setLineIndex] = useState(-1);
+  const stopRef = useRef<() => void>(() => {});
+  const onSpeech = useVoiceCommands(nav.setlistId, (command) => {
+    toast(COMMAND_LABEL[command.type], { duration: 1500 });
+    if (command.type === "next") nav.go(nav.next);
+    else if (command.type === "prev") nav.go(nav.prev);
+    else if (command.type === "tone_up") setTone(Math.min(11, tone + 1));
+    else if (command.type === "tone_down") setTone(Math.max(-11, tone - 1));
+    else if (command.type === "pause") stopRef.current();
+    else nav.goTo(command.position);
+  });
+  const { state, start, stop } = useSongFollow(tone, { onLine: setLineIndex, onSpeech: isSubscriber ? onSpeech : undefined });
+  const following = state.status === "following";
+  const level = following ? state.level : 0;
+  useEffect(() => {
+    stopRef.current = stop;
+  }, [stop]);
+
+  useEffect(() => {
+    void start();
+    return stop;
+    // Liga uma vez ao entrar no palco (start muda quando o tom muda, e o hook já se ajusta sozinho).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (state.status === "error") toast.error(state.message);
+  }, [state]);
+
+  useEffect(() => {
+    publish({ position: nav.pos, lineIndex, transpose: tone, active: true });
+  }, [publish, nav.pos, lineIndex, tone]);
+
+  const goNext = useRef(() => nav.go(nav.next));
+  useEffect(() => {
+    goNext.current = () => nav.go(nav.next);
+  });
+  useEffect(() => {
+    if (!nav.next || lineIndex < 0 || lineIndex < lyricLineCount() - 1) return;
+    const id = setTimeout(() => goNext.current(), AUTO_NEXT_MS);
+    return () => clearTimeout(id);
+  }, [lineIndex, nav.next]);
+
+  const end = () => {
+    stop();
+    publish({ position: nav.pos, lineIndex, transpose: tone, active: false });
+    router.replace(exitStageUrl());
+  };
+
+  return (
+    <StageShell live>
+      <span className="min-w-0 truncate text-xs text-muted-foreground">
+        {following ? (isSubscriber ? "IA pilotando: segue acordes e voz, ouve comandos" : "Seguindo acordes e voz") : "Pausado"} · {nav.index}/{nav.total}
+      </span>
+      <div className="flex gap-1">
+        <Button
+          size="sm"
+          variant={following ? "default" : "outline"}
+          className="relative overflow-hidden"
+          onClick={following ? stop : () => void start()}
+          title="Ouvir a voz"
+        >
+          {following && <MicLevelMeter level={level} />}
+          <AudioLines className="relative size-4" />
+        </Button>
+        <Button size="sm" variant="ghost" className="text-destructive" onClick={end}>
+          <Square className="size-3.5" fill="currentColor" /> Encerrar
+        </Button>
+      </div>
+    </StageShell>
+  );
+}
+
+/** Músico: acompanha a música, o tom e a linha que o dono publica. */
+function MemberStage({ nav }: { nav: Nav }) {
+  const router = useRouter();
+  const { tone, setTone } = useSongViewContext();
+  const { data } = useStage(nav.setlistId, { poll: true });
+  const stage = data?.stage;
+  const ended = useRef(false);
+
+  useEffect(() => {
+    if (!stage) return;
+    if (!stage.active) {
+      if (ended.current) return;
+      ended.current = true;
+      toast("O palco foi encerrado.");
+      router.replace(exitStageUrl());
+      return;
+    }
+    if (stage.position !== nav.pos) {
+      nav.goTo(stage.position);
+      return;
+    }
+    if (stage.transpose !== tone) setTone(stage.transpose);
+    if (stage.lineIndex >= 0) focusLyricLine(stage.lineIndex);
+    // nav muda a cada render; position/linha/tom são o que importa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage?.active, stage?.position, stage?.lineIndex, stage?.transpose, nav.pos]);
+
+  const live = Boolean(stage?.active);
+  return (
+    <StageShell live={live}>
+      <span className="min-w-0 truncate text-xs text-muted-foreground">
+        {live ? `Seguindo ${data?.ownerName ?? "o dono do setlist"}` : "Aguardando o dono iniciar o palco"}
+      </span>
+    </StageShell>
+  );
+}
+
+export function StageBar({ nav }: { nav: Nav }) {
+  const { data } = useStage(nav.setlistId, { poll: false });
+  if (!data) return null;
+  if (data.viewerRole === "member") return <MemberStage nav={nav} />;
+  return <OwnerStage nav={nav} />;
+}

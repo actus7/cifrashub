@@ -1,48 +1,30 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   ArrowLeftRight,
   ArrowUpDown,
+  AudioLines,
   Columns2,
   FlipHorizontal,
   Guitar,
   Magnet,
+  Mic,
   Minus,
   Plus,
   Type,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useKeyDetect } from "@/hooks/use-key-detect";
+import { ExperimentalBadge, notifyExperimentalOnce } from "@/components/ui/experimental";
+import { MicLevelMeter } from "@/components/ui/mic-level-meter";
+import { keyTemplate } from "@/lib/key-detect";
 import { cn } from "@/lib/utils";
-import { getRelativeKeyToggle, transposeRootNote } from "@/lib/music";
-import type { Section } from "@/lib/types";
+import { firstChordRoot, getRelativeKeyToggle, transposeRootNote } from "@/lib/music";
 import { useSongViewContext } from "./song-context";
 import { VersionToolbarControl } from "./song-version-menu";
-
-function firstChordRoot(songData: Section[]): string | undefined {
-  for (const section of songData) {
-    const root = firstSectionChordRoot(section);
-    if (root) return root;
-  }
-  return undefined;
-}
-
-function firstSectionChordRoot(section: Section) {
-  for (const line of section.content) {
-    const root = firstLineChordRoot(line);
-    if (root) return root;
-  }
-  return undefined;
-}
-
-function firstLineChordRoot(line: Section["content"][number]) {
-  for (const block of line) {
-    const root = block.chord?.match(/^([A-G][#b]?)/)?.[1];
-    if (root) return root;
-  }
-  return undefined;
-}
 
 export function ToolbarButton({
   active,
@@ -168,6 +150,7 @@ export const SongToolbar = memo(function SongToolbar() {
       <ToolbarSeparator />
       <ToneControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
       <CapoControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
+      <KeyDetectControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
       <ToolbarSeparator />
       <LayoutControls expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
       <ToolbarSeparator />
@@ -187,7 +170,7 @@ function ToneControl({
 }) {
   const { tone, setTone, currentSong, songData, sharedContext } = useSongViewContext();
   const writtenKey = currentSong.cifraWrittenKey;
-  const displayKey = writtenKey ?? currentSong.cifraSoundingKey ?? firstChordRoot(songData);
+  const displayKey = songDisplayKey(currentSong, songData);
   const relToggle = writtenKey ? getRelativeKeyToggle(writtenKey, tone) : null;
   const locked = Boolean(sharedContext);
 
@@ -199,6 +182,135 @@ function ToneControl({
     >
       <ToolbarButton active={tone !== 0} onClick={() => toggleMenu("tone")} title="Tom" className="flex-col gap-0 p-0" disabled={locked}>
         <ToneButtonLabel displayKey={displayKey} tone={tone} />
+      </ToolbarButton>
+    </ToolbarPopoverGroup>
+  );
+}
+
+type SongViewValue = ReturnType<typeof useSongViewContext>;
+
+function songDisplayKey(song: SongViewValue["currentSong"], songData: SongViewValue["songData"]) {
+  return song.cifraWrittenKey ?? song.cifraSoundingKey ?? firstChordRoot(songData);
+}
+
+function firstChordKey(songData: SongViewValue["songData"]): string | undefined {
+  for (const section of songData) {
+    for (const line of section.content) {
+      for (const block of line) {
+        const m = block.chord?.match(/^([A-G][#b]?)(m(?!aj))?/);
+        if (m) return m[1] + (m[2] ?? "");
+      }
+    }
+  }
+  return undefined;
+}
+
+/** Tempo da opção "15 s" do Descobrir o tom. */
+const KEY_DETECT_LIMIT_MS = 15_000;
+
+/** Grátis (roda no aparelho, sem IA paga): ouve o que está sendo tocado/cantado e ajusta o tom da cifra em tempo real (por 15 s ou até desligar). */
+function KeyDetectControl({
+  expanded,
+  setExpanded,
+  toggleMenu,
+}: {
+  expanded: string | null;
+  setExpanded: (v: string | null) => void;
+  toggleMenu: (menu: string) => void;
+}) {
+  const { tone, setTone, currentSong, songData, sharedContext } = useSongViewContext();
+  const displayKey = songDisplayKey(currentSong, songData);
+  // O tom do store é relativo aos acordes escritos: o molde usa os acordes escritos e o tom escrito.
+  const writtenKey = currentSong.cifraWrittenKey ?? firstChordKey(songData);
+  const template = useMemo(() => keyTemplate(songData, writtenKey), [songData, writtenKey]);
+  const { state, start, stop } = useKeyDetect(template);
+  const toneBefore = useRef(tone);
+  const handled = useRef<typeof state | null>(null);
+  const shift = state.status === "listening" || state.status === "finished" ? state.shift : null;
+
+  const keyLabel = (s: number) => (displayKey ? transposeRootNote(displayKey, s) : `${s > 0 ? "+" : ""}${s}`);
+  const announce = (finalTone: number) => {
+    const previous = toneBefore.current;
+    if (finalTone === previous) {
+      toast("O tom continua o mesmo.");
+      return;
+    }
+    toast.success(`Tom ajustado para ${keyLabel(finalTone)}`, {
+      action: { label: "Desfazer", onClick: () => setTone(previous) },
+    });
+  };
+
+  useEffect(() => {
+    if (shift !== null) setTone(shift);
+  }, [shift, setTone]);
+
+  useEffect(() => {
+    if (handled.current === state) return;
+    handled.current = state;
+    if (state.status === "error") toast.error(state.message);
+    if (state.status === "finished") announce(state.shift ?? toneBefore.current);
+    // announce só lê refs e o rótulo; reexecutar por ela duplicaria o aviso.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
+  const listening = state.status === "listening";
+  const begin = (limitMs?: number) => {
+    setExpanded(null);
+    notifyExperimentalOnce(
+      "key-detect",
+      "O Descobrir o tom pode errar, principalmente com ruído ou voz baixa. Se o tom não ficar bom, use Desfazer ou ajuste com + e −.",
+    );
+    toneBefore.current = tone;
+    void start(limitMs);
+  };
+  const handleClick = () => {
+    if (!listening) {
+      toggleMenu("keydetect");
+      return;
+    }
+    stop();
+    announce(tone);
+  };
+
+  return (
+    <ToolbarPopoverGroup
+      open={expanded === "keydetect" && !listening}
+      setExpanded={setExpanded}
+      popoverContent={
+        <>
+          <ExperimentalBadge className="mx-1" />
+          <Button type="button" size="sm" variant="outline" className="h-9 rounded-xl px-3 text-[11px] font-bold" onClick={() => begin(KEY_DETECT_LIMIT_MS)}>
+            15 s
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-9 rounded-xl px-3 text-[11px] font-bold" onClick={() => begin()}>
+            Contínuo
+          </Button>
+        </>
+      }
+    >
+      <ToolbarButton
+        active={listening}
+        onClick={handleClick}
+        title={listening ? "Parar de ouvir" : "Descobrir o tom (experimental — voz ou instrumento)"}
+        disabled={Boolean(sharedContext)}
+        className="flex-col gap-0 overflow-hidden p-0"
+      >
+        {listening ? (
+          <>
+            <MicLevelMeter level={state.level} />
+            <span className="relative text-[10px] font-bold leading-none">{shift === null ? "…" : keyLabel(shift)}</span>
+            <span className="relative mt-0.5 flex items-center gap-0.5 text-[8px] leading-none">
+              {/* Mesmo efeito do botão de rolagem pela voz: as ondas esticam com o volume. */}
+              <AudioLines
+                className="size-2.5 transition-transform duration-100"
+                style={{ transform: `scaleY(${0.6 + state.level * 0.8})` }}
+              />
+              {state.remainingMs !== null && `${Math.ceil(state.remainingMs / 1000)}s`}
+            </span>
+          </>
+        ) : (
+          <Mic className="size-4" />
+        )}
       </ToolbarButton>
     </ToolbarPopoverGroup>
   );

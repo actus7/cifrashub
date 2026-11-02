@@ -16,6 +16,9 @@ import { useSongViewContext, type SongViewContextValue } from "./song-context";
 import { useAutoScroll } from "@/hooks/use-auto-scroll";
 import { useMetronome } from "@/hooks/use-metronome";
 import { useSongKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { useSetlistNavigation } from "@/hooks/use-setlist-navigation";
+import { SetlistNavBar } from "./setlist-nav-bar";
+import { StageBar } from "./stage-bar";
 
 type SongViewCtx = SongViewContextValue;
 
@@ -25,6 +28,7 @@ type SongOverlaysProps = Pick<SongViewCtx, "activeChord" | "setActiveChord" | "m
 type SongSaveModalProps = Pick<SongViewCtx, "saveModalOpen" | "setSaveModalOpen" | "folders" | "currentSong" | "newFolderName" | "setNewFolderName" | "onCreateFolderFromSave" | "onToggleSongInFolder">;
 
 function useSongViewSideEffects(ctx: SongViewCtx) {
+  const nav = useSetlistNavigation();
   useAutoScroll(ctx.autoScroll, ctx.scrollSpeed);
   useMetronome(ctx.metronomeActive, ctx.bpm);
   useSongKeyboardShortcuts({
@@ -33,7 +37,10 @@ function useSongViewSideEffects(ctx: SongViewCtx) {
     onToggleZen: ctx.onToggleZen,
     onScrollDown: () => window.scrollBy({ top: window.innerHeight / 2, behavior: "smooth" }),
     onScrollUp: () => window.scrollBy({ top: -window.innerHeight / 2, behavior: "smooth" }),
+    onNextSong: nav?.next ? () => nav.go(nav.next) : undefined,
+    onPrevSong: nav?.prev ? () => nav.go(nav.prev) : undefined,
   });
+  return nav;
 }
 
 function SongChrome({ zenMode, onToggleZen }: Pick<SongViewCtx, "zenMode" | "onToggleZen">) {
@@ -190,7 +197,7 @@ function SongOverlays({
 
 export function SongView() {
   const ctx = useSongViewContext();
-  useSongViewSideEffects(ctx);
+  const nav = useSongViewSideEffects(ctx);
 
   return (
     <div className="min-h-screen overflow-x-clip bg-background pb-20 sm:pb-16 selection:bg-primary/30 print:bg-white print:text-black">
@@ -220,6 +227,8 @@ export function SongView() {
         onYoutubeVideoResolved={ctx.onYoutubeVideoResolved}
         currentSong={ctx.currentSong}
       />
+      {nav && <SetlistNavBar nav={nav} />}
+      {nav?.stage && <StageBar key={nav.pos} nav={nav} />}
     </div>
   );
 }

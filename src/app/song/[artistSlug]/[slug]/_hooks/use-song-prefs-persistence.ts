@@ -174,24 +174,21 @@ export function usePersistCloudSongPrefs(
   useEffect(() => {
     return () => {
       if (!isSharedContext && pendingPayloadRef.current) {
-        flushPendingCloudPrefs(pendingPayloadRef.current, currentSongRef.current);
+        flushPendingCloudPrefs(pendingPayloadRef.current);
       }
     };
   }, [isSharedContext]);
 }
 
-function flushPendingCloudPrefs(payload: CloudPrefsPayload, song: StoredSong | null) {
-  try {
-    fetch("/api/songs/prefs", {
-      method: "PATCH",
-      credentials: "include",
-      keepalive: true,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, song: song ?? undefined }),
-    });
-  } catch {
-    // swallow — best-effort on unload
-  }
+function flushPendingCloudPrefs(payload: CloudPrefsPayload) {
+  // best-effort on unload; prefs-only (keepalive body limit ~64KB)
+  fetch("/api/songs/prefs", {
+    method: "PATCH",
+    credentials: "include",
+    keepalive: true,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
 }
 
 function shouldPersistCloudPrefs(

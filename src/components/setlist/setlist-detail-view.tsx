@@ -34,6 +34,7 @@ type SetlistDetailViewProps = {
   onAddItem: (arrangementId: string) => Promise<void> | void;
   onRemoveItem: (itemId: string) => Promise<void> | void;
   onMoveItem: (itemId: string, direction: -1 | 1) => Promise<void> | void;
+  onEditNote: (itemId: string, notes: string) => Promise<void> | void;
   onShare?: () => void;
   onLeave?: () => Promise<void> | void;
   shareBusy?: boolean;
@@ -64,6 +65,7 @@ type SetlistItemsProps = {
   onOpenSong: (song: StoredSong) => void;
   onRemoveItem: (itemId: string) => Promise<void> | void;
   onMoveItem: (itemId: string, direction: -1 | 1) => Promise<void> | void;
+  onEditNote: (itemId: string, notes: string) => Promise<void> | void;
 };
 
 type SetlistItemRowProps = {
@@ -74,6 +76,7 @@ type SetlistItemRowProps = {
   onOpenSong: (song: StoredSong) => void;
   onRemoveItem: (itemId: string) => Promise<void> | void;
   onMoveItem: (itemId: string, direction: -1 | 1) => Promise<void> | void;
+  onEditNote: (itemId: string, notes: string) => Promise<void> | void;
 };
 
 type MoveControlsProps = Pick<SetlistItemRowProps, "disabled" | "index" | "item" | "onMoveItem" | "total">;
@@ -91,6 +94,7 @@ export function SetlistDetailViewScreen({
   onAddItem,
   onRemoveItem,
   onMoveItem,
+  onEditNote,
   onShare,
   onLeave,
   shareBusy,
@@ -131,6 +135,7 @@ export function SetlistDetailViewScreen({
           onOpenSong={onOpenSong}
           onRemoveItem={onRemoveItem}
           onMoveItem={onMoveItem}
+          onEditNote={onEditNote}
         />
       </main>
     </div>
@@ -337,7 +342,7 @@ function AddSongStatus({ status }: { status: "idle" | "saving" | "saved" | "erro
   );
 }
 
-function SetlistItems({ items, disabled, onOpenSong, onRemoveItem, onMoveItem }: SetlistItemsProps) {
+function SetlistItems({ items, disabled, onOpenSong, onRemoveItem, onMoveItem, onEditNote }: SetlistItemsProps) {
   if (items.length === 0) {
     return (
       <p className="text-center text-sm text-muted-foreground">
@@ -358,6 +363,7 @@ function SetlistItems({ items, disabled, onOpenSong, onRemoveItem, onMoveItem }:
           onOpenSong={onOpenSong}
           onRemoveItem={onRemoveItem}
           onMoveItem={onMoveItem}
+          onEditNote={onEditNote}
         />
       ))}
     </ul>
@@ -368,7 +374,14 @@ function SetlistItemRow(props: SetlistItemRowProps) {
   return (
     <li className="flex items-stretch gap-1 rounded-xl border border-border/60 bg-card/50 p-2">
       <MoveControls {...props} />
-      <SetlistItemButton item={props.item} onOpenSong={props.onOpenSong} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <SetlistItemButton item={props.item} onOpenSong={props.onOpenSong} />
+        <ItemNote
+          item={props.item}
+          readOnly={!!props.disabled}
+          onEditNote={props.onEditNote}
+        />
+      </div>
       <RemoveItemButton
         disabled={props.disabled}
         item={props.item}
@@ -440,8 +453,61 @@ function SetlistItemButton({ item, onOpenSong }: SetlistItemButtonProps) {
     >
       <p className="truncate font-medium text-foreground">{setlistItemTitle(item)}</p>
       <p className="truncate text-xs text-muted-foreground">{setlistItemSubtitle(item)}</p>
-      {item.notes ? <p className="mt-1 text-xs text-muted-foreground">{item.notes}</p> : null}
     </button>
+  );
+}
+
+function ItemNote({
+  item,
+  readOnly,
+  onEditNote,
+}: {
+  item: SetlistItemView;
+  readOnly: boolean;
+  onEditNote: SetlistItemRowProps["onEditNote"];
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const save = async () => {
+    if (draft === null) return;
+    const value = draft;
+    setDraft(null);
+    if (value.trim() === (item.notes ?? "")) return;
+    await onEditNote(item.itemId, value);
+  };
+
+  if (draft !== null) {
+    return (
+      <input
+        autoFocus
+        className="mx-2 mt-1 h-8 rounded-md border border-border bg-background px-2 text-xs"
+        maxLength={280}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => void save()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void save();
+          if (e.key === "Escape") setDraft(null);
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 px-2">
+      {item.notes ? <p className="mt-1 text-xs text-muted-foreground">{item.notes}</p> : null}
+      {readOnly ? null : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="mt-1 h-6 px-1 text-xs text-muted-foreground"
+          onClick={() => setDraft(item.notes ?? "")}
+        >
+          Nota
+        </Button>
+      )}
+    </div>
   );
 }
 

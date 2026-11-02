@@ -116,6 +116,33 @@ export async function cloudRemoveSongFromFolder(
   );
 }
 
+export async function cloudTouchRecent(
+  song: StoredSong,
+): Promise<{ recentes: StoredSong[] }> {
+  return apiJson("/api/recentes", {
+    method: "PUT",
+    body: JSON.stringify({ song }),
+  });
+}
+
+export async function cloudRemoveRecent(
+  arrangementId: string,
+): Promise<{ recentes: StoredSong[] }> {
+  const q = new URLSearchParams({ arrangementId });
+  return apiJson(`/api/recentes?${q.toString()}`, { method: "DELETE" });
+}
+
+export async function cloudRemoveFolderSongs(
+  folderId: string,
+  arrangementIds: string[],
+): Promise<{ folders: Folder[] }> {
+  return apiJson(`/api/folders/${encodeURIComponent(folderId)}/songs`, {
+    method: "DELETE",
+    body: JSON.stringify({ arrangementIds }),
+  });
+}
+
+/** @deprecated use cloudTouchRecent */
 export async function cloudSaveRecentes(
   songs: StoredSong[],
 ): Promise<{ recentes: StoredSong[] }> {
@@ -174,6 +201,23 @@ export async function cloudCreateSetlistShareLink(
   });
 }
 
+export type ResourceMember = { userId: string; name: string | null; joinedAt: string };
+
+export async function cloudListFolderMembers(folderId: string): Promise<{ members: ResourceMember[] }> {
+  return apiJson(`/api/folders/${encodeURIComponent(folderId)}/members`);
+}
+
+export async function cloudListSetlistMembers(setlistId: string): Promise<{ members: ResourceMember[] }> {
+  return apiJson(`/api/setlists/${encodeURIComponent(setlistId)}/members`);
+}
+
+export async function cloudRemoveSetlistMember(setlistId: string, userId: string): Promise<{ ok: true }> {
+  return apiJson(
+    `/api/setlists/${encodeURIComponent(setlistId)}/members?userId=${encodeURIComponent(userId)}`,
+    { method: "DELETE" },
+  );
+}
+
 export async function cloudLeaveSetlist(id: string): Promise<{ ok: true }> {
   return apiJson(`/api/setlists/${encodeURIComponent(id)}/membership`, {
     method: "DELETE",
@@ -216,6 +260,17 @@ export async function cloudReorderSetlistItems(
   });
 }
 
+export async function cloudUpdateSetlistItemNote(
+  setlistId: string,
+  itemId: string,
+  notes: string | null,
+): Promise<SetlistDetailView> {
+  return apiJson(`/api/setlists/${encodeURIComponent(setlistId)}/items`, {
+    method: "PATCH",
+    body: JSON.stringify({ itemId, notes }),
+  });
+}
+
 export async function cloudUpdateSongPrefs(
   arrangementId: string,
   prefs: { tone: number; capo: number; uiPrefs: StoredSongUiPrefs },
@@ -240,6 +295,6 @@ export async function cloudSyncSongContent(
 ): Promise<{ ok: true }> {
   return apiJson("/api/songs/prefs", {
     method: "PATCH",
-    body: JSON.stringify({ arrangementId, song }),
+    body: JSON.stringify({ arrangementId, song, syncContent: true }),
   });
 }

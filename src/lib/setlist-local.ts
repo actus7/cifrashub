@@ -55,3 +55,14 @@ export function buildLocalSetlistDetail(
     items,
   };
 }
+
+export const MAX_NOTE_LENGTH = 280;
+
+/** Trim; empty -> null; undefined when not a string or too long (invalid). */
+export function normalizeNote(notes: unknown): string | null | undefined {
+  if (notes === null) return null;
+  if (typeof notes !== "string") return undefined;
+  const trimmed = notes.trim();
+  if (trimmed.length > MAX_NOTE_LENGTH) return undefined;
+  return trimmed || null;
+}

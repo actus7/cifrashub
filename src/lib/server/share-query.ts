@@ -3,6 +3,13 @@ import { db } from "@/db";
 import { shareSnapshots, shareTokens } from "@/db/schema";
 import type { ShareSnapshotPayload } from "@/lib/share-payload";
 
+/** Public payloads must not expose owner ids or e-mail-looking names (also scrubs old snapshots). */
+export function sanitizePublicSharePayload(payload: ShareSnapshotPayload): ShareSnapshotPayload {
+  if (payload.type !== "folder-invite" && payload.type !== "setlist-invite") return payload;
+  const { ownerId: _ownerId, ...rest } = payload;
+  return { ...rest, ownerName: rest.ownerName?.includes("@") ? null : rest.ownerName };
+}
+
 export async function fetchSharePayloadByToken(
   token: string,
 ): Promise<ShareSnapshotPayload | null> {
@@ -22,5 +29,5 @@ export async function fetchSharePayloadByToken(
     )
     .limit(1);
 
-  return (row?.payload as ShareSnapshotPayload) ?? null;
+  return row ? sanitizePublicSharePayload(row.payload as ShareSnapshotPayload) : null;
 }

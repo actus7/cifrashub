@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { userSongs } from "@/db/schema";
@@ -7,7 +7,10 @@ import { readJsonBody } from "@/lib/server/api-route";
 import { loadCloudFoldersAndSongs } from "@/lib/server/cloud-data";
 import { requireOwnedFolder } from "@/lib/server/folder-route";
 import { nextPosition } from "@/lib/server/positions";
-import { buildStoredSongRow } from "@/lib/server/stored-song-row";
+import { buildStoredSongRow, songRowUpdateSet } from "@/lib/server/stored-song-row";
+import { validateStoredSong } from "@/lib/server/song-validation";
+
+const MAX_BULK_REMOVE = 500;
 
 type RouteCtx = { params: Promise<{ id: string }> };
 type OwnedFolderCtx = Awaited<ReturnType<typeof requireOwnedFolder>>;
@@ -35,19 +38,6 @@ async function nextFolderSongPosition(folderCtx: ResolvedFolderCtx) {
   return nextPosition(rows);
 }
 
-function hasStoredSongIdentity(song: StoredSong) {
-  return Boolean(song.id && song.title);
-}
-
-function hasStoredSongContent(song: StoredSong) {
-  return Boolean(song.songData && Array.isArray(song.songData));
-}
-
-function isValidStoredSong(song: StoredSong | null | undefined): song is StoredSong {
-  if (!song) return false;
-  return hasStoredSongIdentity(song) && hasStoredSongContent(song);
-}
-
 /**
  * Upsert atômico: um SELECT-depois-INSERT/UPDATE deixava uma janela onde duas
  * gravações concorrentes da mesma música na mesma pasta (dois cliques, duas
@@ -63,22 +53,7 @@ async function upsertFolderSong(folderCtx: ResolvedFolderCtx, song: StoredSong) 
     .onConflictDoUpdate({
       target: [userSongs.userId, userSongs.folderId, userSongs.arrangementId],
       targetWhere: sql`${userSongs.folderId} is not null`,
-      set: {
-        songId: row.songId,
-        title: row.title,
-        artist: row.artist,
-        artistSlug: row.artistSlug,
-        slug: row.slug,
-        youtubeId: row.youtubeId,
-        songData: row.songData,
-        tone: row.tone,
-        capo: row.capo,
-        uiPrefs: row.uiPrefs,
-        sourceArtistSlug: row.sourceArtistSlug,
-        sourceSlug: row.sourceSlug,
-        isRecent: false,
-        updatedAt: new Date(),
-      },
+      set: { ...songRowUpdateSet(row), isRecent: false },
     });
 }
 
@@ -99,11 +74,12 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if ("response" in json) return json.response;
   const body = json.body;
 
-  if (!isValidStoredSong(body)) {
-    return NextResponse.json({ error: "Dados da música inválidos" }, { status: 400 });
+  const validated = validateStoredSong(body);
+  if (!validated.ok) {
+    return NextResponse.json({ error: validated.error }, { status: 400 });
   }
 
-  await upsertFolderSong(folderCtx, body);
+  await upsertFolderSong(folderCtx, validated.song);
   return respondWithFolders(folderCtx.userId);
 }
 
@@ -114,14 +90,32 @@ export async function DELETE(req: Request, ctx: RouteCtx) {
   const { searchParams } = new URL(req.url);
   const arrangementId =
     searchParams.get("arrangementId") ?? searchParams.get("songId");
-  if (!arrangementId) {
-    return NextResponse.json(
-      { error: "arrangementId obrigatório" },
-      { status: 400 },
-    );
+  if (arrangementId) {
+    await db.delete(userSongs).where(folderSongWhere(folderCtx, arrangementId));
+    return respondWithFolders(folderCtx.userId);
   }
 
-  await db.delete(userSongs).where(folderSongWhere(folderCtx, arrangementId));
+  const json = await readJsonBody<{ arrangementIds?: unknown }>(req);
+  if ("response" in json) return json.response;
+  const ids = json.body?.arrangementIds;
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    ids.length > MAX_BULK_REMOVE ||
+    !ids.every((id) => typeof id === "string" && id)
+  ) {
+    return NextResponse.json({ error: "arrangementId obrigatório" }, { status: 400 });
+  }
+
+  await db
+    .delete(userSongs)
+    .where(
+      and(
+        eq(userSongs.userId, folderCtx.userId),
+        eq(userSongs.folderId, folderCtx.folderId),
+        inArray(userSongs.arrangementId, ids as string[]),
+      ),
+    );
 
   return respondWithFolders(folderCtx.userId);
 }

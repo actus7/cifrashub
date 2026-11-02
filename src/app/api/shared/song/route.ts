@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { userSongs } from "@/db/schema";
 import { requireApiUserId } from "@/lib/server/api-route";
-import { getUserDisplayName, hasAnyAccessToOwner } from "@/lib/server/access";
+import { canViewerReadArrangement, getUserDisplayName } from "@/lib/server/access";
 import { preferredArrangementRow, rowToStoredSong } from "@/lib/server/cloud-data";
 
 export async function GET(req: Request) {
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "ownerId e arrangementId obrigatórios" }, { status: 400 });
   }
 
-  const hasAccess = await hasAnyAccessToOwner(auth.userId, ownerId);
+  const hasAccess = await canViewerReadArrangement(auth.userId, ownerId, arrangementId);
   if (!hasAccess) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
 
   const rows = await db

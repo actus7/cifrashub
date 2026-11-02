@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   chordToNashville,
   classifySection,
+  firstChordRoot,
   getRelativeKeyToggle,
   normalizeChord,
   simplifyChord,
@@ -61,5 +62,18 @@ describe("music utilities", () => {
     expect(classifySection("Pré-Refrão")).toBe("pre-chorus");
     expect(classifySection("Solo final")).toBe("solo");
     expect(classifySection("Parte 1")).toBe("verse");
+  });
+});
+
+describe("firstChordRoot", () => {
+  it("returns the root of the first chord found", () => {
+    const songData = [
+      { type: "verse", label: "A", content: [[{ text: "x" }], [{ text: "y", chord: "Bbm7" }]] },
+    ] as unknown as Parameters<typeof firstChordRoot>[0];
+    expect(firstChordRoot(songData)).toBe("Bb");
+  });
+
+  it("returns undefined when there are no chords", () => {
+    expect(firstChordRoot([])).toBeUndefined();
   });
 });

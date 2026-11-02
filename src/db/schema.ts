@@ -102,6 +102,9 @@ export const userFolders = pgTable(
   (t) => ({
     idxUserFolderUserPosition: index("idx_user_folder_user_position")
       .on(t.userId, t.position, t.createdAt),
+    uqUserFolderDefault: uniqueIndex("uq_user_folder_default")
+      .on(t.userId)
+      .where(sql`${t.isDefault} = true`),
   }),
 );
 
@@ -233,6 +236,30 @@ export const setlistMembers = pgTable(
   }),
 );
 
+// Assinatura por usuário. Sem pagamento por enquanto: as linhas são criadas à mão.
+// FK para neon_auth."user" aplicada por scripts/add-user-fk-cascade.sql.
+export const userEntitlements = pgTable("user_entitlement", {
+  userId: uuid("user_id").primaryKey(),
+  plan: text("plan").notNull().default("pro"),
+  /** null = sem data de expiração. */
+  activeUntil: timestamp("active_until", { mode: "date" }),
+  ...timestampColumns(),
+});
+
+// Estado ao vivo do modo palco: o dono (assinante) publica, os membros do setlist acompanham.
+export const setlistStages = pgTable("setlist_stage", {
+  setlistId: text("setlist_id")
+    .primaryKey()
+    .references(() => userSetlists.id, { onDelete: "cascade" }),
+  /** `position` do item do setlist que está tocando. */
+  position: integer("position").notNull().default(0),
+  /** Índice da linha cantada (ordem de [data-follow] na tela); -1 = nenhuma ainda. */
+  lineIndex: integer("line_index").notNull().default(-1),
+  transpose: integer("transpose").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+});
+
 export const shareSnapshots = pgTable("share_snapshot", {
   id: text("id")
     .primaryKey()
@@ -241,7 +268,7 @@ export const shareSnapshots = pgTable("share_snapshot", {
   payload: jsonb("payload").notNull().$type<unknown>(),
   createdByUserId: uuid("created_by_user_id").notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-});
+}, (t) => [index("idx_share_snapshot_creator_created").on(t.createdByUserId, t.createdAt)]);
 
 export const shareTokens = pgTable("share_token", {
   token: text("token")
@@ -254,7 +281,7 @@ export const shareTokens = pgTable("share_token", {
   expiresAt: timestamp("expires_at", { mode: "date" }),
   revokedAt: timestamp("revoked_at", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-});
+}, (t) => [index("idx_share_token_snapshot").on(t.snapshotId)]);
 
 export const userFoldersRelations = relations(userFolders, ({ many }) => ({
   songs: many(userSongs),

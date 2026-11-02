@@ -15,6 +15,41 @@
       "when": 1785264275958,
       "tag": "0001_narrow_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793541779309,
+      "tag": "0002_groovy_randall",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793545828020,
+      "tag": "0003_sour_night_nurse",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793547578609,
+      "tag": "0004_worried_sunfire",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793631307512,
+      "tag": "0005_bitter_proemial_gods",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793632998756,
+      "tag": "0006_outstanding_exodus",
+      "breakpoints": true
     }
   ]
 }

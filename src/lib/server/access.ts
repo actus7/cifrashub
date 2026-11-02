@@ -1,11 +1,13 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   folderMembers,
   neonAuthUsers,
   setlistMembers,
   userFolders,
+  userSetlistItems,
   userSetlists,
+  userSongs,
 } from "@/db/schema";
 
 export type ResourceRole = "owner" | "member" | "none";
@@ -30,13 +32,32 @@ export async function getUserDisplayName(userId: string): Promise<string | null>
   return lookupUserName(userId);
 }
 
+// Never fall back to the e-mail: names end up in public invite links.
+export function displayNameFromUserRow(
+  row: { name: string | null; email: string | null } | undefined,
+): string | null {
+  return row?.name?.trim() || null;
+}
+
+export async function getUserDisplayNames(ids: string[]): Promise<Map<string, string | null>> {
+  const unique = [...new Set(ids)];
+  const names = new Map<string, string | null>(unique.map((id) => [id, null]));
+  if (unique.length === 0) return names;
+  const rows = await db
+    .select({ id: neonAuthUsers.id, name: neonAuthUsers.name, email: neonAuthUsers.email })
+    .from(neonAuthUsers)
+    .where(inArray(neonAuthUsers.id, unique));
+  for (const row of rows) names.set(row.id, displayNameFromUserRow(row));
+  return names;
+}
+
 async function lookupUserName(userId: string): Promise<string | null> {
   const [row] = await db
     .select({ name: neonAuthUsers.name, email: neonAuthUsers.email })
     .from(neonAuthUsers)
     .where(eq(neonAuthUsers.id, userId))
     .limit(1);
-  return row?.name ?? row?.email ?? null;
+  return displayNameFromUserRow(row);
 }
 
 export async function resolveFolderAccess(
@@ -89,20 +110,38 @@ export async function resolveSetlistAccess(
   return { role: "member", ownerId: setlist.userId, ownerName, setlist };
 }
 
-export async function hasAnyAccessToOwner(viewerId: string, ownerId: string): Promise<boolean> {
-  const [folderRow] = await db
-    .select({ id: folderMembers.folderId })
-    .from(folderMembers)
-    .innerJoin(userFolders, eq(userFolders.id, folderMembers.folderId))
-    .where(and(eq(folderMembers.userId, viewerId), eq(userFolders.userId, ownerId)))
-    .limit(1);
-  if (folderRow) return true;
-
-  const [setlistRow] = await db
-    .select({ id: setlistMembers.setlistId })
-    .from(setlistMembers)
-    .innerJoin(userSetlists, eq(userSetlists.id, setlistMembers.setlistId))
-    .where(and(eq(setlistMembers.userId, viewerId), eq(userSetlists.userId, ownerId)))
-    .limit(1);
-  return Boolean(setlistRow);
+/** True only if the arrangement sits inside a folder or setlist of `ownerId` shared with `viewerId`. */
+export async function canViewerReadArrangement(
+  viewerId: string,
+  ownerId: string,
+  arrangementId: string,
+): Promise<boolean> {
+  const [viaFolder, viaSetlist] = await Promise.all([
+    db
+      .select({ id: userSongs.id })
+      .from(userSongs)
+      .innerJoin(folderMembers, eq(folderMembers.folderId, userSongs.folderId))
+      .where(
+        and(
+          eq(userSongs.userId, ownerId),
+          eq(userSongs.arrangementId, arrangementId),
+          eq(folderMembers.userId, viewerId),
+        ),
+      )
+      .limit(1),
+    db
+      .select({ id: userSetlistItems.id })
+      .from(userSetlistItems)
+      .innerJoin(userSetlists, eq(userSetlists.id, userSetlistItems.setlistId))
+      .innerJoin(setlistMembers, eq(setlistMembers.setlistId, userSetlists.id))
+      .where(
+        and(
+          eq(userSetlistItems.arrangementId, arrangementId),
+          eq(userSetlists.userId, ownerId),
+          eq(setlistMembers.userId, viewerId),
+        ),
+      )
+      .limit(1),
+  ]);
+  return viaFolder.length > 0 || viaSetlist.length > 0;
 }

@@ -1,4 +1,5 @@
 import { classifySection, transposeRootNote } from "./music";
+import { isChordText } from "./chord-grammar";
 import { parseChordLinePair } from "./parse-chord-line-pair";
 import { extractYoutubeIdFromHtml } from "./extract-youtube-id-from-html";
 import type { LyricLine, Section, SectionType, StoredSong } from "./types";
@@ -38,22 +39,7 @@ const CHORD_MARKER_RE = /‹CHORD:([^›]+)›/;
 const SECTION_RE = /^\[(.+?)\]/;
 const KEY_ROOT_RE = /key:\s*["']([A-G][#b]?)["']/;
 
-/** Matches plausible chord text like C7M, Am7, Bm7, Em, E5, D5, Bm, (passagem) */
-const CHORD_TEXT_RE = /^[A-G(#][#b♯♭]?(?:M|maj|min|m|dim|aug|sus|add|º|°|\+|\^|\/[A-G]?[#b♯♭]?|-|\(|\)|\d|\s|\.|,|…|'|"){0,20}$/;
-
-/**
- * Tests whether text content of a `<b>` tag looks like a chord rather than
- * metadata (e.g. "Tom:", "Afinação:"). Used to guard chord-marker replacement.
- */
-export function isChordText(text: string): boolean {
-  const t = text.trim();
-  if (!t) return false;
-  // Parenthetical annotations like (passagem), (2x), etc.
-  if (/^\(.*\)$/.test(t)) return true;
-  // Must start with a note letter
-  if (!/^[A-G]/.test(t)) return false;
-  return CHORD_TEXT_RE.test(t);
-}
+export { isChordText };
 
 function extractCifraClubKeyCapo(htmlContent: string): {
   writtenKey?: string;

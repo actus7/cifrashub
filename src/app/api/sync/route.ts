@@ -9,21 +9,21 @@ import {
   ensureDefaultFolder,
   loadCloudFoldersAndSongs,
 } from "@/lib/server/cloud-data";
-import {
-  resolveArrangementId,
-  sourceArtistSlugForRow,
-  sourceSlugForRow,
-} from "@/lib/server/song-persist";
+import { resolveArrangementId } from "@/lib/server/song-persist";
 import {
   buildStoredSongRow,
-  toneCapoUiFromStored,
-  youtubeIdForRow,
+  songRowUpdateSet,
 } from "@/lib/server/stored-song-row";
 import {
   dedupeSongsByArrangement,
   replaceRecentSongsForUser,
 } from "@/lib/server/recent-songs";
 import { arrangementKey } from "@/lib/arrangement-key";
+import {
+  MAX_SONGS_PER_FOLDER,
+  MAX_SYNC_FOLDERS,
+  validateStoredSong,
+} from "@/lib/server/song-validation";
 
 type SyncBody = {
   folders?: Folder[];
@@ -41,6 +41,26 @@ type SongSyncState = {
   toUpdate: SongUpdate[];
   toInsert: SongInsert[];
 };
+
+function validateSyncBody(body: SyncBody): string | null {
+  const folders = body?.folders ?? [];
+  const recentes = body?.recentes ?? [];
+  if (!Array.isArray(folders) || !Array.isArray(recentes)) return "Payload inválido";
+  if (folders.length > MAX_SYNC_FOLDERS) return "Pastas demais";
+  if (recentes.length > MAX_SONGS_PER_FOLDER) return "Recentes demais";
+  for (const folder of folders) {
+    if (!folder || typeof folder.title !== "string" || !Array.isArray(folder.songs)) {
+      return "Pasta inválida";
+    }
+    if (folder.songs.length > MAX_SONGS_PER_FOLDER) return "Músicas demais na pasta";
+  }
+  const songs = [...folders.flatMap((f) => f.songs), ...recentes];
+  for (const song of songs) {
+    const result = validateStoredSong(song);
+    if (!result.ok) return result.error;
+  }
+  return null;
+}
 
 function songFolderKey(folderId: string | null, arrangementId: string) {
   return `${folderId ?? ""}|${arrangementId}`;
@@ -168,26 +188,11 @@ function syncExistingSong(
   return true;
 }
 
-function updateStoredSongRow({ id, song }: SongUpdate) {
-  const row = toneCapoUiFromStored(song);
+function updateStoredSongRow(userId: string, { id, song }: SongUpdate) {
+  const row = buildStoredSongRow(userId, null, song, 0, false);
   return db
     .update(userSongs)
-    .set({
-      songId: song.id,
-      title: song.title,
-      artist: song.artist,
-      artistSlug: song.artistSlug,
-      slug: song.slug,
-      youtubeId: youtubeIdForRow(song),
-      songData: song.songData,
-      tone: row.tone,
-      capo: row.capo,
-      uiPrefs: row.uiPrefs,
-      sourceArtistSlug: sourceArtistSlugForRow(song),
-      sourceSlug: sourceSlugForRow(song),
-      isRecent: false,
-      updatedAt: new Date(),
-    })
+    .set({ ...songRowUpdateSet(row), isRecent: false })
     .where(eq(userSongs.id, id));
 }
 
@@ -209,7 +214,7 @@ async function syncUserLibrary(userId: string, body: SyncBody) {
   const songSync = createSongSyncState(await cloudSongsForUser(userId));
 
   await collectFolderSongs(userId, body.folders ?? [], cloudFolderRows, songSync);
-  await persistSongSync(songSync);
+  await persistSongSync(userId, songSync);
   await mergeRecentSongs(userId, dedupeSongsByArrangement(body.recentes ?? []));
 }
 
@@ -227,8 +232,8 @@ function cloudSongsForUser(userId: string) {
     .where(eq(userSongs.userId, userId));
 }
 
-async function persistSongSync(songSync: SongSyncState) {
-  await Promise.all(songSync.toUpdate.map(updateStoredSongRow));
+async function persistSongSync(userId: string, songSync: SongSyncState) {
+  await Promise.all(songSync.toUpdate.map((update) => updateStoredSongRow(userId, update)));
   if (songSync.toInsert.length > 0) await db.insert(userSongs).values(songSync.toInsert);
 }
 
@@ -242,6 +247,8 @@ export async function GET() {
 export async function POST(req: Request) {
   const request = await requireApiUserJson<SyncBody>(req);
   if ("response" in request) return request.response;
+  const invalid = validateSyncBody(request.body);
+  if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
   await syncUserLibrary(request.userId, request.body);
 
   return NextResponse.json(await loadCloudFoldersAndSongs(request.userId));

@@ -39,6 +39,13 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Migrations in sync with schema
+        run: |
+          npx drizzle-kit generate --name ci_drift_check
+          msg="::error::src/db/schema.ts changed without a committed migration. Run npm run db:generate."
+          git diff --exit-code -- drizzle/ || (echo "$msg" && exit 1)
+          test -z "$(git status --porcelain drizzle/)" || (echo "$msg" && exit 1)
+
       - name: Test
         run: npm run test
 

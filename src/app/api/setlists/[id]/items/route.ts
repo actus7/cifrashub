@@ -2,8 +2,8 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { userSetlistItems } from "@/db/schema";
-import { requireUserId } from "@/lib/server/api-auth";
-import { readJsonBody } from "@/lib/server/api-route";
+import { readJsonBody, requireApiUserId } from "@/lib/server/api-route";
+import { normalizeNote } from "@/lib/setlist-local";
 import { nextPosition } from "@/lib/server/positions";
 import {
   assertUserOwnsArrangement,
@@ -14,8 +14,8 @@ import {
 type RouteCtx = { params: Promise<{ id: string }> };
 
 async function requireOwnedSetlist(ctx: RouteCtx) {
-  const authResult = await requireUserId();
-  if ("error" in authResult) return { error: authResult.error };
+  const authResult = await requireApiUserId();
+  if ("response" in authResult) return { error: authResult.response };
 
   const { id: setlistId } = await ctx.params;
   const ownsSetlist = await assertUserOwnsSetlist(authResult.userId, setlistId);
@@ -112,14 +112,41 @@ async function batchUpdatePositions(
 }
 
 export async function PATCH(req: Request, ctx: RouteCtx) {
-  const request = await requireOwnedSetlistJson<{ orderedItemIds?: string[] }>(req, ctx);
+  const request = await requireOwnedSetlistJson<{
+    orderedItemIds?: string[];
+    itemId?: string;
+    notes?: unknown;
+  }>(req, ctx);
   if ("error" in request) return request.error;
+
+  if (request.body.itemId !== undefined) return updateItemNote(request.setlist, request.body);
 
   const order = await validItemOrder(request.setlist.setlistId, request.body.orderedItemIds);
   if ("error" in order) return order.error;
 
   await batchUpdatePositions(request.setlist.setlistId, order.value);
   return setlistDetailResponse(request.setlist.userId, request.setlist.setlistId);
+}
+
+async function updateItemNote(
+  setlist: { userId: string; setlistId: string },
+  body: { itemId?: string; notes?: unknown },
+) {
+  const notes = normalizeNote(body.notes);
+  if (typeof body.itemId !== "string" || notes === undefined) {
+    return NextResponse.json({ error: "Nota inválida (máx. 280 caracteres)" }, { status: 400 });
+  }
+
+  const updated = await db
+    .update(userSetlistItems)
+    .set({ notes })
+    .where(and(eq(userSetlistItems.setlistId, setlist.setlistId), eq(userSetlistItems.id, body.itemId)))
+    .returning({ id: userSetlistItems.id });
+  if (updated.length === 0) {
+    return NextResponse.json({ error: "Item não encontrado" }, { status: 404 });
+  }
+
+  return setlistDetailResponse(setlist.userId, setlist.setlistId);
 }
 
 async function validItemOrder(setlistId: string, orderedItemIds: string[] | undefined) {

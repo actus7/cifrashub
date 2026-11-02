@@ -38,8 +38,8 @@ CifrasHub é uma aplicação web open source para músicos que querem organizar 
 
 ### Pré-requisitos
 
-- Node.js 20+
-- npm 10+
+- Node.js 24+
+- npm 11+
 - Conta no [Neon](https://neon.tech) (banco de dados PostgreSQL serverless gratuito)
 
 ### Instalação
@@ -113,6 +113,8 @@ Acesse [http://localhost:3000](http://localhost:3000).
 
 > **Atenção:** se `DATABASE_URL` não estiver configurada em Production, o build falha com mensagem clara indicando quais variáveis estão faltando.
 
+> **Migrações:** os builds de produção aplicam mudanças de schema automaticamente via `drizzle-kit push` (sem `--force`: mudanças destrutivas abortam o build). Veja [docs/runbooks/db-migrations.md](docs/runbooks/db-migrations.md).
+
 ---
 
 ## English
@@ -136,8 +138,8 @@ CifrasHub is an open source web application for musicians to organize and view c
 
 ### Prerequisites
 
-- Node.js 20+
-- npm 10+
+- Node.js 24+
+- npm 11+
 - [Neon](https://neon.tech) account (free serverless PostgreSQL)
 
 ### Installation
@@ -174,11 +176,12 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
+<!-- Wording describes behavior as of plan 012; maintainer must review with legal before publishing. -->
 ## Aviso Legal / Legal Notice
 
-**PT:** Este projeto é uma ferramenta pessoal de organização de cifras. O conteúdo das cifras (letras, acordes) é buscado diretamente pelo navegador do usuário a partir do [Cifra Club](https://www.cifraclub.com.br/) no momento da visualização — o CifrasHub **não armazena, redistribui ou reproduz** esse conteúdo. Ao usar o CifrasHub, você concorda com os [Termos de Uso do Cifra Club](https://www.cifraclub.com.br/info/termos-de-uso/). O CifrasHub não tem nenhuma relação comercial ou oficial com o Cifra Club.
+**PT:** Este projeto é uma ferramenta pessoal de organização de cifras. O **servidor** do CifrasHub busca as páginas de cifras no [Cifra Club](https://www.cifraclub.com.br/) e, quando indisponível, no Internet Archive (Wayback Machine) ou no Ultimate Guitar. A página obtida é armazenada em cache no servidor (banco de dados) por até 30 dias e na CDN por até 1 dia. As cifras que o usuário salva ficam armazenadas na conta dele. Ao usar o CifrasHub, você concorda com os [Termos de Uso do Cifra Club](https://www.cifraclub.com.br/info/termos-de-uso/) e dos demais sites mencionados. O CifrasHub não tem nenhuma relação comercial ou oficial com esses sites.
 
-**EN:** This project is a personal chord sheet organization tool. Chord content (lyrics, chords) is fetched directly by the user's browser from [Cifra Club](https://www.cifraclub.com.br/) at the time of viewing — CifrasHub does **not store, redistribute, or reproduce** that content. By using CifrasHub, you agree to [Cifra Club's Terms of Use](https://www.cifraclub.com.br/info/termos-de-uso/). CifrasHub has no commercial or official relationship with Cifra Club.
+**EN:** This project is a personal chord sheet organization tool. The CifrasHub **server** fetches chord pages from [Cifra Club](https://www.cifraclub.com.br/) and, when unavailable, from the Internet Archive (Wayback Machine) or Ultimate Guitar. The fetched page is cached on the server (database) for up to 30 days and in the CDN for up to 1 day. Songs a user saves are stored in their account. By using CifrasHub, you agree to [Cifra Club's Terms of Use](https://www.cifraclub.com.br/info/termos-de-uso/) and the terms of the other sites mentioned. CifrasHub has no commercial or official relationship with those sites.
 
 ---
 ## Comunidade

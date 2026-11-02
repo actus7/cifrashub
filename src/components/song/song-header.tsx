@@ -1,7 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import {
+  AudioLines,
   Bookmark,
   ChevronLeft,
   FastForward,
@@ -18,12 +19,18 @@ import {
   Rewind,
   Timer,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { AuthHeaderControl } from "@/components/auth/user-menu";
+import { notifyExperimentalOnce } from "@/components/ui/experimental";
+import { MicLevelMeter } from "@/components/ui/mic-level-meter";
+import { useSongFollow } from "@/hooks/use-song-follow";
 import { Button } from "@/components/ui/button";
 import { transposeRootNote } from "@/lib/music";
 import { cn } from "@/lib/utils";
 import type { CurrentSongMeta } from "@/lib/types";
 import { useSongViewContext } from "./song-context";
+import { FollowDiagnosticsPanel } from "./follow-diagnostics";
 import { VersionBadge } from "./song-version-menu";
 
 export function CifraClubMeta({
@@ -73,7 +80,7 @@ export function SongHeader({ extraActions }: SongHeaderProps) {
   if (zenMode) return null;
 
   return (
-    <header className="no-print sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-xl backdrop-saturate-150">
+    <header data-scroll-inset="top" className="no-print sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-xl backdrop-saturate-150">
       <div className="flex items-center justify-between px-3 py-3 sm:px-4">
         <SongHeaderTitle />
         <SongHeaderActions extraActions={extraActions} />
@@ -208,6 +215,7 @@ function SongHeaderActions({ extraActions }: SongHeaderProps) {
     <div className="flex shrink-0 flex-col items-end">
       <div className="flex items-center gap-0.5 sm:gap-1">
         <AutoScrollHeaderControl />
+        <FollowSongHeaderControl />
         <AutoScrollSpeedControls />
         <MetronomeHeaderControl />
         <MetronomeBpmControls />
@@ -241,6 +249,58 @@ function AutoScrollHeaderControl() {
   );
 }
 
+/**
+ * Assinatura: "Seguir a música" — a linha que está sendo tocada/cantada fica no meio da tela.
+ * Combina acordes, voz (Whisper ou navegador) e andamento num só modelo (use-song-follow), com painel de diagnóstico.
+ */
+function FollowSongHeaderControl() {
+  // Grátis para todos (roda no aparelho). Só a transcrição pelo Whisper (IA paga) é de assinante — decidida no servidor.
+  // No modo palco a barra do palco já ouve; dois seguidores brigariam pelo microfone.
+  const inStage = useSearchParams().get("stage") === "1";
+  const { autoScroll, setAutoScroll, tone } = useSongViewContext();
+  const { state, start, stop, downloadDiagnostics } = useSongFollow(tone);
+  const following = state.status === "following";
+  const level = following ? state.level : 0;
+
+  useEffect(() => {
+    if (state.status === "error") toast.error(state.message);
+  }, [state]);
+
+  // As duas rolagens brigariam pela tela: ligar a por tempo desliga esta.
+  useEffect(() => {
+    if (autoScroll && following) stop();
+  }, [autoScroll, following, stop]);
+
+  if (inStage) return null;
+
+  return (
+    <>
+      <HeaderToggleButton
+        active={following}
+        inactiveLabel="Seguir a música (experimental — acordes + voz)"
+        activeLabel="Parar de seguir a música"
+        className="relative overflow-hidden"
+        onClick={() => {
+          if (following) {
+            stop();
+            return;
+          }
+          setAutoScroll(false);
+          notifyExperimentalOnce(
+            "follow",
+            "O Seguir a música pode se perder ou atrasar. Se isso acontecer, role a tela com a mão: ele pausa e volta a acompanhar sozinho.",
+          );
+          void start();
+        }}
+      >
+        {following && <MicLevelMeter level={level} tone="onGhost" />}
+        <AudioLines className="relative size-[18px]" style={following ? { transform: `scaleY(${0.7 + level * 0.6})` } : undefined} />
+      </HeaderToggleButton>
+      {state.status === "following" && <FollowDiagnosticsPanel diag={state.diag} onDownload={downloadDiagnostics} />}
+    </>
+  );
+}
+
 function MetronomeHeaderControl() {
   const { metronomeActive, setMetronomeActive, bpm } = useSongViewContext();
 
@@ -262,12 +322,14 @@ function HeaderToggleButton({
   activeLabel,
   onClick,
   children,
+  className,
 }: {
   active: boolean;
   inactiveLabel: string;
   activeLabel: string;
   onClick: () => void;
   children: ReactNode;
+  className?: string;
 }) {
   const label = active ? activeLabel : inactiveLabel;
 
@@ -279,6 +341,7 @@ function HeaderToggleButton({
       className={cn(
         "rounded-xl",
         active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+        className,
       )}
       onClick={onClick}
       title={label}

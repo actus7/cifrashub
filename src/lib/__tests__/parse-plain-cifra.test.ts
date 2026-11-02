@@ -33,6 +33,13 @@ describe("parsePlainTextCifra", () => {
     expect(sections[1]).toMatchObject({ type: "chorus", label: "[Refrão]" });
   });
 
+  it("classifies lines with 7M, sharps and slash chords as chord lines", () => {
+    const sections = parsed("[Verso]\nC7M  G\nHello world\nD/F#  A7/C#\nAnother line");
+    const chords = sections[0]?.content.flatMap((l) => l.map((b) => b.chord).filter(Boolean));
+
+    expect(chords).toEqual(["C7M", "G", "D/F#", "A7/C#"]);
+  });
+
   it("parses explicit chord markers", () => {
     const sections = parsed("[Verso]\n‹CHORD:G›Olá ‹CHORD:D›mundo");
 

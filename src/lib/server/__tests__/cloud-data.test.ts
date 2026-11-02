@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { preferredArrangementRow } from "@/lib/server/cloud-data";
+import {
+  pickDefaultFolderToPromote,
+  preferredArrangementRow,
+} from "@/lib/server/cloud-data";
 import type { userSongs } from "@/db/schema";
 
 type SongRow = typeof userSongs.$inferSelect;
@@ -55,5 +58,25 @@ describe("preferredArrangementRow", () => {
 
   it("returns undefined for an empty list", () => {
     expect(preferredArrangementRow([])).toBeUndefined();
+  });
+});
+
+describe("pickDefaultFolderToPromote", () => {
+  const f = (title: string, isDefault = false) => ({ title, isDefault });
+
+  it("prefers a folder already marked default", () => {
+    const def = f("Outra", true);
+    expect(pickDefaultFolderToPromote([f("Favoritos"), def])).toBe(def);
+  });
+
+  it("then prefers the folder titled Favoritos", () => {
+    const fav = f("Favoritos");
+    expect(pickDefaultFolderToPromote([f("A"), fav])).toBe(fav);
+  });
+
+  it("falls back to the first folder, or undefined when empty", () => {
+    const first = f("A");
+    expect(pickDefaultFolderToPromote([first, f("B")])).toBe(first);
+    expect(pickDefaultFolderToPromote([])).toBeUndefined();
   });
 });

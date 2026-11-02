@@ -1,6 +1,6 @@
-import type { SectionType } from "./types";
+import type { Section, SectionType } from "./types";
 
-const NOTES = [
+export const NOTES = [
   "C",
   "C#",
   "D",
@@ -62,11 +62,11 @@ export function transposeChord(chord: string, steps: number): string {
     .join("/");
 }
 
-function isMinorKey(key: string): boolean {
+export function isMinorKey(key: string): boolean {
   return key.endsWith("m") && !key.endsWith("dim");
 }
 
-function keyRoot(key: string): string {
+export function keyRoot(key: string): string {
   return isMinorKey(key) ? key.slice(0, -1) : key;
 }
 
@@ -197,4 +197,16 @@ const SECTION_MATCHERS: Array<[RegExp, SectionType]> = [
 export function classifySection(label: string): SectionType {
   const lower = label.toLowerCase();
   return SECTION_MATCHERS.find(([pattern]) => pattern.test(lower))?.[1] ?? "verse";
+}
+
+export function firstChordRoot(songData: Section[]): string | undefined {
+  for (const section of songData) {
+    for (const line of section.content) {
+      for (const block of line) {
+        const root = block.chord?.match(/^([A-G][#b]?)/)?.[1];
+        if (root) return root;
+      }
+    }
+  }
+  return undefined;
 }

@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { fetchChordsHtml } from "@/lib/fetch-proxy";
 import { processHtmlAndExtract } from "@/lib/parser";
 import { enrichStoredSongWithYoutube } from "@/hooks/use-song-loader";
-import { cloudAddSongToFolder, cloudRemoveSongFromFolder, saveFolders } from "@/lib/storage";
+import { cloudAddSongToFolder, cloudRemoveFolderSongs, saveFolders } from "@/lib/storage";
 import { arrangementKey } from "@/lib/arrangement-key";
 import { useSession } from "@/hooks/use-session";
 import type { Folder, SearchResultSong, StoredSong } from "@/lib/types";
@@ -60,16 +60,13 @@ async function removeCloudFolderSongs(
   keys: Set<string>,
   folders: Folder[],
 ) {
-  let nextFolders = folders;
-  for (const key of keys) {
-    try {
-      const { folders: next } = await cloudRemoveSongFromFolder(folderId, key);
-      nextFolders = next;
-    } catch (error) {
-      console.error(`Failed to remove song ${key} from cloud:`, error);
-    }
+  try {
+    const { folders: next } = await cloudRemoveFolderSongs(folderId, [...keys]);
+    return next;
+  } catch (error) {
+    console.error("Failed to remove songs from cloud:", error);
+    return folders;
   }
-  return nextFolders;
 }
 
 function removeLocalFolderSongs(

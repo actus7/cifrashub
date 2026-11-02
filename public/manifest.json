@@ -1,7 +1,7 @@
 {
   "name": "CifrasHub",
   "short_name": "CifrasHub",
-  "description": "Visualizador de cifras com transposição, metrônomo, afinador e modo palco.",
+  "description": "Visualizador de cifras com transposição, metrônomo, setlists e modo palco.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",

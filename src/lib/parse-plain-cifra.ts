@@ -1,3 +1,4 @@
+import { isChordToken } from "@/lib/chord-grammar";
 import { classifySection } from "@/lib/music";
 import { parseChordLinePair } from "@/lib/parse-chord-line-pair";
 import type { LyricLine, Section, SectionType } from "@/lib/types";
@@ -49,9 +50,6 @@ function trimTrailingEmptyLines(lines: LyricLine[]) {
   }
 }
 
-const CHORD_PATTERN =
-  "([A-G][#b]?(?:maj|min|M)?(?:m(?!aj))?(?:\\d{1,2})?(?:sus[24]?|add\\d?|dim|aug)?(?:/[A-G][#b]?)?)\\b";
-
 const SECTION_RE = /^\[(.+?)\]/;
 
 function lineHasAngleChordMarkers(line: string): boolean {
@@ -59,12 +57,8 @@ function lineHasAngleChordMarkers(line: string): boolean {
 }
 
 function isChordOnlyLine(line: string): boolean {
-  const t = line.trim();
-  if (!t) return false;
-  const chordRe = new RegExp(CHORD_PATTERN);
-  if (!chordRe.test(t)) return false;
-  const remainder = t.replace(new RegExp(CHORD_PATTERN, "g"), "").trim();
-  return remainder.length === 0;
+  const tokens = line.trim().match(/\S+/g);
+  return tokens !== null && tokens.every(isChordToken);
 }
 
 function isTabLine(_line: string, stripped: string): boolean {

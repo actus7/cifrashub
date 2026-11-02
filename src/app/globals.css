@@ -279,3 +279,17 @@ html.zen-scroll-hide body::-webkit-scrollbar {
     padding-top: 0 !important;
   }
 }
+
+/* O NeonAuthUIProvider monta um <Toaster /> próprio (canto inferior direito) e o sonner
+   mostra cada aviso em todos os Toasters. O do app (layout.tsx, inferior central) já mostra tudo. */
+[data-sonner-toaster][data-x-position="right"] {
+  display: none !important;
+}
+
+/* Linha que está sendo cantada (Seguir a letra / modo palco). */
+[data-follow][data-lyric-active] {
+  border-radius: 0.375rem;
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+  box-shadow: 0 0 0 6px color-mix(in oklab, var(--primary) 14%, transparent);
+  transition: background 200ms ease, box-shadow 200ms ease;
+}

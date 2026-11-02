@@ -12,7 +12,7 @@ export function youtubeIdForRow(s: Pick<StoredSong, "youtubeId">): string | null
   return isValidYoutubeId(v) ? v : null;
 }
 
-const UI_PREF_KEYS = [
+export const UI_PREF_KEYS = [
   "simplified",
   "showTabs",
   "nashvilleNumbers",
@@ -44,6 +44,27 @@ export function toneCapoUiFromStored(s: StoredSong): {
     tone: s.tone ?? 0,
     capo: s.capo ?? 0,
     uiPrefs: uiPrefsFromStored(s),
+  };
+}
+
+type StoredSongRow = ReturnType<typeof buildStoredSongRow>;
+
+/** Columns refreshed when an existing song row is upserted/updated (shared by sync, folders, recents). */
+export function songRowUpdateSet(row: StoredSongRow) {
+  return {
+    songId: row.songId,
+    title: row.title,
+    artist: row.artist,
+    artistSlug: row.artistSlug,
+    slug: row.slug,
+    youtubeId: row.youtubeId,
+    songData: row.songData,
+    tone: row.tone,
+    capo: row.capo,
+    uiPrefs: row.uiPrefs,
+    sourceArtistSlug: row.sourceArtistSlug,
+    sourceSlug: row.sourceSlug,
+    updatedAt: new Date(),
   };
 }
 
