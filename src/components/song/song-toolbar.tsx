@@ -147,7 +147,7 @@ export const SongToolbar = memo(function SongToolbar() {
       <ToolbarSeparator />
       <ToneControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
       <CapoControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
-      <KeyDetectControl />
+      <KeyDetectControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
       <ToolbarSeparator />
       <LayoutControls expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
       <ToolbarSeparator />
@@ -202,63 +202,104 @@ function firstChordKey(songData: SongViewValue["songData"]): string | undefined 
   return undefined;
 }
 
-/** Assinatura: enquanto ligado, escuta a voz e vai ajustando o tom da cifra ao tom cantado. */
-function KeyDetectControl() {
+/** Tempo da opção "15 s" do Descobrir o tom. */
+const KEY_DETECT_LIMIT_MS = 15_000;
+
+/** Assinatura: escuta a voz e vai ajustando o tom da cifra ao tom cantado (por 15 s ou até desligar). */
+function KeyDetectControl({
+  expanded,
+  setExpanded,
+  toggleMenu,
+}: {
+  expanded: string | null;
+  setExpanded: (v: string | null) => void;
+  toggleMenu: (menu: string) => void;
+}) {
   const isSubscriber = useIsSubscriber();
   const { tone, setTone, currentSong, songData, sharedContext } = useSongViewContext();
   const displayKey = songDisplayKey(currentSong, songData);
   // O tom do store é relativo aos acordes escritos, então a detecção parte do tom escrito (com o modo).
   const { state, start, stop } = useKeyDetect(currentSong.cifraWrittenKey ?? firstChordKey(songData));
   const toneBefore = useRef(tone);
-  const lastError = useRef<typeof state | null>(null);
-  const shift = state.status === "listening" ? state.shift : null;
+  const handled = useRef<typeof state | null>(null);
+  const shift = state.status === "listening" || state.status === "finished" ? state.shift : null;
+
+  const keyLabel = (s: number) => (displayKey ? transposeRootNote(displayKey, s) : `${s > 0 ? "+" : ""}${s}`);
+  const announce = (finalTone: number) => {
+    const previous = toneBefore.current;
+    if (finalTone === previous) {
+      toast("O tom continua o mesmo.");
+      return;
+    }
+    toast.success(`Tom ajustado para ${keyLabel(finalTone)}`, {
+      action: { label: "Desfazer", onClick: () => setTone(previous) },
+    });
+  };
 
   useEffect(() => {
     if (shift !== null) setTone(shift);
   }, [shift, setTone]);
 
   useEffect(() => {
-    if (state.status !== "error" || lastError.current === state) return;
-    lastError.current = state;
-    toast.error(state.message);
+    if (handled.current === state) return;
+    handled.current = state;
+    if (state.status === "error") toast.error(state.message);
+    if (state.status === "finished") announce(state.shift ?? toneBefore.current);
+    // announce só lê refs e o rótulo; reexecutar por ela duplicaria o aviso.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
   if (!isSubscriber) return null;
 
   const listening = state.status === "listening";
-  const keyLabel = (s: number) => (displayKey ? transposeRootNote(displayKey, s) : `${s > 0 ? "+" : ""}${s}`);
-
+  const begin = (limitMs?: number) => {
+    setExpanded(null);
+    toneBefore.current = tone;
+    void start(limitMs);
+  };
   const handleClick = () => {
     if (!listening) {
-      toneBefore.current = tone;
-      void start();
+      toggleMenu("keydetect");
       return;
     }
     stop();
-    const previous = toneBefore.current;
-    if (tone === previous) return;
-    toast.success(`Tom ajustado para ${keyLabel(tone)}`, {
-      action: { label: "Desfazer", onClick: () => setTone(previous) },
-    });
+    announce(tone);
   };
 
   return (
-    <ToolbarButton
-      active={listening}
-      onClick={handleClick}
-      title={listening ? "Parar de ouvir" : "Descobrir o tom pela voz"}
-      disabled={Boolean(sharedContext)}
-      className="flex-col gap-0 p-0"
-    >
-      {listening ? (
+    <ToolbarPopoverGroup
+      open={expanded === "keydetect" && !listening}
+      setExpanded={setExpanded}
+      popoverContent={
         <>
-          <Mic className="size-3.5 animate-pulse" style={{ opacity: 0.5 + state.level * 0.5 }} />
-          <span className="text-[10px] font-bold leading-none">{shift === null ? "…" : keyLabel(shift)}</span>
+          <Button type="button" size="sm" variant="outline" className="h-9 rounded-xl px-3 text-[11px] font-bold" onClick={() => begin(KEY_DETECT_LIMIT_MS)}>
+            15 s
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-9 rounded-xl px-3 text-[11px] font-bold" onClick={() => begin()}>
+            Contínuo
+          </Button>
         </>
-      ) : (
-        <Mic className="size-4" />
-      )}
-    </ToolbarButton>
+      }
+    >
+      <ToolbarButton
+        active={listening}
+        onClick={handleClick}
+        title={listening ? "Parar de ouvir" : "Descobrir o tom pela voz"}
+        disabled={Boolean(sharedContext)}
+        className="flex-col gap-0 p-0"
+      >
+        {listening ? (
+          <>
+            <span className="text-[10px] font-bold leading-none">{shift === null ? "…" : keyLabel(shift)}</span>
+            <span className="text-[8px] leading-none" style={{ opacity: 0.5 + state.level * 0.5 }}>
+              {state.remainingMs === null ? "ouvindo" : `${Math.ceil(state.remainingMs / 1000)}s`}
+            </span>
+          </>
+        ) : (
+          <Mic className="size-4" />
+        )}
+      </ToolbarButton>
+    </ToolbarPopoverGroup>
   );
 }
 

@@ -15,7 +15,9 @@ const FFT_SIZE = 2048;
 
 export type KeyDetectState =
   | { status: "idle" }
-  | { status: "listening"; level: number; shift: number | null }
+  | { status: "listening"; level: number; shift: number | null; remainingMs: number | null }
+  /** Terminou sozinho ao fim do tempo limite. */
+  | { status: "finished"; shift: number | null }
   | { status: "error"; message: string };
 
 function micErrorMessage(err: unknown): string {
@@ -26,7 +28,7 @@ function micErrorMessage(err: unknown): string {
 }
 
 /**
- * Escuta a voz continuamente até `stop()` e, a cada 2 s, estima quantos semitons transpor a partir do tom escrito.
+ * Escuta a voz até `stop()` (ou até `limitMs`, se informado) e, a cada 2 s, estima quantos semitons transpor a partir do tom escrito.
  * `shift` só muda quando duas leituras seguidas concordam (evita o tom pulando).
  */
 export function useKeyDetect(writtenKey: string | undefined) {
@@ -41,7 +43,7 @@ export function useKeyDetect(writtenKey: string | undefined) {
 
   useEffect(() => () => releaseRef.current?.(), []);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (limitMs?: number) => {
     if (!writtenKey) {
       setState({ status: "error", message: "Esta cifra não informa o tom." });
       return;
@@ -66,7 +68,8 @@ export function useKeyDetect(writtenKey: string | undefined) {
     ctx.createMediaStreamSource(stream).connect(analyser);
     const buf = new Float32Array(FFT_SIZE);
     const samples: { t: number; f: number }[] = [];
-    let lastEval = performance.now();
+    const startedAt = performance.now();
+    let lastEval = startedAt;
     let candidate: number | null = null;
     let shift: number | null = null;
 
@@ -84,9 +87,16 @@ export function useKeyDetect(writtenKey: string | undefined) {
         candidate = reading;
       }
 
+      const remainingMs = limitMs ? Math.max(0, limitMs - (now - startedAt)) : null;
+      if (remainingMs === 0) {
+        releaseRef.current?.();
+        releaseRef.current = null;
+        setState({ status: "finished", shift });
+        return;
+      }
       let sum = 0;
       for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-      setState({ status: "listening", level: Math.min(1, Math.sqrt(sum / buf.length) * 5), shift });
+      setState({ status: "listening", level: Math.min(1, Math.sqrt(sum / buf.length) * 5), shift, remainingMs });
     }, SAMPLE_EVERY_MS);
 
     releaseRef.current = () => {
@@ -94,7 +104,7 @@ export function useKeyDetect(writtenKey: string | undefined) {
       stream.getTracks().forEach((t) => t.stop());
       ctx.close().catch(() => {});
     };
-    setState({ status: "listening", level: 0, shift: null });
+    setState({ status: "listening", level: 0, shift: null, remainingMs: limitMs ?? null });
   }, [writtenKey]);
 
   return { state, start, stop };
