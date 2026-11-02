@@ -279,3 +279,9 @@ html.zen-scroll-hide body::-webkit-scrollbar {
     padding-top: 0 !important;
   }
 }
+
+/* O NeonAuthUIProvider monta um <Toaster /> próprio (canto inferior direito) e o sonner
+   mostra cada aviso em todos os Toasters. O do app (layout.tsx, inferior central) já mostra tudo. */
+[data-sonner-toaster][data-x-position="right"] {
+  display: none !important;
+}
