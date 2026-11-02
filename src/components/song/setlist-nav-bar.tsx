@@ -10,6 +10,7 @@ export function SetlistNavBar({ nav }: { nav: Nav }) {
   return (
     <nav
       aria-label={`Setlist ${nav.title}`}
+      data-scroll-inset="bottom"
       className="no-print fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-2 border-t bg-background/95 px-3 py-2 backdrop-blur"
     >
       <Button variant="ghost" size="sm" disabled={!nav.prev} onClick={() => nav.go(nav.prev)}>

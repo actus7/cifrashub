@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { SOUND_LEVEL, useKeyDetect } from "@/hooks/use-key-detect";
+import { useKeyDetect } from "@/hooks/use-key-detect";
+import { MicLevelMeter } from "@/components/ui/mic-level-meter";
 import { keyTemplate } from "@/lib/key-detect";
 import { useIsSubscriber } from "@/hooks/use-subscription";
 import { cn } from "@/lib/utils";
@@ -293,7 +294,7 @@ function KeyDetectControl({
       >
         {listening ? (
           <>
-            <KeyDetectLevelMeter level={state.level} />
+            <MicLevelMeter level={state.level} />
             <span className="relative text-[10px] font-bold leading-none">{shift === null ? "…" : keyLabel(shift)}</span>
             <span className="relative text-[8px] leading-none">
               {state.remainingMs === null ? "ouvindo" : `${Math.ceil(state.remainingMs / 1000)}s`}
@@ -304,28 +305,6 @@ function KeyDetectControl({
         )}
       </ToolbarButton>
     </ToolbarPopoverGroup>
-  );
-}
-
-/** Medidor de volume dentro do botão: o fundo enche com o nível e a borda acende quando há som. */
-function KeyDetectLevelMeter({ level }: { level: number }) {
-  const hearing = level >= SOUND_LEVEL;
-  return (
-    <>
-      <span
-        aria-hidden
-        className="absolute inset-x-0 bottom-0 bg-primary-foreground/30 transition-[height] duration-100 ease-out"
-        style={{ height: `${Math.round(level * 100)}%` }}
-      />
-      <span
-        aria-hidden
-        className={cn(
-          "absolute inset-0 rounded-xl ring-2 ring-inset transition-opacity duration-150",
-          hearing ? "animate-pulse opacity-100 ring-primary-foreground/70" : "opacity-0",
-        )}
-      />
-      <span className="sr-only">{hearing ? "Captando som" : "Sem som"}</span>
-    </>
   );
 }
 

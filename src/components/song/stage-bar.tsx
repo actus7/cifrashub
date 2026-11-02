@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { useSetlistNavigation } from "@/hooks/use-setlist-navigation";
 import { focusLyricLine, useLyricsFollow } from "@/hooks/use-lyrics-follow";
+import { MicLevelMeter } from "@/components/ui/mic-level-meter";
+import { useMicLevel } from "@/hooks/use-mic-level";
 import { useStage } from "@/hooks/use-stage";
 import { useIsSubscriber } from "@/hooks/use-subscription";
 import type { StageCommand } from "@/lib/stage-commands";
@@ -30,7 +32,7 @@ function exitStageUrl() {
 
 function StageShell({ children, live }: { children: ReactNode; live: boolean }) {
   return (
-    <div className="no-print fixed inset-x-0 bottom-[52px] z-40 flex items-center justify-between gap-2 border-t bg-background/95 px-3 py-1.5 text-sm backdrop-blur">
+    <div data-scroll-inset="bottom" className="no-print fixed inset-x-0 bottom-[52px] z-40 flex items-center justify-between gap-2 border-t bg-background/95 px-3 py-1.5 text-sm backdrop-blur">
       <span className={cn("flex items-center gap-1.5 font-semibold", live ? "text-primary" : "text-muted-foreground")}>
         <Radio className={cn("size-4", live && "animate-pulse")} /> {live ? "Ao vivo" : "Palco"}
       </span>
@@ -108,6 +110,7 @@ function OwnerStage({ nav }: { nav: Nav }) {
   });
   const { state, start, stop } = useLyricsFollow(setLineIndex, onSpeech);
   const following = state.status === "following";
+  const level = useMicLevel(following);
   useEffect(() => {
     stopRef.current = stop;
   }, [stop]);
@@ -147,8 +150,15 @@ function OwnerStage({ nav }: { nav: Nav }) {
         {following ? "IA pilotando: segue a letra e ouve comandos" : "IA pausada"} · {nav.index}/{nav.total}
       </span>
       <div className="flex gap-1">
-        <Button size="sm" variant={following ? "default" : "outline"} onClick={following ? stop : start} title="Ouvir a voz">
-          <AudioLines className="size-4" />
+        <Button
+          size="sm"
+          variant={following ? "default" : "outline"}
+          className="relative overflow-hidden"
+          onClick={following ? stop : start}
+          title="Ouvir a voz"
+        >
+          {following && <MicLevelMeter level={level} />}
+          <AudioLines className="relative size-4" />
         </Button>
         <Button size="sm" variant="ghost" className="text-destructive" onClick={end}>
           <Square className="size-3.5" fill="currentColor" /> Encerrar

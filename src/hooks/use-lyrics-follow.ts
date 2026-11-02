@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { scrollToVisibleCenter } from "@/lib/center-scroll";
 import { matchLine, normalizeWords } from "@/lib/lyrics-follow";
 import { startSpeech } from "@/lib/speech";
 
@@ -12,11 +13,12 @@ function lyricElements(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>("[data-lyric]"));
 }
 
-/** Move o destaque e centraliza a linha. */
+/** Move o destaque e põe a linha no meio da área visível (descontando header e barras fixas). */
 export function focusLyricLine(index: number) {
   const els = lyricElements();
   els.forEach((el, i) => el.toggleAttribute(ACTIVE_ATTR, i === index));
-  els[index]?.scrollIntoView({ block: "center", behavior: "smooth" });
+  const el = els[index];
+  if (el) scrollToVisibleCenter(el);
 }
 
 export function clearLyricFocus() {

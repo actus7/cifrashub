@@ -22,7 +22,9 @@ import {
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { AuthHeaderControl } from "@/components/auth/user-menu";
+import { MicLevelMeter } from "@/components/ui/mic-level-meter";
 import { useLyricsFollow } from "@/hooks/use-lyrics-follow";
+import { useMicLevel } from "@/hooks/use-mic-level";
 import { useIsSubscriber } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
 import { transposeRootNote } from "@/lib/music";
@@ -78,7 +80,7 @@ export function SongHeader({ extraActions }: SongHeaderProps) {
   if (zenMode) return null;
 
   return (
-    <header className="no-print sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-xl backdrop-saturate-150">
+    <header data-scroll-inset="top" className="no-print sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-xl backdrop-saturate-150">
       <div className="flex items-center justify-between px-3 py-3 sm:px-4">
         <SongHeaderTitle />
         <SongHeaderActions extraActions={extraActions} />
@@ -255,6 +257,7 @@ function FollowLyricsHeaderControl() {
   const { autoScroll, setAutoScroll } = useSongViewContext();
   const { state, start, stop } = useLyricsFollow();
   const following = state.status === "following";
+  const level = useMicLevel(following);
 
   useEffect(() => {
     if (state.status === "error") toast.error(state.message);
@@ -272,6 +275,7 @@ function FollowLyricsHeaderControl() {
       active={following}
       inactiveLabel="Rolagem pela voz (segue a letra cantada)"
       activeLabel="Parar rolagem pela voz"
+      className="relative overflow-hidden"
       onClick={() => {
         if (following) {
           stop();
@@ -281,7 +285,8 @@ function FollowLyricsHeaderControl() {
         start();
       }}
     >
-      <AudioLines className={cn("size-[18px]", following && "animate-pulse")} />
+      {following && <MicLevelMeter level={level} tone="onGhost" />}
+      <AudioLines className="relative size-[18px]" style={following ? { transform: `scaleY(${0.7 + level * 0.6})` } : undefined} />
     </HeaderToggleButton>
   );
 }
@@ -307,12 +312,14 @@ function HeaderToggleButton({
   activeLabel,
   onClick,
   children,
+  className,
 }: {
   active: boolean;
   inactiveLabel: string;
   activeLabel: string;
   onClick: () => void;
   children: ReactNode;
+  className?: string;
 }) {
   const label = active ? activeLabel : inactiveLabel;
 
@@ -324,6 +331,7 @@ function HeaderToggleButton({
       className={cn(
         "rounded-xl",
         active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+        className,
       )}
       onClick={onClick}
       title={label}

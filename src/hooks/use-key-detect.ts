@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createAudioContext, ensureResumed } from "@/lib/audio-context";
+import { createAudioContext, ensureResumed, SOUND_LEVEL } from "@/lib/audio-context";
 import { bestShift, spectrumChroma } from "@/lib/key-detect";
 
 /** FFT grande = resolução de ~3 Hz, suficiente para separar semitons a partir de ~100 Hz. */
@@ -15,8 +15,6 @@ const DECAY = 0.995;
 const MIN_CONFIDENCE = 0.04;
 /** Quadros com som (≈1,5 s) antes do primeiro palpite. */
 const MIN_FRAMES = 15;
-/** Nível (0–1) acima do qual o botão mostra que está captando som. */
-export const SOUND_LEVEL = 0.08;
 
 export type KeyDetectState =
   | { status: "idle" }
