@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import {
   ArrowLeftRight,
   ArrowUpDown,
+  AudioLines,
   Columns2,
   FlipHorizontal,
   Guitar,
@@ -296,8 +297,13 @@ function KeyDetectControl({
           <>
             <MicLevelMeter level={state.level} />
             <span className="relative text-[10px] font-bold leading-none">{shift === null ? "…" : keyLabel(shift)}</span>
-            <span className="relative text-[8px] leading-none">
-              {state.remainingMs === null ? "ouvindo" : `${Math.ceil(state.remainingMs / 1000)}s`}
+            <span className="relative mt-0.5 flex items-center gap-0.5 text-[8px] leading-none">
+              {/* Mesmo efeito do botão de rolagem pela voz: as ondas esticam com o volume. */}
+              <AudioLines
+                className="size-2.5 transition-transform duration-100"
+                style={{ transform: `scaleY(${0.6 + state.level * 0.8})` }}
+              />
+              {state.remainingMs !== null && `${Math.ceil(state.remainingMs / 1000)}s`}
             </span>
           </>
         ) : (
