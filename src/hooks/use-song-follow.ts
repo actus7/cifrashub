@@ -7,7 +7,7 @@ import { lineWordScores, matchLine, normalizeWords } from "@/lib/lyrics-follow";
 import { startMicChroma } from "@/lib/mic-chroma";
 import { startSpeech, type SpeechListener } from "@/lib/speech";
 import { startWhisper, whisperAvailable } from "@/lib/whisper-client";
-import { clearLyricFocus, highlightLyricLine, lyricElements } from "@/hooks/use-lyrics-follow";
+import { clearLyricFocus, highlightLyricLine, lyricElements, repeatEdgesOnScreen } from "@/hooks/use-lyrics-follow";
 import { FollowScroller } from "@/lib/center-scroll";
 
 /** Suavização do cromagrama (~0,5 s): a batida e o dedilhado não fazem o acorde "piscar". */
@@ -95,8 +95,9 @@ export function useSongFollow(
 
   const build = useCallback(
     (startLine: number) => {
-      const lines = lyricElements().map((el) => (el.dataset.chords ?? "").split(" ").filter(Boolean));
-      followerRef.current = new ChordFollower(lines, shift, startLine);
+      const els = lyricElements();
+      const lines = els.map((el) => (el.dataset.chords ?? "").split(" ").filter(Boolean));
+      followerRef.current = new ChordFollower(lines, shift, startLine, repeatEdgesOnScreen());
     },
     [shift],
   );
@@ -130,7 +131,7 @@ export function useSongFollow(
     let lastDiagAt = 0;
     let lastWindow = "";
     const smooth = new Array<number>(12).fill(0);
-    const stabilizer = new LineStabilizer();
+    const stabilizer = new LineStabilizer(repeatEdgesOnScreen());
     const scroller = new FollowScroller();
     scroller.start();
     const elements = lyricElements();

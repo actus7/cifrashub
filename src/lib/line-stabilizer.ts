@@ -28,6 +28,12 @@ export class LineStabilizer {
   private shown = -1;
   private candidate = -1;
   private held = 0;
+  /** Voltas previstas pela cifra ("(2x)"): de `from` para `to` é caminho normal, não salto. */
+  private readonly expected = new Map<number, Set<number>>();
+
+  constructor(repeats: { from: number; to: number }[] = []) {
+    for (const { from, to } of repeats) this.expected.set(from, (this.expected.get(from) ?? new Set()).add(to));
+  }
 
   /** Linha mostrada na tela agora. */
   get line(): number {
@@ -41,7 +47,7 @@ export class LineStabilizer {
 
   private ruleFor(target: number): Rule {
     if (this.shown < 0) return target <= START_LINES ? ACQUIRE_START : ACQUIRE_ELSEWHERE;
-    if (target === this.shown + 1) return NEXT;
+    if (target === this.shown + 1 || this.expected.get(this.shown)?.has(target)) return NEXT;
     if (target > this.shown && target - this.shown <= AHEAD_LINES) return AHEAD;
     return FAR_OR_BACK;
   }

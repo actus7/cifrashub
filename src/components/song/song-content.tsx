@@ -3,6 +3,7 @@
 import { memo, type KeyboardEvent } from "react";
 import { ChevronDown } from "lucide-react";
 import { chordToNashville, firstChordRoot, simplifyChord, transposeChord, transposeRootNote } from "@/lib/music";
+import { parseRepeat, stripRepeat } from "@/lib/repeat-marks";
 import { cn } from "@/lib/utils";
 import type { LyricLine, Section } from "@/lib/types";
 
@@ -233,14 +234,21 @@ function ChordRow({
 }: Omit<LineRenderProps, "lineHasChord" | "rowKey">) {
   // Posições que a rolagem automática segue ([data-follow] em ordem): linhas com letra e/ou acordes.
   // data-lyric = texto (seguir pela voz); data-chords = acordes ESCRITOS (seguir pelos acordes).
-  const lyric = isLineTab ? "" : lyricText(line);
+  // data-repeat = "(2x)" no fim da linha (o texto para comparar com o canto vai sem a marca).
+  const rawLyric = isLineTab ? "" : lyricText(line);
+  const repeat = parseRepeat(rawLyric);
+  const lyric = stripRepeat(rawLyric);
   const chords = isLineTab ? "" : line.map((b) => b.chord).filter(Boolean).join(" ");
+  // Linha só com "(2x)": não é uma posição da música; a marca vale para a linha de cima (data-repeat-mark).
   const follow = Boolean(lyric || chords);
   return (
     <div
+      data-row={isLineTab ? undefined : ""}
       data-follow={follow || undefined}
+      data-repeat-mark={!follow && repeat ? repeat : undefined}
       data-lyric={follow ? lyric : undefined}
       data-chords={follow ? chords : undefined}
+      data-repeat={follow && repeat ? repeat : undefined}
       className={cn(
         "flex flex-wrap items-end",
         isLineTab && "min-w-0 max-w-max",
@@ -453,10 +461,13 @@ function SectionBlock({
   renderLineProps: Omit<LineRenderProps, "line" | "rowKey" | "isLineTab">;
 }) {
   if (sectionOnlyHasTabs(section) && !showTabs) return null;
+  const sectionRepeat = parseRepeat(sectionLabel(section));
 
   return (
     <div
       key={idx}
+      data-section={idx}
+      data-section-repeat={sectionRepeat ?? undefined}
       className={cn("relative min-w-0 print-break-auto", idx > 0 && "mt-6")}
       style={{ marginBottom: `${sectionSpacing}px` }}
     >

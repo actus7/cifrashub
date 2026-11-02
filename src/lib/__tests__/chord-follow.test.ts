@@ -264,4 +264,46 @@ describe("acquisition: understand where we are before moving the screen", () => 
     expect(frame).toBeGreaterThanOrEqual(30); // não decide no susto
     expect(frame).toBeLessThanOrEqual(80); // mas decide em até ~8 s
   });
+
+});
+
+describe("repeat marks (Nx)", () => {
+  // Estrofe (0–3) marcada "(2x)" na última linha, depois o refrão (4–7).
+  const STANZA = [["C", "G"], ["Am", "F"], ["Dm", "G"], ["Em", "Am"]];
+  const CHORUS = [["F", "C"], ["G", "Am"], ["F", "C"], ["G", "G"]];
+  const SONG_X2 = [...STANZA, ...CHORUS];
+  const EDGES = [{ from: 3, to: 3 }, { from: 3, to: 0 }];
+
+  function playRepeated(edges: { from: number; to: number }[]) {
+    const f = new ChordFollower(SONG_X2, 0, -1, edges);
+    const screen = new LineStabilizer(edges);
+    let seed = 3;
+    const shownAt: number[] = [];
+    const order = [0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6, 7]; // a estrofe tocada 2 vezes
+    for (const line of order) {
+      for (const c of SONG_X2[line]) for (let i = 0; i < 20; i++) {
+        f.step(chordChroma(c, 0, 0.3, seed++));
+        const shown = screen.update(f.best(screen.line));
+        f.setAnchor(shown);
+      }
+      shownAt.push(screen.line);
+    }
+    return shownAt;
+  }
+
+  it("follows the stanza back to its start and then into the chorus", () => {
+    const shown = playRepeated(EDGES);
+    // Ao fim de cada linha tocada, a tela está nela (tolerância: 1 linha de atraso na volta da repetição).
+    const order = [0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6, 7];
+    const right = shown.filter((line, i) => line === order[i]).length;
+    expect(right).toBeGreaterThanOrEqual(order.length - 1);
+    expect(shown[shown.length - 1]).toBe(7);
+  });
+
+  it("without the marks, the same performance gets lost on the repeat", () => {
+    const shown = playRepeated([]);
+    const order = [0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6, 7];
+    const right = shown.filter((line, i) => line === order[i]).length;
+    expect(right).toBeLessThan(order.length - 1);
+  });
 });

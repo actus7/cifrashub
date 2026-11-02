@@ -47,6 +47,8 @@ const P_JUMP_MAX = 0.01;
  * "perdido" e a âncora se solta.
  */
 const ANCHOR_DECAY = 0.97;
+/** No fim de uma linha com repetição marcada ("(2x)"), a parte da transição que volta (o resto segue em frente). */
+const REPEAT_SHARE = 0.5;
 const ANCHOR_BACK_LINES = 1;
 const ANCHOR_AHEAD_LINES = 2;
 /** Quão "afiada" é a emissão: maior = confia mais em cada quadro. */
@@ -109,14 +111,28 @@ export class ChordFollower {
   private lostFrames = 0;
   private lost = false;
   private anchor = -1;
+  /** Linhas para onde a música pode voltar depois de cada linha (marcas "(Nx)"). */
+  private readonly repeatTargets = new Map<number, number[]>();
+  /** Índice do 1º e do último acorde de cada linha. */
+  private readonly firstStep = new Map<number, number>();
+  private readonly lastStep = new Map<number, number>();
+  private anchorLines = new Set<number>();
 
   /** `lineChords` = acordes ESCRITOS de cada linha (em ordem); `shift` = semitons até o tom que está soando. */
-  constructor(lineChords: string[][], shift: number, startLine = -1) {
+  constructor(lineChords: string[][], shift: number, startLine = -1, repeats: { from: number; to: number }[] = []) {
     this.steps = fillChordless(lineChords).flatMap((chords, line) =>
       chords.length > 0
         ? chords.map((chord) => ({ line, chord, template: chordTemplate(chord, shift) }))
         : [{ line, chord: "", template: [] }],
     );
+    this.steps.forEach((s, i) => {
+      if (!this.firstStep.has(s.line)) this.firstStep.set(s.line, i);
+      this.lastStep.set(s.line, i);
+    });
+    for (const { from, to } of repeats) {
+      if (!this.firstStep.has(to) || !this.lastStep.has(from)) continue;
+      this.repeatTargets.set(from, [...(this.repeatTargets.get(from) ?? []), to]);
+    }
     const n = this.steps.length;
     const first = startLine >= 0 ? this.steps.findIndex((s) => s.line === startLine) : -1;
     if (first >= 0) {
@@ -143,8 +159,17 @@ export class ChordFollower {
       const b = this.belief[i];
       if (b === 0) continue;
       moved[i] += b * (1 - pNext - pSkip - pJump);
+      // Fim de uma linha com "(Nx)": parte da transição volta para o começo da repetição.
+      const line = this.steps[i].line;
+      const targets = this.lastStep.get(line) === i ? this.repeatTargets.get(line) : undefined;
+      let forward = pNext;
+      if (targets?.length) {
+        forward = pNext * (1 - REPEAT_SHARE);
+        const each = (pNext * REPEAT_SHARE) / targets.length;
+        for (const to of targets) moved[this.firstStep.get(to)!] += b * each;
+      }
       // Depois do último acorde a música acabou: essa probabilidade sai (senão o fim "atrairia" a posição).
-      if (i + 1 < n) moved[i + 1] += b * pNext;
+      if (i + 1 < n) moved[i + 1] += b * forward;
       if (i + 2 < n) moved[i + 2] += b * pSkip;
     }
     let explained = 0;
@@ -159,8 +184,7 @@ export class ChordFollower {
     }
     if (this.anchor >= 0 && !this.lost) {
       for (let i = 0; i < n; i++) {
-        const line = this.steps[i].line;
-        if (line < this.anchor - ANCHOR_BACK_LINES || line > this.anchor + ANCHOR_AHEAD_LINES) moved[i] *= ANCHOR_DECAY;
+        if (!this.anchorLines.has(this.steps[i].line)) moved[i] *= ANCHOR_DECAY;
       }
     }
     const total = moved.reduce((s, x) => s + x, 0) || 1;
@@ -251,7 +275,15 @@ export class ChordFollower {
 
   /** Linha em que a tela está firme (-1 = nenhuma): o modelo se apoia nela enquanto o som confirma. */
   setAnchor(line: number): void {
+    if (line === this.anchor) return;
     this.anchor = line;
+    // Perto da âncora + para onde as linhas perto dela podem voltar (repetições marcadas).
+    const lines = new Set<number>();
+    for (let l = line - ANCHOR_BACK_LINES; l <= line + ANCHOR_AHEAD_LINES; l++) {
+      lines.add(l);
+      for (const to of this.repeatTargets.get(l) ?? []) for (let k = to; k <= to + ANCHOR_AHEAD_LINES; k++) lines.add(k);
+    }
+    this.anchorLines = lines;
   }
 
   /** true enquanto o modelo está "recalculando a rota" (a posição atual não explica o som). */
