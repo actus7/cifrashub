@@ -142,11 +142,12 @@ export function useSongFollow(
 
     // Chamado uma vez por quadro de áudio: o estabilizador conta tempo em quadros.
     const decide = () => {
-      const best = followerRef.current?.best();
+      const best = followerRef.current?.best(stabilizer.line);
       if (!best) return;
       diag.modelLine = best.index;
       diag.probability = best.probability;
       const shown = stabilizer.update(best);
+      followerRef.current?.setAnchor(shown);
       diag.line = shown;
       diag.lost = followerRef.current?.isLost() ?? false;
       if (shown < 0) return;

@@ -3,6 +3,13 @@ import { ChordFollower, fillChordless, lineChordTemplate } from "../chord-follow
 import { chordPitchClasses } from "../key-detect";
 import { LineStabilizer } from "../line-stabilizer";
 
+/** O mesmo ciclo do app: a tela decide a partir do modelo e a linha mostrada vira a âncora do modelo. */
+function anchorAndShow(f: ChordFollower, screen: LineStabilizer): number {
+  const shown = screen.update(f.best(screen.line));
+  f.setAnchor(shown);
+  return shown;
+}
+
 /** Cromagrama de um acorde tocado (notas do acorde + um pouco de ruído). */
 function chordChroma(chord: string, shift = 0, noise = 0.15, seed = 1): number[] {
   let s = seed;
@@ -127,7 +134,7 @@ describe("follower + stabilizer (what the screen shows)", () => {
       for (const c of chords) {
         for (let i = 0; i < 20; i++) {
           f.step(chordChroma(c, 0, 0.45, seed++));
-          const shown = screen.update(f.best());
+          const shown = anchorAndShow(f, screen);
           if (previous >= 0 && shown < previous) backwards++;
           previous = shown;
         }
@@ -157,7 +164,7 @@ describe("re-routing when the player jumps to another part", () => {
       const shown: number[] = [];
       for (const c of SECTIONS[line]) for (let i = 0; i < 20; i++) {
         f.step(chordChroma(c, 0, 0.15, seed++));
-        shown.push(screen.update(f.best()));
+        shown.push(anchorAndShow(f, screen));
       }
       return shown;
     };
@@ -175,5 +182,46 @@ describe("re-routing when the player jumps to another part", () => {
 
   it("then keeps following the new route", () => {
     expect(jump().screen.line).toBe(11);
+  });
+
+});
+
+describe("calibration: no false jumps while playing in order", () => {
+  // Música mais longa (verso, refrão, verso, refrão, ponte, refrão), com partes repetidas.
+  const VERSE = [["C", "G"], ["Am", "F"], ["C", "G"], ["Am", "F"]];
+  const CHORUS = [["F", "C"], ["G", "Am"], ["F", "C"], ["G", "G"]];
+  const BRIDGE = [["Dm", "Em"], ["F", "G"]];
+  const LONG = [...VERSE, ...CHORUS, ...VERSE, ...CHORUS, ...BRIDGE, ...CHORUS];
+  const WRONG = ["E", "D", "Bm", "A", "B"];
+
+  /** Toca em ordem, com ruído forte e 10% de quadros com um acorde errado; conta saltos falsos da tela. */
+  function falseJumps(seed0: number) {
+    const f = new ChordFollower(LONG, 0);
+    const screen = new LineStabilizer();
+    let seed = seed0;
+    let previous = -1;
+    let jumps = 0;
+    for (const chords of LONG) {
+      for (const c of chords) {
+        for (let i = 0; i < 20; i++) {
+          seed++;
+          const wrong = seed % 10 === 0;
+          f.step(chordChroma(wrong ? WRONG[seed % WRONG.length] : c, 0, 0.4, seed));
+          const shown = anchorAndShow(f, screen);
+          if (previous >= 0 && shown !== previous && (shown < previous || shown > previous + 1)) jumps++;
+          previous = shown;
+        }
+      }
+    }
+    return { jumps, end: screen.line };
+  }
+
+  it("makes no out-of-sequence jumps over a whole song (5 runs)", () => {
+    const total = [1, 2, 3, 4, 5].reduce((sum, s) => sum + falseJumps(s * 97).jumps, 0);
+    expect(total).toBe(0);
+  });
+
+  it("still ends on the last line", () => {
+    expect(falseJumps(7).end).toBeGreaterThanOrEqual(LONG.length - 2);
   });
 });

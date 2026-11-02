@@ -24,22 +24,23 @@ describe("LineStabilizer", () => {
     expect(shown.slice(shown.indexOf(5)).every((v) => v === 5 || shown.indexOf(5) === -1)).toBe(true);
   });
 
-  it("ignores a brief backward pull", () => {
+  it("ignores a backward pull that is not strong and sustained", () => {
     const s = new LineStabilizer();
     feed(s, 10, 0.9, 3);
-    expect(feed(s, 3, 0.85, 8)).toBe(10);
+    expect(feed(s, 3, 0.85, 40)).toBe(10); // forte, mas abaixo de 90%
+    expect(feed(s, 3, 0.95, 20)).toBe(10); // 90%+, mas só 2 s
   });
 
-  it("goes back only with strong, sustained evidence", () => {
+  it("goes back only after ~3 s at 90%+ (the musician really jumped)", () => {
     const s = new LineStabilizer();
     feed(s, 10, 0.9, 3);
-    expect(feed(s, 3, 0.9, 15)).toBe(3);
+    expect(feed(s, 3, 0.95, 30)).toBe(3);
   });
 
   it("needs more evidence to skip ahead than to advance one line", () => {
     const s = new LineStabilizer();
     feed(s, 2, 0.9, 3);
-    expect(feed(s, 5, 0.5, 10)).toBe(2);
-    expect(feed(s, 5, 0.7, 6)).toBe(5);
+    expect(feed(s, 5, 0.5, 20)).toBe(2);
+    expect(feed(s, 5, 0.7, 8)).toBe(5);
   });
 });

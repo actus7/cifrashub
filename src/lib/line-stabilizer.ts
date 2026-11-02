@@ -8,10 +8,10 @@ type Rule = { minProbability: number; holdFrames: number };
 
 /** Linha seguinte (o caso normal da música): 45% por 3 quadros (~0,3 s). */
 const NEXT: Rule = { minProbability: 0.45, holdFrames: 3 };
-/** Algumas linhas à frente (pulou uma linha curta): 60% por ~0,6 s. */
-const AHEAD: Rule = { minProbability: 0.6, holdFrames: 6 };
-/** Para trás ou para longe: 80% por ~1,5 s. */
-const FAR_OR_BACK: Rule = { minProbability: 0.8, holdFrames: 15 };
+/** Algumas linhas à frente (pulou uma linha curta): 65% por ~0,8 s. */
+const AHEAD: Rule = { minProbability: 0.65, holdFrames: 8 };
+/** Para trás ou para longe (o músico saltou de parte — raro): 90% por ~3 s. */
+const FAR_OR_BACK: Rule = { minProbability: 0.9, holdFrames: 30 };
 /** "Algumas linhas à frente" vai até aqui. */
 const AHEAD_LINES = 6;
 
