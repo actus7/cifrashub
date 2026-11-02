@@ -62,6 +62,9 @@ DELETE FROM public.setlist_member sm
 WHERE NOT EXISTS (SELECT 1 FROM public.user_setlist sl WHERE sl.id = sm.setlist_id)
    OR NOT EXISTS (SELECT 1 FROM neon_auth."user" u WHERE u.id = sm.user_id);
 
+DELETE FROM public.user_entitlement ue
+WHERE NOT EXISTS (SELECT 1 FROM neon_auth."user" u WHERE u.id = ue.user_id);
+
 DO $$
 DECLARE
   r record;
@@ -76,7 +79,8 @@ BEGIN
         to_regclass('public.user_setlist'),
         to_regclass('public.share_snapshot'),
         to_regclass('public.folder_member'),
-        to_regclass('public.setlist_member')
+        to_regclass('public.setlist_member'),
+        to_regclass('public.user_entitlement')
       ], NULL))
   LOOP
     EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.table_name, r.conname);
@@ -109,4 +113,8 @@ ALTER TABLE public.folder_member
 
 ALTER TABLE public.setlist_member
   ADD CONSTRAINT setlist_member_user_id_fkey
+  FOREIGN KEY (user_id) REFERENCES neon_auth."user"(id) ON DELETE CASCADE;
+
+ALTER TABLE public.user_entitlement
+  ADD CONSTRAINT user_entitlement_user_id_fkey
   FOREIGN KEY (user_id) REFERENCES neon_auth."user"(id) ON DELETE CASCADE;

@@ -236,6 +236,16 @@ export const setlistMembers = pgTable(
   }),
 );
 
+// Assinatura por usuário. Sem pagamento por enquanto: as linhas são criadas à mão.
+// FK para neon_auth."user" aplicada por scripts/add-user-fk-cascade.sql.
+export const userEntitlements = pgTable("user_entitlement", {
+  userId: uuid("user_id").primaryKey(),
+  plan: text("plan").notNull().default("pro"),
+  /** null = sem data de expiração. */
+  activeUntil: timestamp("active_until", { mode: "date" }),
+  ...timestampColumns(),
+});
+
 export const shareSnapshots = pgTable("share_snapshot", {
   id: text("id")
     .primaryKey()

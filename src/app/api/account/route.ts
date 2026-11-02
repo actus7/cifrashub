@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { sql } from "@/db";
 import { requireApiUserId } from "@/lib/server/api-route";
 import { clearAuthCookies } from "@/lib/server/auth-cookies";
+import { hasActiveSubscription } from "@/lib/server/entitlement";
+
+export async function GET() {
+  const auth = await requireApiUserId();
+  if ("response" in auth) return auth.response;
+  return NextResponse.json({ isSubscriber: await hasActiveSubscription(auth.userId) });
+}
 
 export async function DELETE() {
   const auth = await requireApiUserId();
@@ -38,6 +45,10 @@ export async function DELETE() {
       `,
       tx`
         DELETE FROM public.user_folder
+        WHERE user_id = ${userId}
+      `,
+      tx`
+        DELETE FROM public.user_entitlement
         WHERE user_id = ${userId}
       `,
       tx`
