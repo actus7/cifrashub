@@ -231,11 +231,16 @@ function ChordRow({
   effectiveTransposition,
   onChordClick,
 }: Omit<LineRenderProps, "lineHasChord" | "rowKey">) {
-  // Texto da letra para o "Seguir a letra" (use-lyrics-follow lê [data-lyric] em ordem).
+  // Posições que a rolagem automática segue ([data-follow] em ordem): linhas com letra e/ou acordes.
+  // data-lyric = texto (seguir pela voz); data-chords = acordes ESCRITOS (seguir pelos acordes).
   const lyric = isLineTab ? "" : lyricText(line);
+  const chords = isLineTab ? "" : line.map((b) => b.chord).filter(Boolean).join(" ");
+  const follow = Boolean(lyric || chords);
   return (
     <div
-      data-lyric={lyric || undefined}
+      data-follow={follow || undefined}
+      data-lyric={follow ? lyric : undefined}
+      data-chords={follow ? chords : undefined}
       className={cn(
         "flex flex-wrap items-end",
         isLineTab && "min-w-0 max-w-max",

@@ -21,7 +21,7 @@ type Nav = NonNullable<ReturnType<typeof useSetlistNavigation>>;
 const AUTO_NEXT_MS = 8_000;
 
 function lyricLineCount() {
-  return document.querySelectorAll("[data-lyric]").length;
+  return document.querySelectorAll("[data-follow]").length;
 }
 
 function exitStageUrl() {

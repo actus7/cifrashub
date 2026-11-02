@@ -9,8 +9,9 @@ export type LyricsFollowState = { status: "idle" } | { status: "following" } | {
 
 const ACTIVE_ATTR = "data-lyric-active";
 
-function lyricElements(): HTMLElement[] {
-  return Array.from(document.querySelectorAll<HTMLElement>("[data-lyric]"));
+/** As posições da música na tela, em ordem (linhas com letra e/ou acordes). */
+export function lyricElements(): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>("[data-follow]"));
 }
 
 /** Move o destaque e põe a linha no meio da área visível (descontando header e barras fixas). */
@@ -27,7 +28,7 @@ export function clearLyricFocus() {
 
 /**
  * Ouve a voz e mantém no centro da tela a linha da letra que está sendo cantada.
- * As linhas vêm do DOM (`[data-lyric]`, em ordem), então funciona com colunas, tom e cifra simplificada.
+ * As linhas vêm do DOM (`[data-follow]`, em ordem), então funciona com colunas, tom e cifra simplificada.
  * `onLine` recebe o índice da linha sempre que ela muda (usado pelo modo palco).
  * `onSpeech` recebe cada frase fechada que NÃO bate com a letra (candidata a comando de voz).
  */

@@ -287,7 +287,7 @@ html.zen-scroll-hide body::-webkit-scrollbar {
 }
 
 /* Linha que está sendo cantada (Seguir a letra / modo palco). */
-[data-lyric][data-lyric-active] {
+[data-follow][data-lyric-active] {
   border-radius: 0.375rem;
   background: color-mix(in oklab, var(--primary) 14%, transparent);
   box-shadow: 0 0 0 6px color-mix(in oklab, var(--primary) 14%, transparent);

@@ -253,7 +253,7 @@ export const setlistStages = pgTable("setlist_stage", {
     .references(() => userSetlists.id, { onDelete: "cascade" }),
   /** `position` do item do setlist que está tocando. */
   position: integer("position").notNull().default(0),
-  /** Índice da linha cantada (ordem de [data-lyric] na tela); -1 = nenhuma ainda. */
+  /** Índice da linha cantada (ordem de [data-follow] na tela); -1 = nenhuma ainda. */
   lineIndex: integer("line_index").notNull().default(-1),
   transpose: integer("transpose").notNull().default(0),
   active: boolean("active").notNull().default(true),

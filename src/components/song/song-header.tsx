@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   FastForward,
   FileEdit,
+  Guitar,
   Link2,
   ListMusic,
   Maximize,
@@ -23,6 +24,7 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { AuthHeaderControl } from "@/components/auth/user-menu";
 import { MicLevelMeter } from "@/components/ui/mic-level-meter";
+import { useChordFollow } from "@/hooks/use-chord-follow";
 import { useLyricsFollow } from "@/hooks/use-lyrics-follow";
 import { useMicLevel } from "@/hooks/use-mic-level";
 import { useIsSubscriber } from "@/hooks/use-subscription";
@@ -216,6 +218,7 @@ function SongHeaderActions({ extraActions }: SongHeaderProps) {
       <div className="flex items-center gap-0.5 sm:gap-1">
         <AutoScrollHeaderControl />
         <FollowLyricsHeaderControl />
+        <FollowChordsHeaderControl />
         <AutoScrollSpeedControls />
         <MetronomeHeaderControl />
         <MetronomeBpmControls />
@@ -287,6 +290,46 @@ function FollowLyricsHeaderControl() {
     >
       {following && <MicLevelMeter level={level} tone="onGhost" />}
       <AudioLines className="relative size-[18px]" style={following ? { transform: `scaleY(${0.7 + level * 0.6})` } : undefined} />
+    </HeaderToggleButton>
+  );
+}
+
+/** Assinatura: rolagem pelos acordes tocados — não depende de reconhecer o canto. */
+function FollowChordsHeaderControl() {
+  const isSubscriber = useIsSubscriber();
+  const inStage = useSearchParams().get("stage") === "1";
+  const { autoScroll, setAutoScroll, tone } = useSongViewContext();
+  const { state, start, stop } = useChordFollow(tone);
+  const following = state.status === "following";
+  const level = following ? state.level : 0;
+
+  useEffect(() => {
+    if (state.status === "error") toast.error(state.message);
+  }, [state]);
+
+  useEffect(() => {
+    if (autoScroll && following) stop();
+  }, [autoScroll, following, stop]);
+
+  if (!isSubscriber || inStage) return null;
+
+  return (
+    <HeaderToggleButton
+      active={following}
+      inactiveLabel="Rolagem pelos acordes (segue o que você toca)"
+      activeLabel="Parar rolagem pelos acordes"
+      className="relative overflow-hidden"
+      onClick={() => {
+        if (following) {
+          stop();
+          return;
+        }
+        setAutoScroll(false);
+        void start();
+      }}
+    >
+      {following && <MicLevelMeter level={level} tone="onGhost" />}
+      <Guitar className="relative size-[18px]" style={following ? { transform: `scale(${0.85 + level * 0.35})` } : undefined} />
     </HeaderToggleButton>
   );
 }
