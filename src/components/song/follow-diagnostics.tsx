@@ -2,6 +2,7 @@
 
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ExperimentalBadge } from "@/components/ui/experimental";
 import type { FollowDiagnostics } from "@/hooks/use-song-follow";
 import { cn } from "@/lib/utils";
 
@@ -25,8 +26,9 @@ export function FollowDiagnosticsPanel({ diag, onDownload }: { diag: FollowDiagn
   return (
     <div className="no-print fixed bottom-20 left-3 z-40 w-[min(19rem,calc(100vw-1.5rem))] rounded-xl border bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-semibold">
+        <span className="flex items-center gap-1.5 font-semibold">
           Seguir a música
+          <ExperimentalBadge />
           {diag.locating && <span className="ml-1.5 animate-pulse font-normal text-muted-foreground">localizando…</span>}
           {!diag.locating && diag.lost && <span className="ml-1.5 animate-pulse font-normal text-amber-500">recalculando rota…</span>}
         </span>
@@ -60,6 +62,9 @@ export function FollowDiagnosticsPanel({ diag, onDownload }: { diag: FollowDiagn
         <dt className="text-muted-foreground">Andamento</dt>
         <dd>{diag.secondsPerChord.toFixed(1)} s por acorde</dd>
       </dl>
+      <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
+        Pode errar. Rolar a tela com a mão pausa o acompanhamento por alguns segundos.
+      </p>
     </div>
   );
 }

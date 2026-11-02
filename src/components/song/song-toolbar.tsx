@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useKeyDetect } from "@/hooks/use-key-detect";
+import { ExperimentalBadge, notifyExperimentalOnce } from "@/components/ui/experimental";
 import { MicLevelMeter } from "@/components/ui/mic-level-meter";
 import { keyTemplate } from "@/lib/key-detect";
 import { useIsSubscriber } from "@/hooks/use-subscription";
@@ -259,6 +260,10 @@ function KeyDetectControl({
   const listening = state.status === "listening";
   const begin = (limitMs?: number) => {
     setExpanded(null);
+    notifyExperimentalOnce(
+      "key-detect",
+      "O Descobrir o tom pode errar, principalmente com ruído ou voz baixa. Se o tom não ficar bom, use Desfazer ou ajuste com + e −.",
+    );
     toneBefore.current = tone;
     void start(limitMs);
   };
@@ -277,6 +282,7 @@ function KeyDetectControl({
       setExpanded={setExpanded}
       popoverContent={
         <>
+          <ExperimentalBadge className="mx-1" />
           <Button type="button" size="sm" variant="outline" className="h-9 rounded-xl px-3 text-[11px] font-bold" onClick={() => begin(KEY_DETECT_LIMIT_MS)}>
             15 s
           </Button>
@@ -289,7 +295,7 @@ function KeyDetectControl({
       <ToolbarButton
         active={listening}
         onClick={handleClick}
-        title={listening ? "Parar de ouvir" : "Descobrir o tom (voz ou instrumento)"}
+        title={listening ? "Parar de ouvir" : "Descobrir o tom (experimental — voz ou instrumento)"}
         disabled={Boolean(sharedContext)}
         className="flex-col gap-0 overflow-hidden p-0"
       >

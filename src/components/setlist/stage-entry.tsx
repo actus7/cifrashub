@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Radio } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ExperimentalBadge, notifyExperimentalOnce } from "@/components/ui/experimental";
 import { useStage } from "@/hooks/use-stage";
 import { useIsSubscriber } from "@/hooks/use-subscription";
 import { songHref } from "@/lib/setlist-navigation";
@@ -49,6 +50,10 @@ export function StageEntry({ detail }: Props) {
   if (!isSubscriber) return null;
 
   const start = async () => {
+    notifyExperimentalOnce(
+      "stage",
+      "O Modo palco é experimental: a IA pode errar a linha, o tom ou a troca de música. Os botões e os comandos de voz continuam com você.",
+    );
     const first = live?.position ?? items[0].position;
     const res = await fetch(`/api/setlists/${encodeURIComponent(detail.id)}/stage`, {
       method: "PUT",
@@ -65,7 +70,9 @@ export function StageEntry({ detail }: Props) {
   return (
     <div className="mx-4 mt-3 flex items-center justify-between gap-2 rounded-xl border border-border/60 bg-card/60 px-3 py-2">
       <span className="text-sm text-muted-foreground">
-        Modo palco: a IA segue a música e os músicos acompanham na tela deles.
+        <span className="mr-1.5 font-medium text-foreground">Modo palco</span>
+        <ExperimentalBadge className="mr-1.5 align-middle" />
+        a IA segue a música e os músicos acompanham na tela deles. Pode errar: você continua no controle.
       </span>
       <Button size="sm" className="shrink-0 gap-1.5" onClick={() => void start()}>
         <Radio className="size-4" /> {live ? "Voltar ao palco" : "Iniciar palco"}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AudioLines, Radio, Square } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ExperimentalBadge } from "@/components/ui/experimental";
 import type { useSetlistNavigation } from "@/hooks/use-setlist-navigation";
 import { focusLyricLine } from "@/hooks/use-lyrics-follow";
 import { useSongFollow } from "@/hooks/use-song-follow";
@@ -35,6 +36,7 @@ function StageShell({ children, live }: { children: ReactNode; live: boolean }) 
     <div data-scroll-inset="bottom" className="no-print fixed inset-x-0 bottom-[52px] z-40 flex items-center justify-between gap-2 border-t bg-background/95 px-3 py-1.5 text-sm backdrop-blur">
       <span className={cn("flex items-center gap-1.5 font-semibold", live ? "text-primary" : "text-muted-foreground")}>
         <Radio className={cn("size-4", live && "animate-pulse")} /> {live ? "Ao vivo" : "Palco"}
+        <ExperimentalBadge />
       </span>
       {children}
     </div>

@@ -22,6 +22,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { AuthHeaderControl } from "@/components/auth/user-menu";
+import { notifyExperimentalOnce } from "@/components/ui/experimental";
 import { MicLevelMeter } from "@/components/ui/mic-level-meter";
 import { useSongFollow } from "@/hooks/use-song-follow";
 import { useIsSubscriber } from "@/hooks/use-subscription";
@@ -277,7 +278,7 @@ function FollowSongHeaderControl() {
     <>
       <HeaderToggleButton
         active={following}
-        inactiveLabel="Seguir a música (acordes + voz)"
+        inactiveLabel="Seguir a música (experimental — acordes + voz)"
         activeLabel="Parar de seguir a música"
         className="relative overflow-hidden"
         onClick={() => {
@@ -286,6 +287,10 @@ function FollowSongHeaderControl() {
             return;
           }
           setAutoScroll(false);
+          notifyExperimentalOnce(
+            "follow",
+            "O Seguir a música pode se perder ou atrasar. Se isso acontecer, role a tela com a mão: ele pausa e volta a acompanhar sozinho.",
+          );
           void start();
         }}
       >
