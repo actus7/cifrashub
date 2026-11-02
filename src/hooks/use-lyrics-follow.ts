@@ -17,6 +17,11 @@ export function focusLyricLine(index: number) {
   if (el) scrollToVisibleCenter(el);
 }
 
+/** Só o destaque (sem rolar): usado quando a rolagem é contínua (FollowScroller). */
+export function highlightLyricLine(index: number) {
+  lyricElements().forEach((el, i) => el.toggleAttribute(ACTIVE_ATTR, i === index));
+}
+
 export function clearLyricFocus() {
   lyricElements().forEach((el) => el.removeAttribute(ACTIVE_ATTR));
 }

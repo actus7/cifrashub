@@ -22,8 +22,18 @@ const TEMPO_LEARNING = 0.25;
 const SKIP_RATIO = 0.15;
 /** Força da evidência das palavras: um trecho que bate 100% com uma linha a torna ~e^4 = 55× mais provável. */
 const WORD_SHARPNESS = 4;
-/** Chance, por quadro, de saltar para qualquer outro ponto (recuperação de um erro); bem pequena para não voltar à toa. */
+/** Chance, por quadro, de saltar para qualquer outro ponto: mínima enquanto o som confirma a posição. */
 const P_JUMP = 1e-6;
+/**
+ * "Recalculando rota": quando a posição atual explica o som muito pior do que o melhor ponto da música
+ * (a pessoa pulou para outra parte), os saltos ficam liberados até o modelo se reencontrar.
+ */
+const P_JUMP_LOST = 0.03;
+/** Ajuste = (quanto a crença atual explica o quadro) ÷ (quanto o melhor ponto da música explicaria). */
+const FIT_SMOOTHING = 0.12;
+/** Abaixo disto (média de ~1 s) o modelo se considera perdido; volta ao normal acima de RECOVERED_FIT. */
+const LOST_FIT = 0.35;
+const RECOVERED_FIT = 0.6;
 /** Quão "afiada" é a emissão: maior = confia mais em cada quadro. */
 const SHARPNESS = 4;
 
@@ -78,6 +88,8 @@ export class ChordFollower {
   private framesPerChord = FRAMES_PER_CHORD;
   private bestStep = -1;
   private framesOnBest = 0;
+  private fit = 1;
+  private lost = false;
 
   /** `lineChords` = acordes ESCRITOS de cada linha (em ordem); `shift` = semitons até o tom que está soando. */
   constructor(lineChords: string[][], shift: number, startLine = -1) {
@@ -106,21 +118,33 @@ export class ChordFollower {
     if (n === 0 || !chroma) return;
     const pNext = 1 / this.framesPerChord;
     const pSkip = pNext * SKIP_RATIO;
-    const moved = new Array<number>(n).fill(P_JUMP / n);
+    const pJump = this.lost ? P_JUMP_LOST : P_JUMP;
+    const moved = new Array<number>(n).fill(pJump / n);
     for (let i = 0; i < n; i++) {
       const b = this.belief[i];
       if (b === 0) continue;
-      moved[i] += b * (1 - pNext - pSkip);
+      moved[i] += b * (1 - pNext - pSkip - pJump);
       // Depois do último acorde a música acabou: essa probabilidade sai (senão o fim "atrairia" a posição).
       if (i + 1 < n) moved[i + 1] += b * pNext;
       if (i + 2 < n) moved[i + 2] += b * pSkip;
     }
+    let explained = 0;
+    let bestEmission = 0;
     for (let i = 0; i < n; i++) {
       const t = this.steps[i].template;
-      moved[i] *= Math.exp(SHARPNESS * (t.length ? cosine(chroma, t) : 0.3));
+      const emission = Math.exp(SHARPNESS * (t.length ? cosine(chroma, t) : 0.3));
+      const prior = moved[i];
+      moved[i] *= emission;
+      explained += prior * emission;
+      bestEmission = Math.max(bestEmission, emission);
     }
     const total = moved.reduce((s, x) => s + x, 0) || 1;
     this.belief = moved.map((x) => x / total);
+    // Surpresa: quanto da melhor explicação possível a posição atual alcança (1 = confirma; perto de 0 = perdido).
+    const priorTotal = explained === 0 ? 0 : explained / bestEmission;
+    this.fit += (Math.min(1, priorTotal) - this.fit) * FIT_SMOOTHING;
+    if (!this.lost && this.fit < LOST_FIT) this.lost = true;
+    else if (this.lost && this.fit > RECOVERED_FIT) this.lost = false;
     this.learnTempo();
   }
 
@@ -166,20 +190,62 @@ export class ChordFollower {
     return { chord, similarity };
   }
 
+  /** Progresso (0–1) dentro da linha: em qual dos acordes dela a crença está (para a rolagem contínua). */
+  lineProgress(line: number): number {
+    let mass = 0;
+    let weighted = 0;
+    let k = 0;
+    let count = 0;
+    this.steps.forEach((s) => s.line === line && count++);
+    this.steps.forEach((s, i) => {
+      if (s.line !== line) return;
+      mass += this.belief[i];
+      weighted += this.belief[i] * (k + 0.5);
+      k++;
+    });
+    return mass > 0 && count > 0 ? weighted / mass / count : 0;
+  }
+
+  /** true enquanto o modelo está "recalculando a rota" (a posição atual não explica o som). */
+  isLost(): boolean {
+    return this.lost;
+  }
+
   secondsPerChord(): number {
     return this.framesPerChord / 10;
   }
 
-  /** Linha mais provável (somando os acordes dela) e sua probabilidade. */
+  /**
+   * Linha mais provável e sua probabilidade. Linhas com os MESMOS acordes são o mesmo lugar para o ouvido:
+   * a certeza delas é somada e vale a mais provável do grupo (empate → a primeira, por onde se costuma entrar numa
+   * parte). Sem isso, um salto para uma parte repetida ficaria dividido 50/50 e a tela nunca se firmaria.
+   */
   best(): { index: number; probability: number } {
     const byLine = new Map<number, number>();
-    this.steps.forEach((s, i) => byLine.set(s.line, (byLine.get(s.line) ?? 0) + this.belief[i]));
+    const signature = new Map<number, string>();
+    this.steps.forEach((s, i) => {
+      byLine.set(s.line, (byLine.get(s.line) ?? 0) + this.belief[i]);
+      signature.set(s.line, `${signature.get(s.line) ?? ""}|${s.chord}`);
+    });
+    const groups = new Map<string, { total: number; line: number; p: number }>();
+    for (const [line, p] of byLine) {
+      const key = signature.get(line) ?? String(line);
+      const g = groups.get(key);
+      if (!g) groups.set(key, { total: p, line, p });
+      else {
+        g.total += p;
+        if (p > g.p * 1.05) {
+          g.line = line;
+          g.p = p;
+        }
+      }
+    }
     let index = 0;
     let probability = 0;
-    for (const [line, p] of byLine) {
-      if (p > probability) {
-        index = line;
-        probability = p;
+    for (const g of groups.values()) {
+      if (g.total > probability) {
+        index = g.line;
+        probability = g.total;
       }
     }
     return { index, probability };

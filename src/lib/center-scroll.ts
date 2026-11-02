@@ -34,3 +34,60 @@ export function scrollToVisibleCenter(el: HTMLElement) {
   const delta = centerScrollDelta({ top: r.top, height: r.height }, visibleBand());
   if (delta !== 0) window.scrollBy({ top: delta, behavior: "smooth" });
 }
+
+/** Fração da distância percorrida a cada quadro da tela (~60/s): 0,08 = desliza em ~0,5 s, sem trancos. */
+const EASE_PER_FRAME = 0.08;
+/** Se a pessoa rolar com a mão, a rolagem automática espera este tempo antes de voltar. */
+const MANUAL_PAUSE_MS = 4_000;
+
+/**
+ * Rolagem contínua e suave para o "Seguir a música": o ponto-alvo anda entre o centro da linha atual e o da próxima
+ * conforme o progresso dentro da linha (qual acorde dela está tocando), e a página se aproxima dele um pouco a cada
+ * quadro (como um teleprompter). Rolar com a mão pausa por alguns segundos.
+ */
+export class FollowScroller {
+  private line: HTMLElement | null = null;
+  private next: HTMLElement | null = null;
+  private progress = 0;
+  private raf = 0;
+  private pausedUntil = 0;
+  private readonly onManual = () => {
+    this.pausedUntil = performance.now() + MANUAL_PAUSE_MS;
+  };
+
+  start() {
+    window.addEventListener("wheel", this.onManual, { passive: true });
+    window.addEventListener("touchmove", this.onManual, { passive: true });
+    const tick = () => {
+      this.raf = requestAnimationFrame(tick);
+      if (!this.line || performance.now() < this.pausedUntil) return;
+      const band = visibleBand();
+      const center = (el: HTMLElement) => {
+        const r = el.getBoundingClientRect();
+        return r.top + r.height / 2;
+      };
+      const from = center(this.line);
+      const point = this.next ? from + (center(this.next) - from) * this.progress : from;
+      const delta = point - (band.top + (band.bottom - band.top) / 2);
+      if (Math.abs(delta) <= 1) return;
+      // Passo mínimo de 1 px: frações menores são arredondadas para zero e a tela pararia antes do centro.
+      const step = Math.sign(delta) * Math.max(1, Math.abs(delta) * EASE_PER_FRAME);
+      window.scrollBy({ top: step, behavior: "instant" });
+    };
+    this.raf = requestAnimationFrame(tick);
+  }
+
+  /** Linha atual, a próxima e o progresso (0–1) dentro da atual. */
+  setTarget(line: HTMLElement | null, next: HTMLElement | null, progress: number) {
+    this.line = line;
+    this.next = next;
+    this.progress = Math.min(1, Math.max(0, progress));
+  }
+
+  stop() {
+    cancelAnimationFrame(this.raf);
+    window.removeEventListener("wheel", this.onManual);
+    window.removeEventListener("touchmove", this.onManual);
+    this.line = null;
+  }
+}

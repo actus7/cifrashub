@@ -7,7 +7,8 @@ import { lineWordScores, matchLine, normalizeWords } from "@/lib/lyrics-follow";
 import { startMicChroma } from "@/lib/mic-chroma";
 import { startSpeech, type SpeechListener } from "@/lib/speech";
 import { startWhisper, whisperAvailable } from "@/lib/whisper-client";
-import { clearLyricFocus, focusLyricLine, lyricElements } from "@/hooks/use-lyrics-follow";
+import { clearLyricFocus, highlightLyricLine, lyricElements } from "@/hooks/use-lyrics-follow";
+import { FollowScroller } from "@/lib/center-scroll";
 
 /** Suavização do cromagrama (~0,5 s): a batida e o dedilhado não fazem o acorde "piscar". */
 const SMOOTH = 0.3;
@@ -42,6 +43,8 @@ export type FollowDiagnostics = {
   modelLine: number;
   probability: number;
   secondsPerChord: number;
+  /** "Recalculando rota": a posição atual não explica o som. */
+  lost: boolean;
 };
 
 export type SongFollowState =
@@ -64,6 +67,7 @@ const EMPTY_DIAG: FollowDiagnostics = {
   modelLine: -1,
   probability: 0,
   secondsPerChord: 2,
+  lost: false,
 };
 
 /**
@@ -124,11 +128,14 @@ export function useSongFollow(
     let lastWindow = "";
     const smooth = new Array<number>(12).fill(0);
     const stabilizer = new LineStabilizer();
+    const scroller = new FollowScroller();
+    scroller.start();
+    const elements = lyricElements();
 
     const moveTo = (index: number, probability: number) => {
       if (index === currentRef.current) return;
       currentRef.current = index;
-      focusLyricLine(index);
+      highlightLyricLine(index);
       callbacks.current.onLine?.(index);
       log({ t: performance.now() - t0, type: "line", line: index, p: probability });
     };
@@ -141,7 +148,12 @@ export function useSongFollow(
       diag.probability = best.probability;
       const shown = stabilizer.update(best);
       diag.line = shown;
-      if (shown >= 0) moveTo(shown, best.probability);
+      diag.lost = followerRef.current?.isLost() ?? false;
+      if (shown < 0) return;
+      moveTo(shown, best.probability);
+      // Rolagem contínua: dentro da linha mostrada, desliza conforme o acorde em que a música está.
+      const progress = best.index === shown ? (followerRef.current?.lineProgress(shown) ?? 0) : 0;
+      scroller.setTarget(elements[shown] ?? null, elements[shown + 1] ?? null, progress);
     };
 
     const observeText = (text: string, final: boolean) => {
@@ -150,8 +162,10 @@ export function useSongFollow(
       if (!key || key === lastWindow) return;
       lastWindow = key;
       const at = currentRef.current;
+      // Recalculando rota: as palavras valem em qualquer parte da música.
+      const anywhere = at < 0 || (followerRef.current?.isLost() ?? false);
       const scores = lineWordScores(words, recent).map((x, i) => {
-        const near = at < 0 || (i >= at - WORDS_NEAR.back && i <= at + WORDS_NEAR.ahead);
+        const near = anywhere || (i >= at - WORDS_NEAR.back && i <= at + WORDS_NEAR.ahead);
         return x * (final ? 1 : PARTIAL_WEIGHT) * (near ? 1 : WORDS_NEAR.farWeight);
       });
       followerRef.current?.observeWords(scores);
@@ -174,7 +188,7 @@ export function useSongFollow(
       },
     };
 
-    const stops: (() => void)[] = [];
+    const stops: (() => void)[] = [() => scroller.stop()];
     try {
       stops.push(
         await startMicChroma(({ level, chroma }) => {

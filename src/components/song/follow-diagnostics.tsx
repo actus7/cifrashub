@@ -25,7 +25,10 @@ export function FollowDiagnosticsPanel({ diag, onDownload }: { diag: FollowDiagn
   return (
     <div className="no-print fixed bottom-20 left-3 z-40 w-[min(19rem,calc(100vw-1.5rem))] rounded-xl border bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-semibold">Seguir a música</span>
+        <span className="font-semibold">
+          Seguir a música
+          {diag.lost && <span className="ml-1.5 animate-pulse font-normal text-amber-500">recalculando rota…</span>}
+        </span>
         <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-[11px]" onClick={onDownload}>
           <Download className="size-3.5" /> Diagnóstico
         </Button>

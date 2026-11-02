@@ -137,4 +137,43 @@ describe("follower + stabilizer (what the screen shows)", () => {
     expect(backwards).toBe(0);
     expect(correct).toBeGreaterThanOrEqual(SONG.length - 2);
   });
+
+});
+
+describe("re-routing when the player jumps to another part", () => {
+  // Partes com harmonias diferentes: verso (C G Am F), refrão (D A Bm G), ponte (E B C#m A).
+  const SECTIONS: string[][] = [
+    ["C", "G"], ["Am", "F"], ["C", "G"], ["Am", "F"],
+    ["D", "A"], ["Bm", "G"], ["D", "A"], ["Bm", "G"],
+    ["E", "B"], ["C#m", "A"], ["E", "B"], ["C#m", "A"],
+  ];
+
+  /** Toca o começo do verso (linhas 0–1) e PULA para a ponte (linha 8), seguindo até o fim. */
+  function jump() {
+    const f = new ChordFollower(SECTIONS, 0);
+    const screen = new LineStabilizer();
+    let seed = 5;
+    const play = (line: number) => {
+      const shown: number[] = [];
+      for (const c of SECTIONS[line]) for (let i = 0; i < 20; i++) {
+        f.step(chordChroma(c, 0, 0.15, seed++));
+        shown.push(screen.update(f.best()));
+      }
+      return shown;
+    };
+    [0, 1].forEach(play);
+    const afterJump = [8, 9, 10, 11].map(play);
+    return { afterJump, screen };
+  }
+
+  it("re-routes to the new part within ~2 s of the jump", () => {
+    const { afterJump } = jump();
+    const at = afterJump[0].findIndex((shown) => shown === 8);
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(at).toBeLessThanOrEqual(20);
+  });
+
+  it("then keeps following the new route", () => {
+    expect(jump().screen.line).toBe(11);
+  });
 });
