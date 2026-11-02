@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ChordFollower, fillChordless, lineChordTemplate } from "../chord-follow";
 import { chordPitchClasses } from "../key-detect";
+import { LineStabilizer } from "../line-stabilizer";
 
 /** Cromagrama de um acorde tocado (notas do acorde + um pouco de ruído). */
 function chordChroma(chord: string, shift = 0, noise = 0.15, seed = 1): number[] {
@@ -110,5 +111,30 @@ describe("ChordFollower — fusion with words and tempo", () => {
   it("names the chord being heard for diagnostics", () => {
     const f = new ChordFollower(SONG, 0);
     expect(f.heardChord(chordChroma("Am", 0, 0.05)).chord).toBe("Am");
+  });
+
+});
+
+describe("follower + stabilizer (what the screen shows)", () => {
+  it("never moves the screen backwards and keeps most lines right with noisy audio", () => {
+    const f = new ChordFollower(SONG, 0);
+    const screen = new LineStabilizer();
+    let seed = 11;
+    let backwards = 0;
+    let previous = -1;
+    let correct = 0;
+    fillChordless(SONG).forEach((chords, line) => {
+      for (const c of chords) {
+        for (let i = 0; i < 20; i++) {
+          f.step(chordChroma(c, 0, 0.45, seed++));
+          const shown = screen.update(f.best());
+          if (previous >= 0 && shown < previous) backwards++;
+          previous = shown;
+        }
+      }
+      if (screen.line === line) correct++;
+    });
+    expect(backwards).toBe(0);
+    expect(correct).toBeGreaterThanOrEqual(SONG.length - 2);
   });
 });

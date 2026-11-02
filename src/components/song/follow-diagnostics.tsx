@@ -44,6 +44,11 @@ export function FollowDiagnosticsPanel({ diag, onDownload }: { diag: FollowDiagn
         <dd>
           <b className="mr-1.5">{diag.line >= 0 ? diag.line + 1 : "—"}</b>
           <Meter value={diag.probability} />
+          {diag.modelLine >= 0 && diag.modelLine !== diag.line && (
+            <span className="ml-1.5 text-muted-foreground" title="O modelo está considerando outra linha; a tela só muda se ela se firmar.">
+              (avaliando {diag.modelLine + 1})
+            </span>
+          )}
           <span className={cn("ml-1.5", agree ? "text-primary" : "text-muted-foreground")}>
             {diag.wordsLine >= 0 ? (agree ? "voz confirma" : `voz: ${diag.wordsLine + 1}`) : ""}
           </span>

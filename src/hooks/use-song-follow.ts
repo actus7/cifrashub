@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChordFollower } from "@/lib/chord-follow";
+import { LineStabilizer } from "@/lib/line-stabilizer";
 import { lineWordScores, matchLine, normalizeWords } from "@/lib/lyrics-follow";
 import { startMicChroma } from "@/lib/mic-chroma";
 import { startSpeech, type SpeechListener } from "@/lib/speech";
@@ -10,14 +11,17 @@ import { clearLyricFocus, focusLyricLine, lyricElements } from "@/hooks/use-lyri
 
 /** Suavização do cromagrama (~0,5 s): a batida e o dedilhado não fazem o acorde "piscar". */
 const SMOOTH = 0.3;
-/** Só move a tela quando a linha mais provável tem pelo menos esta probabilidade. */
-const MIN_PROBABILITY = 0.45;
 /** Palavras recentes consideradas como evidência. */
 const WORD_WINDOW = 8;
 /** Parciais do reconhecedor do navegador chegam muitas vezes: cada janela nova conta pela metade. */
 const PARTIAL_WEIGHT = 0.5;
 /** Limite do registro de diagnóstico (~30 min de quadros). */
 const MAX_EVENTS = 20_000;
+/**
+ * Palavras apontando para longe da posição atual valem menos: palavras comuns ("aleluia") aparecem em várias
+ * linhas e puxariam a posição para outra repetição.
+ */
+const WORDS_NEAR = { back: 2, ahead: 8, farWeight: 0.3 };
 /** O painel ao vivo atualiza ~4×/s (os quadros são 10×/s). */
 const DIAG_EVERY_MS = 250;
 
@@ -32,8 +36,10 @@ export type FollowDiagnostics = {
   words: string;
   /** Linha que as palavras sozinhas apontariam (-1 = nenhuma). */
   wordsLine: number;
-  /** Linha escolhida pela fusão e sua probabilidade. */
+  /** Linha mostrada na tela (estabilizada). */
   line: number;
+  /** Linha que o modelo acha agora e a certeza dele (pode oscilar; a tela não acompanha cada oscilação). */
+  modelLine: number;
   probability: number;
   secondsPerChord: number;
 };
@@ -44,7 +50,7 @@ export type SongFollowState =
   | { status: "error"; message: string };
 
 type DiagEvent =
-  | { t: number; type: "frame"; level: number; chord: string; sim: number; line: number; p: number }
+  | { t: number; type: "frame"; level: number; chord: string; sim: number; line: number; model: number; p: number }
   | { t: number; type: "words"; text: string; wordsLine: number; final: boolean }
   | { t: number; type: "line"; line: number; p: number };
 
@@ -55,6 +61,7 @@ const EMPTY_DIAG: FollowDiagnostics = {
   words: "",
   wordsLine: -1,
   line: -1,
+  modelLine: -1,
   probability: 0,
   secondsPerChord: 2,
 };
@@ -116,6 +123,7 @@ export function useSongFollow(
     let lastDiagAt = 0;
     let lastWindow = "";
     const smooth = new Array<number>(12).fill(0);
+    const stabilizer = new LineStabilizer();
 
     const moveTo = (index: number, probability: number) => {
       if (index === currentRef.current) return;
@@ -125,12 +133,15 @@ export function useSongFollow(
       log({ t: performance.now() - t0, type: "line", line: index, p: probability });
     };
 
+    // Chamado uma vez por quadro de áudio: o estabilizador conta tempo em quadros.
     const decide = () => {
       const best = followerRef.current?.best();
       if (!best) return;
-      diag.line = best.index;
+      diag.modelLine = best.index;
       diag.probability = best.probability;
-      if (best.probability >= MIN_PROBABILITY) moveTo(best.index, best.probability);
+      const shown = stabilizer.update(best);
+      diag.line = shown;
+      if (shown >= 0) moveTo(shown, best.probability);
     };
 
     const observeText = (text: string, final: boolean) => {
@@ -138,12 +149,15 @@ export function useSongFollow(
       const key = recent.join(" ");
       if (!key || key === lastWindow) return;
       lastWindow = key;
-      const scores = lineWordScores(words, recent).map((x) => (final ? x : x * PARTIAL_WEIGHT));
+      const at = currentRef.current;
+      const scores = lineWordScores(words, recent).map((x, i) => {
+        const near = at < 0 || (i >= at - WORDS_NEAR.back && i <= at + WORDS_NEAR.ahead);
+        return x * (final ? 1 : PARTIAL_WEIGHT) * (near ? 1 : WORDS_NEAR.farWeight);
+      });
       followerRef.current?.observeWords(scores);
       diag.words = recent.join(" ");
       diag.wordsLine = matchLine(words, recent, -1);
       log({ t: performance.now() - t0, type: "words", text: key, wordsLine: diag.wordsLine, final });
-      decide();
     };
 
     const listener: SpeechListener = {
@@ -175,7 +189,7 @@ export function useSongFollow(
             diag.chordSimilarity = heard.similarity;
             diag.secondsPerChord = follower.secondsPerChord();
             decide();
-            log({ t: now - t0, type: "frame", level, chord: heard.chord, sim: heard.similarity, line: diag.line, p: diag.probability });
+            log({ t: now - t0, type: "frame", level, chord: heard.chord, sim: heard.similarity, line: diag.line, model: diag.modelLine, p: diag.probability });
           }
           if (now - lastDiagAt >= DIAG_EVERY_MS) {
             lastDiagAt = now;
