@@ -4,8 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { scrollToVisibleCenter } from "@/lib/center-scroll";
 import { matchLine, normalizeWords } from "@/lib/lyrics-follow";
 import { startSpeech } from "@/lib/speech";
+import { startWhisper, whisperAvailable } from "@/lib/whisper-client";
 
-export type LyricsFollowState = { status: "idle" } | { status: "following" } | { status: "error"; message: string };
+export type LyricsFollowState =
+  | { status: "idle" }
+  | { status: "following"; engine: "whisper" | "browser" }
+  | { status: "error"; message: string };
 
 const ACTIVE_ATTR = "data-lyric-active";
 
@@ -51,31 +55,58 @@ export function useLyricsFollow(onLine?: (index: number) => void, onSpeech?: (ph
 
   useEffect(() => () => stopRef.current?.(), []);
 
-  const start = useCallback(() => {
+  const start = useCallback(async () => {
     stopRef.current?.();
     let current = -1;
     let lines: string[][] = [];
-    const stopSpeech = startSpeech({
-      onText: (text) => {
-        if (lines.length === 0) lines = lyricElements().map((el) => normalizeWords(el.dataset.lyric ?? ""));
+    const ensureLines = () => {
+      if (lines.length === 0) lines = lyricElements().map((el) => normalizeWords(el.dataset.lyric ?? ""));
+    };
+    const listener = {
+      onText: (text: string) => {
+        ensureLines();
         const next = matchLine(lines, normalizeWords(text), current);
         if (next === current || next < 0) return;
         current = next;
         focusLyricLine(next);
         onLineRef.current?.(next);
       },
-      onFinal: (segment) => {
+      onFinal: (segment: string) => {
         if (!onSpeechRef.current) return;
-        if (lines.length === 0) lines = lyricElements().map((el) => normalizeWords(el.dataset.lyric ?? ""));
+        ensureLines();
         // Trecho que é letra cantada não é comando.
         if (matchLine(lines, normalizeWords(segment), -1) !== -1) return;
         onSpeechRef.current(segment);
       },
-      onError: (message) => {
+      onError: (message: string) => {
+        stopRef.current?.();
         stopRef.current = null;
         setState({ status: "error", message });
       },
-    });
+    };
+
+    // Whisper (servidor) entende canto; o reconhecedor do navegador é para fala e fica de reserva.
+    if (await whisperAvailable()) {
+      // Dica para o Whisper: a letra a partir da posição atual (ou o começo, se ainda não achou).
+      const prompt = () => {
+        const els = lyricElements();
+        const from = Math.max(0, current);
+        return els
+          .slice(from, from + 10)
+          .map((el) => el.dataset.lyric)
+          .filter(Boolean)
+          .join(" ");
+      };
+      try {
+        stopRef.current = await startWhisper(listener, prompt);
+        setState({ status: "following", engine: "whisper" });
+      } catch {
+        setState({ status: "error", message: "Não foi possível ligar o microfone." });
+      }
+      return;
+    }
+
+    const stopSpeech = startSpeech(listener);
     if (!stopSpeech) {
       setState({
         status: "error",
@@ -84,7 +115,7 @@ export function useLyricsFollow(onLine?: (index: number) => void, onSpeech?: (ph
       return;
     }
     stopRef.current = stopSpeech;
-    setState({ status: "following" });
+    setState({ status: "following", engine: "browser" });
   }, []);
 
   return { state, start, stop };

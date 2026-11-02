@@ -261,10 +261,15 @@ function FollowLyricsHeaderControl() {
   const { state, start, stop } = useLyricsFollow();
   const following = state.status === "following";
   const level = useMicLevel(following);
+  const engine = state.status === "following" ? state.engine : null;
 
   useEffect(() => {
     if (state.status === "error") toast.error(state.message);
   }, [state]);
+
+  useEffect(() => {
+    if (engine) toast(engine === "whisper" ? "Seguindo pela voz com o Whisper" : "Seguindo pela voz com o reconhecedor do navegador", { duration: 2000 });
+  }, [engine]);
 
   // As duas rolagens brigariam pela tela: ligar a por tempo desliga a por voz.
   useEffect(() => {
@@ -285,7 +290,7 @@ function FollowLyricsHeaderControl() {
           return;
         }
         setAutoScroll(false);
-        start();
+        void start();
       }}
     >
       {following && <MicLevelMeter level={level} tone="onGhost" />}
