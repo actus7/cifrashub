@@ -63,4 +63,10 @@ describe("matchLine on a real song (Gratidão)", () => {
     const next = matchLine(LINES, normalizeWords("vamos louve ao senhor ei meu coracao"), repeats[0] + 3);
     expect(next).toBe(repeats[1]);
   });
+
+  it("finds the chorus within 3 words when the singer starts there, even with a dropped word", () => {
+    const chorus = LINES.findIndex((l) => l.join(" ") === "ei meu coracao");
+    expect(matchLine(LINES, normalizeWords("ei meu coracao"), -1)).toBe(chorus);
+    expect(matchLine(LINES, normalizeWords("ei coracao"), -1)).toBe(chorus);
+  });
 });

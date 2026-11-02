@@ -103,7 +103,7 @@ function bestStart(lines: string[][], heard: string[], from: number, to: number,
   const currentText = current >= 0 ? lines[current]?.join(" ") : undefined;
   for (let i = Math.max(0, from); i <= Math.min(lines.length - 1, to); i++) {
     if (i === current || lines[i].join(" ") === currentText) continue;
-    const matched = prefixMatch(lines[i], heard, i === current + 1 ? NEXT : rule);
+    const matched = prefixMatch(lines[i], heard, i === current + 1 && current >= 0 ? NEXT : rule);
     if (matched > bestMatched || (matched === bestMatched && matched > 0 && rank(i) < rank(best))) {
       best = i;
       bestMatched = matched;
@@ -119,6 +119,11 @@ function bestStart(lines: string[][], heard: string[], from: number, to: number,
 export function matchLine(lines: string[][], recentWords: string[], current: number): number {
   const heard = recentWords.slice(-RECENT_WORDS);
   if (heard.length === 0) return current;
+  // Sem posição ainda (começou a cantar agora, talvez pelo refrão): nenhuma linha é "longe", todas valem como a próxima.
+  if (current < 0) {
+    const start = bestStart(lines, heard, 0, lines.length - 1, current, NEXT);
+    return start !== -1 ? start : current;
+  }
   const near = bestStart(lines, heard, current - LOOK_BACK, current + LOOK_AHEAD, current, NEAR);
   if (near !== -1) return near;
   const far = bestStart(lines, heard, 0, lines.length - 1, current, FAR);
