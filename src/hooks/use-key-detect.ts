@@ -2,16 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createAudioContext, ensureResumed } from "@/lib/audio-context";
-import { detectToneShift, pitchFromFrame } from "@/lib/key-detect";
+import { bestShift, spectrumChroma } from "@/lib/key-detect";
 
-const SAMPLE_EVERY_MS = 50;
-/** De quanto em quanto tempo o tom é reavaliado. */
-const EVALUATE_EVERY_MS = 2_000;
-/** Só as alturas recentes contam: se a pessoa muda de tom, a detecção acompanha. */
-const WINDOW_MS = 15_000;
-/** ~2 s de voz com altura clara antes da primeira decisão. */
-const MIN_SAMPLES = 40;
-const FFT_SIZE = 2048;
+/** FFT grande = resolução de ~3 Hz, suficiente para separar semitons a partir de ~100 Hz. */
+const FFT_SIZE = 16_384;
+const FRAME_MS = 100;
+/** O resultado na tela é recalculado a cada meio segundo. */
+const DECIDE_MS = 500;
+/** Média com decaimento: cada quadro pesa pouco e a memória dura ~20 s, então segue uma mudança de tom. */
+const DECAY = 0.995;
+/** Vantagem mínima da melhor transposição sobre a segunda para mostrar o tom. */
+const MIN_CONFIDENCE = 0.04;
+/** Quadros com som (≈1,5 s) antes do primeiro palpite. */
+const MIN_FRAMES = 15;
+/** Nível (0–1) acima do qual o botão mostra que está captando som. */
+export const SOUND_LEVEL = 0.08;
 
 export type KeyDetectState =
   | { status: "idle" }
@@ -28,10 +33,10 @@ function micErrorMessage(err: unknown): string {
 }
 
 /**
- * Escuta a voz até `stop()` (ou até `limitMs`, se informado) e, a cada 2 s, estima quantos semitons transpor a partir do tom escrito.
- * `shift` só muda quando duas leituras seguidas concordam (evita o tom pulando).
+ * Ouve o microfone e, em tempo real, estima quantos semitons transpor a cifra (relativo aos acordes escritos).
+ * `template` vem de `keyTemplate(songData, writtenKey)`; o palpite é a média do que soou até agora.
  */
-export function useKeyDetect(writtenKey: string | undefined) {
+export function useKeyDetect(template: number[] | null) {
   const [state, setState] = useState<KeyDetectState>({ status: "idle" });
   const releaseRef = useRef<(() => void) | null>(null);
 
@@ -43,69 +48,87 @@ export function useKeyDetect(writtenKey: string | undefined) {
 
   useEffect(() => () => releaseRef.current?.(), []);
 
-  const start = useCallback(async (limitMs?: number) => {
-    if (!writtenKey) {
-      setState({ status: "error", message: "Esta cifra não informa o tom." });
-      return;
-    }
-    releaseRef.current?.();
-    const ctx = createAudioContext();
-    if (!ctx || !navigator.mediaDevices?.getUserMedia) {
-      setState({ status: "error", message: "Este navegador não permite usar o microfone." });
-      return;
-    }
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-    } catch (err) {
-      ctx.close().catch(() => {});
-      setState({ status: "error", message: micErrorMessage(err) });
-      return;
-    }
-    ensureResumed(ctx);
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = FFT_SIZE;
-    ctx.createMediaStreamSource(stream).connect(analyser);
-    const buf = new Float32Array(FFT_SIZE);
-    const samples: { t: number; f: number }[] = [];
-    const startedAt = performance.now();
-    let lastEval = startedAt;
-    let candidate: number | null = null;
-    let shift: number | null = null;
-
-    const timer = setInterval(() => {
-      const now = performance.now();
-      analyser.getFloatTimeDomainData(buf);
-      const f = pitchFromFrame(buf, ctx.sampleRate);
-      if (f) samples.push({ t: now, f });
-      while (samples.length && samples[0].t < now - WINDOW_MS) samples.shift();
-
-      if (now - lastEval >= EVALUATE_EVERY_MS) {
-        lastEval = now;
-        const reading = detectToneShift(samples.map((s) => s.f), writtenKey, MIN_SAMPLES);
-        if (reading !== null && reading === candidate) shift = reading;
-        candidate = reading;
-      }
-
-      const remainingMs = limitMs ? Math.max(0, limitMs - (now - startedAt)) : null;
-      if (remainingMs === 0) {
-        releaseRef.current?.();
-        releaseRef.current = null;
-        setState({ status: "finished", shift });
+  const start = useCallback(
+    async (limitMs?: number) => {
+      if (!template || template.every((v) => v === 0)) {
+        setState({ status: "error", message: "Esta cifra não tem acordes para comparar." });
         return;
       }
-      let sum = 0;
-      for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-      setState({ status: "listening", level: Math.min(1, Math.sqrt(sum / buf.length) * 5), shift, remainingMs });
-    }, SAMPLE_EVERY_MS);
+      releaseRef.current?.();
+      const ctx = createAudioContext();
+      if (!ctx || !navigator.mediaDevices?.getUserMedia) {
+        setState({ status: "error", message: "Este navegador não permite usar o microfone." });
+        return;
+      }
+      let stream: MediaStream;
+      try {
+        // Sem processamento de voz: ele corta notas sustentadas de instrumento e distorce o espectro.
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        });
+      } catch (err) {
+        ctx.close().catch(() => {});
+        setState({ status: "error", message: micErrorMessage(err) });
+        return;
+      }
+      ensureResumed(ctx);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = FFT_SIZE;
+      analyser.smoothingTimeConstant = 0;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      const spectrum = new Float32Array(analyser.frequencyBinCount);
+      const wave = new Float32Array(2048);
+      const avg = new Array<number>(12).fill(0);
+      let tuning = 0;
+      let soundFrames = 0;
+      let shift: number | null = null;
+      const startedAt = performance.now();
+      let lastDecision = startedAt;
 
-    releaseRef.current = () => {
-      clearInterval(timer);
-      stream.getTracks().forEach((t) => t.stop());
-      ctx.close().catch(() => {});
-    };
-    setState({ status: "listening", level: 0, shift: null, remainingMs: limitMs ?? null });
-  }, [writtenKey]);
+      const timer = setInterval(() => {
+        const now = performance.now();
+        analyser.getFloatTimeDomainData(wave);
+        let sum = 0;
+        for (let i = 0; i < wave.length; i++) sum += wave[i] * wave[i];
+        const level = Math.min(1, Math.sqrt(sum / wave.length) * 6);
+
+        if (level >= SOUND_LEVEL) {
+          analyser.getFloatFrequencyData(spectrum);
+          const frame = spectrumChroma(spectrum, ctx.sampleRate, FFT_SIZE, tuning);
+          if (frame.energy > 0) {
+            // Afinação também segue a média, devagar (um quadro ruidoso não desloca a grade).
+            tuning += (frame.tuningCents - tuning) * 0.05;
+            const total = frame.chroma.reduce((s, x) => s + x, 0);
+            for (let i = 0; i < 12; i++) avg[i] = avg[i] * DECAY + frame.chroma[i] / total;
+            soundFrames++;
+          }
+        }
+
+        if (now - lastDecision >= DECIDE_MS && soundFrames >= MIN_FRAMES) {
+          lastDecision = now;
+          const result = bestShift(avg, template);
+          if (result.confidence >= MIN_CONFIDENCE) shift = result.shift;
+        }
+
+        const remainingMs = limitMs ? Math.max(0, limitMs - (now - startedAt)) : null;
+        if (remainingMs === 0) {
+          releaseRef.current?.();
+          releaseRef.current = null;
+          setState({ status: "finished", shift });
+          return;
+        }
+        setState({ status: "listening", level, shift, remainingMs });
+      }, FRAME_MS);
+
+      releaseRef.current = () => {
+        clearInterval(timer);
+        stream.getTracks().forEach((t) => t.stop());
+        ctx.close().catch(() => {});
+      };
+      setState({ status: "listening", level: 0, shift: null, remainingMs: limitMs ?? null });
+    },
+    [template],
+  );
 
   return { state, start, stop };
 }

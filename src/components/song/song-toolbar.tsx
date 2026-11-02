@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   ArrowLeftRight,
@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { useKeyDetect } from "@/hooks/use-key-detect";
+import { SOUND_LEVEL, useKeyDetect } from "@/hooks/use-key-detect";
+import { keyTemplate } from "@/lib/key-detect";
 import { useIsSubscriber } from "@/hooks/use-subscription";
 import { cn } from "@/lib/utils";
 import { firstChordRoot, getRelativeKeyToggle, transposeRootNote } from "@/lib/music";
@@ -205,7 +206,7 @@ function firstChordKey(songData: SongViewValue["songData"]): string | undefined 
 /** Tempo da opção "15 s" do Descobrir o tom. */
 const KEY_DETECT_LIMIT_MS = 15_000;
 
-/** Assinatura: escuta a voz e vai ajustando o tom da cifra ao tom cantado (por 15 s ou até desligar). */
+/** Assinatura: ouve o que está sendo tocado/cantado e ajusta o tom da cifra em tempo real (por 15 s ou até desligar). */
 function KeyDetectControl({
   expanded,
   setExpanded,
@@ -218,8 +219,10 @@ function KeyDetectControl({
   const isSubscriber = useIsSubscriber();
   const { tone, setTone, currentSong, songData, sharedContext } = useSongViewContext();
   const displayKey = songDisplayKey(currentSong, songData);
-  // O tom do store é relativo aos acordes escritos, então a detecção parte do tom escrito (com o modo).
-  const { state, start, stop } = useKeyDetect(currentSong.cifraWrittenKey ?? firstChordKey(songData));
+  // O tom do store é relativo aos acordes escritos: o molde usa os acordes escritos e o tom escrito.
+  const writtenKey = currentSong.cifraWrittenKey ?? firstChordKey(songData);
+  const template = useMemo(() => keyTemplate(songData, writtenKey), [songData, writtenKey]);
+  const { state, start, stop } = useKeyDetect(template);
   const toneBefore = useRef(tone);
   const handled = useRef<typeof state | null>(null);
   const shift = state.status === "listening" || state.status === "finished" ? state.shift : null;
@@ -284,14 +287,15 @@ function KeyDetectControl({
       <ToolbarButton
         active={listening}
         onClick={handleClick}
-        title={listening ? "Parar de ouvir" : "Descobrir o tom pela voz"}
+        title={listening ? "Parar de ouvir" : "Descobrir o tom (voz ou instrumento)"}
         disabled={Boolean(sharedContext)}
-        className="flex-col gap-0 p-0"
+        className="flex-col gap-0 overflow-hidden p-0"
       >
         {listening ? (
           <>
-            <span className="text-[10px] font-bold leading-none">{shift === null ? "…" : keyLabel(shift)}</span>
-            <span className="text-[8px] leading-none" style={{ opacity: 0.5 + state.level * 0.5 }}>
+            <KeyDetectLevelMeter level={state.level} />
+            <span className="relative text-[10px] font-bold leading-none">{shift === null ? "…" : keyLabel(shift)}</span>
+            <span className="relative text-[8px] leading-none">
               {state.remainingMs === null ? "ouvindo" : `${Math.ceil(state.remainingMs / 1000)}s`}
             </span>
           </>
@@ -300,6 +304,28 @@ function KeyDetectControl({
         )}
       </ToolbarButton>
     </ToolbarPopoverGroup>
+  );
+}
+
+/** Medidor de volume dentro do botão: o fundo enche com o nível e a borda acende quando há som. */
+function KeyDetectLevelMeter({ level }: { level: number }) {
+  const hearing = level >= SOUND_LEVEL;
+  return (
+    <>
+      <span
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 bg-primary-foreground/30 transition-[height] duration-100 ease-out"
+        style={{ height: `${Math.round(level * 100)}%` }}
+      />
+      <span
+        aria-hidden
+        className={cn(
+          "absolute inset-0 rounded-xl ring-2 ring-inset transition-opacity duration-150",
+          hearing ? "animate-pulse opacity-100 ring-primary-foreground/70" : "opacity-0",
+        )}
+      />
+      <span className="sr-only">{hearing ? "Captando som" : "Sem som"}</span>
+    </>
   );
 }
 
