@@ -202,54 +202,59 @@ function firstChordKey(songData: SongViewValue["songData"]): string | undefined 
   return undefined;
 }
 
-/** Assinatura: escuta a voz por alguns segundos e transpõe para o tom cantado. */
+/** Assinatura: enquanto ligado, escuta a voz e vai ajustando o tom da cifra ao tom cantado. */
 function KeyDetectControl() {
   const isSubscriber = useIsSubscriber();
   const { tone, setTone, currentSong, songData, sharedContext } = useSongViewContext();
   const displayKey = songDisplayKey(currentSong, songData);
   // O tom do store é relativo aos acordes escritos, então a detecção parte do tom escrito (com o modo).
-  const { state, start, cancel } = useKeyDetect(currentSong.cifraWrittenKey ?? firstChordKey(songData));
+  const { state, start, stop } = useKeyDetect(currentSong.cifraWrittenKey ?? firstChordKey(songData));
   const toneBefore = useRef(tone);
-  const handled = useRef<typeof state | null>(null);
+  const lastError = useRef<typeof state | null>(null);
+  const shift = state.status === "listening" ? state.shift : null;
 
   useEffect(() => {
-    // Cada resultado é aplicado uma vez só, mesmo que o efeito rode de novo.
-    if (handled.current === state) return;
-    handled.current = state;
-    if (state.status === "error") toast.error(state.message);
-    if (state.status !== "done") return;
-    const previous = toneBefore.current;
-    setTone(state.shift);
-    const label = displayKey ? transposeRootNote(displayKey, state.shift) : `${state.shift > 0 ? "+" : ""}${state.shift}`;
-    toast.success(`Tom detectado: ${label}`, {
-      action: { label: "Desfazer", onClick: () => setTone(previous) },
-    });
-  }, [state, displayKey, setTone]);
+    if (shift !== null) setTone(shift);
+  }, [shift, setTone]);
+
+  useEffect(() => {
+    if (state.status !== "error" || lastError.current === state) return;
+    lastError.current = state;
+    toast.error(state.message);
+  }, [state]);
 
   if (!isSubscriber) return null;
 
   const listening = state.status === "listening";
+  const keyLabel = (s: number) => (displayKey ? transposeRootNote(displayKey, s) : `${s > 0 ? "+" : ""}${s}`);
+
   const handleClick = () => {
-    if (listening) {
-      cancel();
+    if (!listening) {
+      toneBefore.current = tone;
+      void start();
       return;
     }
-    toneBefore.current = tone;
-    void start();
+    stop();
+    const previous = toneBefore.current;
+    if (tone === previous) return;
+    toast.success(`Tom ajustado para ${keyLabel(tone)}`, {
+      action: { label: "Desfazer", onClick: () => setTone(previous) },
+    });
   };
 
   return (
     <ToolbarButton
       active={listening}
       onClick={handleClick}
-      title={listening ? "Cancelar" : "Descobrir o tom pela voz"}
+      title={listening ? "Parar de ouvir" : "Descobrir o tom pela voz"}
       disabled={Boolean(sharedContext)}
       className="flex-col gap-0 p-0"
     >
       {listening ? (
-        <span className="text-xs font-bold leading-none" style={{ opacity: 0.6 + state.level * 0.4 }}>
-          {Math.ceil(state.remainingMs / 1000)}s
-        </span>
+        <>
+          <Mic className="size-3.5 animate-pulse" style={{ opacity: 0.5 + state.level * 0.5 }} />
+          <span className="text-[10px] font-bold leading-none">{shift === null ? "…" : keyLabel(shift)}</span>
+        </>
       ) : (
         <Mic className="size-4" />
       )}
