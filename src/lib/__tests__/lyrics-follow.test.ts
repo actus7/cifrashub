@@ -1,19 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { matchLine, normalizeWords } from "../lyrics-follow";
+import { matchLine, normalizeWords, similarWords } from "../lyrics-follow";
+import GRATIDAO from "./fixtures/gratidao-lyrics.json";
 
-const LYRICS = [
-  "Vamos, louve ao Senhor",
-  "Ei, meu coração",
-  "Não se envergonhe, cante essa canção",
-  "Pois sei que há fôlego nesses pulmões",
-  "Aleluia, aleluia",
-  "É um aleluia, aleluia",
-  "Sei que é simples pra um rei",
-  "Aleluia, aleluia",
-  "É um aleluia, aleluia",
-].map(normalizeWords);
+const LINES = (GRATIDAO as string[]).map(normalizeWords);
 
-const heard = (text: string) => normalizeWords(text);
+/** "Canta" a letra palavra por palavra (com ruído opcional) e conta em quantas linhas a posição estava certa no fim. */
+function follow(noise: (word: string, i: number) => string | null = (w) => w): number {
+  let current = -1;
+  const heard: string[] = [];
+  let correct = 0;
+  let n = 0;
+  LINES.forEach((line, idx) => {
+    for (const w of line) {
+      const r = noise(w, n++);
+      if (r) heard.push(r);
+      current = matchLine(LINES, heard, current);
+    }
+    if (current === idx) correct++;
+  });
+  return correct;
+}
 
 describe("normalizeWords", () => {
   it("strips accents, punctuation and case", () => {
@@ -21,24 +27,40 @@ describe("normalizeWords", () => {
   });
 });
 
-describe("matchLine", () => {
-  it("finds the exact line being sung", () => {
-    expect(matchLine(LYRICS, heard("não se envergonhe cante essa canção"), 0)).toBe(2);
+describe("similarWords", () => {
+  it("accepts recognition slips and rejects different words", () => {
+    expect(similarWords("folego", "folga")).toBe(true);
+    expect(similarWords("cancao", "cancoes")).toBe(true);
+    expect(similarWords("louvar", "levantar")).toBe(false);
+    expect(similarWords("rei", "reis")).toBe(false);
+  });
+});
+
+describe("matchLine on a real song (Gratidão)", () => {
+  it("follows every line with clean recognition", () => {
+    expect(follow()).toBe(LINES.length);
   });
 
-  it("tolerates recognition errors", () => {
-    expect(matchLine(LYRICS, heard("pois sei que a folga nesses pulmões"), 2)).toBe(3);
+  it("keeps following when the recognizer drops 1 in 4 words", () => {
+    // Medido: 45/60 (o algoritmo anterior: 31/60). Linhas como "aleluia, aleluia" com 1 palavra ouvida não têm
+    // evidência suficiente de que começaram.
+    expect(follow((w, i) => (i % 4 === 3 ? null : w))).toBeGreaterThanOrEqual(LINES.length * 0.7);
   });
 
-  it("advances to the next repeat of the chorus instead of jumping back", () => {
-    expect(matchLine(LYRICS, heard("é um aleluia aleluia"), 6)).toBe(8);
+  it("keeps following when the recognizer mishears words", () => {
+    expect(follow((w, i) => (i % 3 === 2 ? w.slice(0, -1) + "x" : w))).toBeGreaterThanOrEqual(LINES.length * 0.85);
   });
 
-  it("stays on the current line for unrelated speech", () => {
-    expect(matchLine(LYRICS, heard("galera bora mais uma"), 3)).toBe(3);
+  it("stays on the line while it is being sung and for unrelated speech", () => {
+    const at = LINES.findIndex((l) => l.join(" ") === "pois sei que ha folego nesses pulmoes");
+    expect(matchLine(LINES, normalizeWords("pois sei que ha folego"), at)).toBe(at);
+    expect(matchLine(LINES, normalizeWords("galera bora mais uma"), at)).toBe(at);
   });
 
-  it("jumps far only when the match is strong", () => {
-    expect(matchLine(LYRICS, heard("vamos louve ao senhor"), 8)).toBe(0);
+  it("moves to the next repeat of the chorus, not back to an earlier one", () => {
+    const repeats = LINES.flatMap((l, i) => (l.join(" ") === "ei meu coracao" ? [i] : []));
+    expect(repeats.length).toBeGreaterThan(1);
+    const next = matchLine(LINES, normalizeWords("vamos louve ao senhor ei meu coracao"), repeats[0] + 3);
+    expect(next).toBe(repeats[1]);
   });
 });

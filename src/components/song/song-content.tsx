@@ -206,6 +206,19 @@ function CompactTabRow({ line }: { line: LyricLine }) {
   );
 }
 
+/**
+ * Texto corrido da linha: os blocos são cortados onde cai cada acorde, e o espaço entre palavras
+ * vem de `spaceAfter` (não do texto). "_" estica sílaba na cifra ("ale_luia") e não faz parte da palavra.
+ */
+export function lyricText(line: LyricLine): string {
+  return line
+    .map((b) => b.text + (b.spaceAfter === false ? "" : " "))
+    .join("")
+    .replace(/_+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function ChordRow({
   line,
   isLineTab,
@@ -219,7 +232,7 @@ function ChordRow({
   onChordClick,
 }: Omit<LineRenderProps, "lineHasChord" | "rowKey">) {
   // Texto da letra para o "Seguir a letra" (use-lyrics-follow lê [data-lyric] em ordem).
-  const lyric = isLineTab ? "" : line.map((b) => b.text).join("").trim();
+  const lyric = isLineTab ? "" : lyricText(line);
   return (
     <div
       data-lyric={lyric || undefined}
