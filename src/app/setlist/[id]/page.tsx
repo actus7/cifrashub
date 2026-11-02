@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { arrangementKey } from "@/lib/arrangement-key";
 import { SetlistDetailViewScreen } from "@/components/setlist/setlist-detail-view";
+import { StageEntry } from "@/components/setlist/stage-entry";
 import { useSession } from "@/hooks/use-session";
 import { buildLocalSetlistDetail, normalizeNote } from "@/lib/setlist-local";
 import { songHref } from "@/lib/setlist-navigation";
@@ -269,6 +270,8 @@ export default function SetlistPage() {
   if (!detail) return <NotFoundState onBack={onBack} />;
 
   return (
+    <>
+    {isCloud && <StageEntry detail={detail} />}
     <SetlistDetailViewScreen
       detail={detail}
       folders={folders}
@@ -287,5 +290,6 @@ export default function SetlistPage() {
       onDismissShare={onDismissShare}
       disabled={detail.viewerRole === "member"}
     />
+    </>
   );
 }
