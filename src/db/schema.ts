@@ -246,6 +246,20 @@ export const userEntitlements = pgTable("user_entitlement", {
   ...timestampColumns(),
 });
 
+// Estado ao vivo do modo palco: o dono (assinante) publica, os membros do setlist acompanham.
+export const setlistStages = pgTable("setlist_stage", {
+  setlistId: text("setlist_id")
+    .primaryKey()
+    .references(() => userSetlists.id, { onDelete: "cascade" }),
+  /** `position` do item do setlist que está tocando. */
+  position: integer("position").notNull().default(0),
+  /** Índice da linha cantada (ordem de [data-lyric] na tela); -1 = nenhuma ainda. */
+  lineIndex: integer("line_index").notNull().default(-1),
+  transpose: integer("transpose").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+});
+
 export const shareSnapshots = pgTable("share_snapshot", {
   id: text("id")
     .primaryKey()

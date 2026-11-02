@@ -18,6 +18,7 @@ import { useMetronome } from "@/hooks/use-metronome";
 import { useSongKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useSetlistNavigation } from "@/hooks/use-setlist-navigation";
 import { SetlistNavBar } from "./setlist-nav-bar";
+import { StageBar } from "./stage-bar";
 
 type SongViewCtx = SongViewContextValue;
 
@@ -227,6 +228,7 @@ export function SongView() {
         currentSong={ctx.currentSong}
       />
       {nav && <SetlistNavBar nav={nav} />}
+      {nav?.stage && <StageBar key={nav.pos} nav={nav} />}
     </div>
   );
 }

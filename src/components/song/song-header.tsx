@@ -19,6 +19,7 @@ import {
   Rewind,
   Timer,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { AuthHeaderControl } from "@/components/auth/user-menu";
 import { useLyricsFollow } from "@/hooks/use-lyrics-follow";
@@ -249,6 +250,8 @@ function AutoScrollHeaderControl() {
 /** Assinatura: rolagem pela voz — a linha que está sendo cantada fica no centro da tela. */
 function FollowLyricsHeaderControl() {
   const isSubscriber = useIsSubscriber();
+  // No modo palco a barra do palco já ouve a voz; dois reconhecedores brigariam pelo microfone.
+  const inStage = useSearchParams().get("stage") === "1";
   const { autoScroll, setAutoScroll } = useSongViewContext();
   const { state, start, stop } = useLyricsFollow();
   const following = state.status === "following";
@@ -262,7 +265,7 @@ function FollowLyricsHeaderControl() {
     if (autoScroll && following) stop();
   }, [autoScroll, following, stop]);
 
-  if (!isSubscriber) return null;
+  if (!isSubscriber || inStage) return null;
 
   return (
     <HeaderToggleButton

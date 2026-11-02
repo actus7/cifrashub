@@ -43,6 +43,13 @@
       "when": 1793631307512,
       "tag": "0005_bitter_proemial_gods",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793632998756,
+      "tag": "0006_outstanding_exodus",
+      "breakpoints": true
     }
   ]
 }

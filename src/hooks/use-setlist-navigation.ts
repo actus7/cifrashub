@@ -53,10 +53,12 @@ export function useSetlistNavigation() {
   const { prev, next } = neighbors(detail.items, pos);
   const playable = detail.items.filter((i) => i.song !== null);
   const index = playable.filter((i) => i.position <= pos).length;
+  const stage = params.get("stage") === "1";
   const go = (item: SetlistItemView | null) => {
     if (!item?.song) return;
-    router.push(songHref(item.song, { setlistId, position: item.position, ownerId }));
+    router.push(songHref(item.song, { setlistId, position: item.position, ownerId, stage }));
   };
+  const goTo = (position: number) => go(playable.find((i) => i.position === position) ?? null);
 
-  return { prev, next, go, title: detail.title, index, total: playable.length };
+  return { prev, next, go, goTo, setlistId, pos, stage, title: detail.title, index, total: playable.length };
 }

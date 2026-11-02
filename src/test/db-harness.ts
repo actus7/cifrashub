@@ -35,7 +35,7 @@ export async function seedUser(client: PGlite, id: string, name: string, email: 
 
 export async function resetDb(client: PGlite) {
   await client.exec(
-    `TRUNCATE folder_member, setlist_member, user_setlist_item, user_setlist, user_song, user_folder, neon_auth."user" CASCADE;`,
+    `TRUNCATE setlist_stage, folder_member, setlist_member, user_setlist_item, user_setlist, user_song, user_folder, neon_auth."user" CASCADE;`,
   );
 }
 

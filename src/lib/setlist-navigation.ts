@@ -3,7 +3,7 @@ import type { SetlistItemView, StoredSong } from "@/lib/types";
 
 export function songHref(
   song: StoredSong,
-  ctx: { setlistId: string; position: number; ownerId?: string | null },
+  ctx: { setlistId: string; position: number; ownerId?: string | null; stage?: boolean },
 ): string {
   const params = new URLSearchParams({
     arrangementId: arrangementKey(song),
@@ -11,6 +11,7 @@ export function songHref(
     pos: String(ctx.position),
   });
   if (ctx.ownerId) params.set("ownerId", ctx.ownerId);
+  if (ctx.stage) params.set("stage", "1");
   return `/song/${song.artistSlug}/${song.slug}?${params.toString()}`;
 }
 
