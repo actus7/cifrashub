@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiUserId } from "@/lib/server/api-route";
-import { requireSubscriber } from "@/lib/server/entitlement";
+import { hasActiveSubscription, requireSubscriber } from "@/lib/server/entitlement";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const MODEL = "whisper-large-v3-turbo";
@@ -10,11 +10,12 @@ const MAX_AUDIO_BYTES = 1_000_000;
 const MAX_PROMPT_CHARS = 600;
 const TIMEOUT_MS = 6_000;
 
-/** O app pergunta se o Whisper está configurado para escolher o reconhecedor do botão de voz. */
+/** O app pergunta se pode usar o Whisper (IA paga): chave configurada e pessoa assinante. Senão, reconhecedor local. */
 export async function GET() {
   const auth = await requireApiUserId();
   if ("response" in auth) return auth.response;
-  return NextResponse.json({ available: Boolean(process.env.GROQ_API_KEY) });
+  const available = Boolean(process.env.GROQ_API_KEY) && (await hasActiveSubscription(auth.userId));
+  return NextResponse.json({ available });
 }
 
 /**

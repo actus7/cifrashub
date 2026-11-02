@@ -96,6 +96,8 @@ const COMMAND_LABEL: Record<StageCommand["type"], string> = {
 
 /** Dono: a IA ouve a voz, segue a letra, publica posição/linha/tom e passa para a próxima música no fim. */
 function OwnerStage({ nav }: { nav: Nav }) {
+  // Comandos de voz usam o Jev (IA paga): só para assinantes. O resto do palco é para todos.
+  const isSubscriber = useIsSubscriber();
   const router = useRouter();
   const { tone, setTone } = useSongViewContext();
   const { publish } = useStage(nav.setlistId, { poll: false });
@@ -110,7 +112,7 @@ function OwnerStage({ nav }: { nav: Nav }) {
     else if (command.type === "pause") stopRef.current();
     else nav.goTo(command.position);
   });
-  const { state, start, stop } = useSongFollow(tone, { onLine: setLineIndex, onSpeech });
+  const { state, start, stop } = useSongFollow(tone, { onLine: setLineIndex, onSpeech: isSubscriber ? onSpeech : undefined });
   const following = state.status === "following";
   const level = following ? state.level : 0;
   useEffect(() => {
@@ -151,7 +153,7 @@ function OwnerStage({ nav }: { nav: Nav }) {
   return (
     <StageShell live>
       <span className="min-w-0 truncate text-xs text-muted-foreground">
-        {following ? "IA pilotando: segue acordes e voz, ouve comandos" : "IA pausada"} · {nav.index}/{nav.total}
+        {following ? (isSubscriber ? "IA pilotando: segue acordes e voz, ouve comandos" : "Seguindo acordes e voz") : "Pausado"} · {nav.index}/{nav.total}
       </span>
       <div className="flex gap-1">
         <Button
@@ -210,16 +212,8 @@ function MemberStage({ nav }: { nav: Nav }) {
 }
 
 export function StageBar({ nav }: { nav: Nav }) {
-  const isSubscriber = useIsSubscriber();
   const { data } = useStage(nav.setlistId, { poll: false });
   if (!data) return null;
   if (data.viewerRole === "member") return <MemberStage nav={nav} />;
-  if (!isSubscriber) {
-    return (
-      <StageShell live={false}>
-        <span className="text-xs text-muted-foreground">O modo palco é exclusivo para assinantes.</span>
-      </StageShell>
-    );
-  }
   return <OwnerStage nav={nav} />;
 }

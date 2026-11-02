@@ -25,7 +25,6 @@ import { AuthHeaderControl } from "@/components/auth/user-menu";
 import { notifyExperimentalOnce } from "@/components/ui/experimental";
 import { MicLevelMeter } from "@/components/ui/mic-level-meter";
 import { useSongFollow } from "@/hooks/use-song-follow";
-import { useIsSubscriber } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
 import { transposeRootNote } from "@/lib/music";
 import { cn } from "@/lib/utils";
@@ -255,7 +254,7 @@ function AutoScrollHeaderControl() {
  * Combina acordes, voz (Whisper ou navegador) e andamento num só modelo (use-song-follow), com painel de diagnóstico.
  */
 function FollowSongHeaderControl() {
-  const isSubscriber = useIsSubscriber();
+  // Grátis para todos (roda no aparelho). Só a transcrição pelo Whisper (IA paga) é de assinante — decidida no servidor.
   // No modo palco a barra do palco já ouve; dois seguidores brigariam pelo microfone.
   const inStage = useSearchParams().get("stage") === "1";
   const { autoScroll, setAutoScroll, tone } = useSongViewContext();
@@ -272,7 +271,7 @@ function FollowSongHeaderControl() {
     if (autoScroll && following) stop();
   }, [autoScroll, following, stop]);
 
-  if (!isSubscriber || inStage) return null;
+  if (inStage) return null;
 
   return (
     <>

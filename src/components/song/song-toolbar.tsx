@@ -21,7 +21,6 @@ import { useKeyDetect } from "@/hooks/use-key-detect";
 import { ExperimentalBadge, notifyExperimentalOnce } from "@/components/ui/experimental";
 import { MicLevelMeter } from "@/components/ui/mic-level-meter";
 import { keyTemplate } from "@/lib/key-detect";
-import { useIsSubscriber } from "@/hooks/use-subscription";
 import { cn } from "@/lib/utils";
 import { firstChordRoot, getRelativeKeyToggle, transposeRootNote } from "@/lib/music";
 import { useSongViewContext } from "./song-context";
@@ -209,7 +208,7 @@ function firstChordKey(songData: SongViewValue["songData"]): string | undefined 
 /** Tempo da opção "15 s" do Descobrir o tom. */
 const KEY_DETECT_LIMIT_MS = 15_000;
 
-/** Assinatura: ouve o que está sendo tocado/cantado e ajusta o tom da cifra em tempo real (por 15 s ou até desligar). */
+/** Grátis (roda no aparelho, sem IA paga): ouve o que está sendo tocado/cantado e ajusta o tom da cifra em tempo real (por 15 s ou até desligar). */
 function KeyDetectControl({
   expanded,
   setExpanded,
@@ -219,7 +218,6 @@ function KeyDetectControl({
   setExpanded: (v: string | null) => void;
   toggleMenu: (menu: string) => void;
 }) {
-  const isSubscriber = useIsSubscriber();
   const { tone, setTone, currentSong, songData, sharedContext } = useSongViewContext();
   const displayKey = songDisplayKey(currentSong, songData);
   // O tom do store é relativo aos acordes escritos: o molde usa os acordes escritos e o tom escrito.
@@ -254,8 +252,6 @@ function KeyDetectControl({
     // announce só lê refs e o rótulo; reexecutar por ela duplicaria o aviso.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
-
-  if (!isSubscriber) return null;
 
   const listening = state.status === "listening";
   const begin = (limitMs?: number) => {

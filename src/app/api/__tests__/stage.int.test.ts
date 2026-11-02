@@ -39,9 +39,9 @@ beforeEach(async () => {
 });
 
 describe("PUT /api/setlists/[id]/stage", () => {
-  it("rejects the owner without subscription", async () => {
+  it("lets any owner run the stage (no AI cost, no subscription needed)", async () => {
     setSession(OWNER);
-    expect((await put(STATE)).status).toBe(403);
+    expect((await put(STATE)).status).toBe(200);
   });
 
   it("rejects members even when they subscribe", async () => {

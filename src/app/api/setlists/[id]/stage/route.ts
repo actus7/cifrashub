@@ -4,7 +4,6 @@ import { db } from "@/db";
 import { setlistStages } from "@/db/schema";
 import { resolveSetlistAccess } from "@/lib/server/access";
 import { readJsonBody, requireApiUserId } from "@/lib/server/api-route";
-import { hasActiveSubscription } from "@/lib/server/entitlement";
 import { parseStageUpdate, type StageResponse } from "@/lib/stage";
 
 type RouteCtx = { params: Promise<{ id: string }> };
@@ -38,7 +37,7 @@ export async function GET(_req: Request, ctx: RouteCtx) {
   return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
 }
 
-/** Só o dono do setlist, com assinatura ativa, comanda o palco. */
+/** Só o dono do setlist comanda o palco (grátis: não usa IA; os comandos de voz por IA têm rota própria, de assinante). */
 export async function PUT(req: Request, ctx: RouteCtx) {
   const auth = await requireApiUserId();
   if ("response" in auth) return auth.response;
@@ -48,10 +47,6 @@ export async function PUT(req: Request, ctx: RouteCtx) {
   if (access.role !== "owner") {
     return NextResponse.json({ error: "Só o dono do setlist comanda o palco." }, { status: 403 });
   }
-  if (!(await hasActiveSubscription(auth.userId))) {
-    return NextResponse.json({ error: "Recurso exclusivo para assinantes." }, { status: 403 });
-  }
-
   const json = await readJsonBody<unknown>(req);
   if ("response" in json) return json.response;
   const update = parseStageUpdate(json.body);

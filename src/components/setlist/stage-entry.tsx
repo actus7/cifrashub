@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ExperimentalBadge, notifyExperimentalOnce } from "@/components/ui/experimental";
 import { useStage } from "@/hooks/use-stage";
-import { useIsSubscriber } from "@/hooks/use-subscription";
 import { songHref } from "@/lib/setlist-navigation";
 import type { SetlistDetailView } from "@/lib/types";
 
@@ -16,10 +15,9 @@ function playableItems(detail: SetlistDetailView) {
   return [...detail.items].filter((i) => i.song !== null).sort((a, b) => a.position - b.position);
 }
 
-/** Na página do setlist: o dono assinante inicia o palco; os membros entram quando ele está ao vivo. */
+/** Na página do setlist: o dono inicia o palco; os membros entram quando ele está ao vivo. */
 export function StageEntry({ detail }: Props) {
   const router = useRouter();
-  const isSubscriber = useIsSubscriber();
   const isMember = detail.viewerRole === "member";
   const { data } = useStage(detail.id, { poll: isMember });
   const items = playableItems(detail);
@@ -46,8 +44,6 @@ export function StageEntry({ detail }: Props) {
       </div>
     );
   }
-
-  if (!isSubscriber) return null;
 
   const start = async () => {
     notifyExperimentalOnce(

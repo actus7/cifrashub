@@ -36,11 +36,14 @@ afterEach(() => {
 });
 
 describe("/api/song/transcribe", () => {
-  it("reports availability only to signed-in users", async () => {
+  it("reports Whisper as available only to subscribers when the key is set", async () => {
     setSession(null);
     expect((await GET()).status).toBe(401);
     setSession(USER);
+    vi.stubEnv("GROQ_API_KEY", "test-key");
     expect(await (await GET()).json()).toEqual({ available: false });
+    await db.insert(userEntitlements).values({ userId: USER });
+    expect(await (await GET()).json()).toEqual({ available: true });
   });
 
   it("requires a subscription and a configured key", async () => {
