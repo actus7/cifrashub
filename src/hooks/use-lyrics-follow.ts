@@ -27,14 +27,17 @@ export function clearLyricFocus() {
  * Ouve a voz e mantém no centro da tela a linha da letra que está sendo cantada.
  * As linhas vêm do DOM (`[data-lyric]`, em ordem), então funciona com colunas, tom e cifra simplificada.
  * `onLine` recebe o índice da linha sempre que ela muda (usado pelo modo palco).
+ * `onSpeech` recebe cada frase fechada que NÃO bate com a letra (candidata a comando de voz).
  */
-export function useLyricsFollow(onLine?: (index: number) => void) {
+export function useLyricsFollow(onLine?: (index: number) => void, onSpeech?: (phrase: string) => void) {
   const [state, setState] = useState<LyricsFollowState>({ status: "idle" });
   const stopRef = useRef<(() => void) | null>(null);
   const onLineRef = useRef(onLine);
+  const onSpeechRef = useRef(onSpeech);
   useEffect(() => {
     onLineRef.current = onLine;
-  }, [onLine]);
+    onSpeechRef.current = onSpeech;
+  }, [onLine, onSpeech]);
 
   const stop = useCallback(() => {
     stopRef.current?.();
@@ -57,6 +60,13 @@ export function useLyricsFollow(onLine?: (index: number) => void) {
         current = next;
         focusLyricLine(next);
         onLineRef.current?.(next);
+      },
+      onFinal: (segment) => {
+        if (!onSpeechRef.current) return;
+        if (lines.length === 0) lines = lyricElements().map((el) => normalizeWords(el.dataset.lyric ?? ""));
+        // Trecho que é letra cantada não é comando.
+        if (matchLine(lines, normalizeWords(segment), -1) !== -1) return;
+        onSpeechRef.current(segment);
       },
       onError: (message) => {
         stopRef.current = null;

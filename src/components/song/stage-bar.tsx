@@ -9,6 +9,7 @@ import type { useSetlistNavigation } from "@/hooks/use-setlist-navigation";
 import { focusLyricLine, useLyricsFollow } from "@/hooks/use-lyrics-follow";
 import { useStage } from "@/hooks/use-stage";
 import { useIsSubscriber } from "@/hooks/use-subscription";
+import type { StageCommand } from "@/lib/stage-commands";
 import { cn } from "@/lib/utils";
 import { useSongViewContext } from "./song-context";
 
@@ -38,14 +39,78 @@ function StageShell({ children, live }: { children: ReactNode; live: boolean }) 
   );
 }
 
+/**
+ * Frases faladas que não são letra vão ao Jev (rota do servidor), uma por vez e sempre a mais nova:
+ * sem fila e sem intervalo fixo, como no kit Jev (slides-seguem), mas sem esperar 600 ms entre chamadas.
+ */
+function useVoiceCommands(setlistId: string, execute: (command: StageCommand) => void) {
+  const inFlight = useRef(false);
+  const latest = useRef<string | null>(null);
+  const executeRef = useRef(execute);
+  useEffect(() => {
+    executeRef.current = execute;
+  });
+
+  const send = useRef(async () => {});
+  useEffect(() => {
+    send.current = async () => {
+      const phrase = latest.current;
+      if (inFlight.current || !phrase) return;
+      latest.current = null;
+      inFlight.current = true;
+      try {
+        const res = await fetch(`/api/setlists/${encodeURIComponent(setlistId)}/stage/command`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phrase }),
+        });
+        const body = res.ok ? ((await res.json()) as { command: StageCommand | null }) : null;
+        if (body?.command) executeRef.current(body.command);
+      } catch {
+        // ponytail: sem rede, o comando falado se perde; os botões continuam funcionando.
+      } finally {
+        inFlight.current = false;
+        if (latest.current) void send.current();
+      }
+    };
+  }, [setlistId]);
+
+  return (phrase: string) => {
+    latest.current = phrase;
+    void send.current();
+  };
+}
+
+const COMMAND_LABEL: Record<StageCommand["type"], string> = {
+  next: "Próxima música",
+  prev: "Música anterior",
+  tone_up: "Subindo meio tom",
+  tone_down: "Descendo meio tom",
+  pause: "IA pausada",
+  go_to: "Trocando de música",
+};
+
 /** Dono: a IA ouve a voz, segue a letra, publica posição/linha/tom e passa para a próxima música no fim. */
 function OwnerStage({ nav }: { nav: Nav }) {
   const router = useRouter();
-  const { tone } = useSongViewContext();
+  const { tone, setTone } = useSongViewContext();
   const { publish } = useStage(nav.setlistId, { poll: false });
   const [lineIndex, setLineIndex] = useState(-1);
-  const { state, start, stop } = useLyricsFollow(setLineIndex);
+  const stopRef = useRef<() => void>(() => {});
+  const onSpeech = useVoiceCommands(nav.setlistId, (command) => {
+    toast(COMMAND_LABEL[command.type], { duration: 1500 });
+    if (command.type === "next") nav.go(nav.next);
+    else if (command.type === "prev") nav.go(nav.prev);
+    else if (command.type === "tone_up") setTone(Math.min(11, tone + 1));
+    else if (command.type === "tone_down") setTone(Math.max(-11, tone - 1));
+    else if (command.type === "pause") stopRef.current();
+    else nav.goTo(command.position);
+  });
+  const { state, start, stop } = useLyricsFollow(setLineIndex, onSpeech);
   const following = state.status === "following";
+  useEffect(() => {
+    stopRef.current = stop;
+  }, [stop]);
 
   useEffect(() => {
     start();
@@ -79,7 +144,7 @@ function OwnerStage({ nav }: { nav: Nav }) {
   return (
     <StageShell live>
       <span className="min-w-0 truncate text-xs text-muted-foreground">
-        {following ? "IA seguindo a letra" : "IA pausada"} · {nav.index}/{nav.total}
+        {following ? "IA pilotando: segue a letra e ouve comandos" : "IA pausada"} · {nav.index}/{nav.total}
       </span>
       <div className="flex gap-1">
         <Button size="sm" variant={following ? "default" : "outline"} onClick={following ? stop : start} title="Ouvir a voz">

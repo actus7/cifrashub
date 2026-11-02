@@ -37,11 +37,13 @@ export function speechErrorMessage(error: string): string {
 export type SpeechListener = {
   /** Texto completo reconhecido até agora (finais + parcial atual). */
   onText: (text: string) => void;
+  /** Cada trecho que o reconhecedor fechou (fim de frase). */
+  onFinal?: (segment: string) => void;
   onError: (message: string) => void;
 };
 
 /** Liga o reconhecimento contínuo; devolve a função que desliga. null se o navegador não suporta. */
-export function startSpeech({ onText, onError }: SpeechListener): (() => void) | null {
+export function startSpeech({ onText, onFinal, onError }: SpeechListener): (() => void) | null {
   const Ctor = speechRecognitionCtor();
   if (!Ctor) return null;
   const rec = new Ctor();
@@ -52,6 +54,7 @@ export function startSpeech({ onText, onError }: SpeechListener): (() => void) |
   let previous = "";
   let session = "";
   let active = true;
+  let finalCount = 0;
 
   rec.onresult = (e) => {
     let finals = "";
@@ -62,6 +65,12 @@ export function startSpeech({ onText, onError }: SpeechListener): (() => void) |
       else partial += r[0].transcript;
     }
     session = finals;
+    let seen = 0;
+    for (let i = 0; i < e.results.length; i++) {
+      if (!e.results[i].isFinal) continue;
+      if (seen++ >= finalCount) onFinal?.(e.results[i][0].transcript.trim());
+    }
+    finalCount = seen;
     onText(`${previous} ${finals} ${partial}`.replace(/\s+/g, " ").trim());
   };
   rec.onerror = (e) => {
@@ -72,6 +81,7 @@ export function startSpeech({ onText, onError }: SpeechListener): (() => void) |
   rec.onend = () => {
     previous = `${previous} ${session}`.replace(/\s+/g, " ").trim();
     session = "";
+    finalCount = 0;
     if (!active) return;
     try {
       rec.start();
