@@ -129,3 +129,18 @@ export function matchLine(lines: string[][], recentWords: string[], current: num
   const far = bestStart(lines, heard, 0, lines.length - 1, current, FAR);
   return far !== -1 ? far : current;
 }
+
+/**
+ * Evidência das palavras para o seguidor por fusão: para cada linha, a fração das palavras de conteúdo dela que
+ * aparecem (parecidas) no trecho ouvido. 0 quando bate menos de 2 palavras (ou a linha inteira, se for curta).
+ */
+export function lineWordScores(lines: string[][], heard: string[]): number[] {
+  const words = heard.filter(isContent);
+  return lines.map((line) => {
+    const content = line.filter(isContent);
+    if (content.length === 0 || words.length === 0) return 0;
+    const matched = content.filter((w) => words.some((h) => similarWords(h, w))).length;
+    if (matched < Math.min(2, content.length)) return 0;
+    return matched / content.length;
+  });
+}

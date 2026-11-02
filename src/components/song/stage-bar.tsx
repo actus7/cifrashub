@@ -6,9 +6,9 @@ import { AudioLines, Radio, Square } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { useSetlistNavigation } from "@/hooks/use-setlist-navigation";
-import { focusLyricLine, useLyricsFollow } from "@/hooks/use-lyrics-follow";
+import { focusLyricLine } from "@/hooks/use-lyrics-follow";
+import { useSongFollow } from "@/hooks/use-song-follow";
 import { MicLevelMeter } from "@/components/ui/mic-level-meter";
-import { useMicLevel } from "@/hooks/use-mic-level";
 import { useStage } from "@/hooks/use-stage";
 import { useIsSubscriber } from "@/hooks/use-subscription";
 import type { StageCommand } from "@/lib/stage-commands";
@@ -108,17 +108,19 @@ function OwnerStage({ nav }: { nav: Nav }) {
     else if (command.type === "pause") stopRef.current();
     else nav.goTo(command.position);
   });
-  const { state, start, stop } = useLyricsFollow(setLineIndex, onSpeech);
+  const { state, start, stop } = useSongFollow(tone, { onLine: setLineIndex, onSpeech });
   const following = state.status === "following";
-  const level = useMicLevel(following);
+  const level = following ? state.level : 0;
   useEffect(() => {
     stopRef.current = stop;
   }, [stop]);
 
   useEffect(() => {
-    start();
+    void start();
     return stop;
-  }, [start, stop]);
+    // Liga uma vez ao entrar no palco (start muda quando o tom muda, e o hook já se ajusta sozinho).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (state.status === "error") toast.error(state.message);
@@ -147,14 +149,14 @@ function OwnerStage({ nav }: { nav: Nav }) {
   return (
     <StageShell live>
       <span className="min-w-0 truncate text-xs text-muted-foreground">
-        {following ? "IA pilotando: segue a letra e ouve comandos" : "IA pausada"} · {nav.index}/{nav.total}
+        {following ? "IA pilotando: segue acordes e voz, ouve comandos" : "IA pausada"} · {nav.index}/{nav.total}
       </span>
       <div className="flex gap-1">
         <Button
           size="sm"
           variant={following ? "default" : "outline"}
           className="relative overflow-hidden"
-          onClick={following ? stop : start}
+          onClick={following ? stop : () => void start()}
           title="Ouvir a voz"
         >
           {following && <MicLevelMeter level={level} />}

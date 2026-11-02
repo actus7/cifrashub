@@ -11,11 +11,17 @@ import { chordPitchClasses } from "@/lib/key-detect";
  * anterior certa.
  */
 
-/** Duração típica de um acorde, em quadros de 100 ms (~2 s). */
+/** Duração inicial de um acorde, em quadros de 100 ms (~2 s); depois o andamento é aprendido. */
 const FRAMES_PER_CHORD = 20;
-const P_NEXT = 1 / FRAMES_PER_CHORD;
-/** Acorde tocado mais curto que o normal: às vezes pula um passo. */
-const P_SKIP = P_NEXT * 0.15;
+/** Limites do andamento aprendido (0,6 s a 6 s por acorde). */
+const MIN_FRAMES_PER_CHORD = 6;
+const MAX_FRAMES_PER_CHORD = 60;
+/** Peso de cada nova medição de duração no andamento aprendido. */
+const TEMPO_LEARNING = 0.25;
+/** Acorde tocado mais curto que o normal: às vezes pula um passo (fração de P_NEXT). */
+const SKIP_RATIO = 0.15;
+/** Força da evidência das palavras: um trecho que bate 100% com uma linha a torna ~e^4 = 55× mais provável. */
+const WORD_SHARPNESS = 4;
 /** Chance, por quadro, de saltar para qualquer outro ponto (recuperação de um erro); bem pequena para não voltar à toa. */
 const P_JUMP = 1e-6;
 /** Quão "afiada" é a emissão: maior = confia mais em cada quadro. */
@@ -59,16 +65,26 @@ function cosine(a: number[], b: number[]): number {
 }
 
 /** Um passo da música: um acorde de uma linha. */
-type Step = { line: number; template: number[] };
+type Step = { line: number; chord: string; template: number[] };
 
+/**
+ * Seguidor por fusão de evidências sobre a mesma crença (posição na música):
+ * acordes a cada quadro (`step`), palavras quando o transcritor devolve algo (`observeWords`) e o andamento aprendido
+ * (quanto tempo a pessoa fica em cada acorde). Cada fonte cobre a falha da outra.
+ */
 export class ChordFollower {
   private readonly steps: Step[];
   private belief: number[];
+  private framesPerChord = FRAMES_PER_CHORD;
+  private bestStep = -1;
+  private framesOnBest = 0;
 
   /** `lineChords` = acordes ESCRITOS de cada linha (em ordem); `shift` = semitons até o tom que está soando. */
   constructor(lineChords: string[][], shift: number, startLine = -1) {
     this.steps = fillChordless(lineChords).flatMap((chords, line) =>
-      chords.length > 0 ? chords.map((c) => ({ line, template: chordTemplate(c, shift) })) : [{ line, template: [] }],
+      chords.length > 0
+        ? chords.map((chord) => ({ line, chord, template: chordTemplate(chord, shift) }))
+        : [{ line, chord: "", template: [] }],
     );
     const n = this.steps.length;
     const first = startLine >= 0 ? this.steps.findIndex((s) => s.line === startLine) : -1;
@@ -88,14 +104,16 @@ export class ChordFollower {
   step(chroma: number[] | null): void {
     const n = this.belief.length;
     if (n === 0 || !chroma) return;
+    const pNext = 1 / this.framesPerChord;
+    const pSkip = pNext * SKIP_RATIO;
     const moved = new Array<number>(n).fill(P_JUMP / n);
     for (let i = 0; i < n; i++) {
       const b = this.belief[i];
       if (b === 0) continue;
-      moved[i] += b * (1 - P_NEXT - P_SKIP);
+      moved[i] += b * (1 - pNext - pSkip);
       // Depois do último acorde a música acabou: essa probabilidade sai (senão o fim "atrairia" a posição).
-      if (i + 1 < n) moved[i + 1] += b * P_NEXT;
-      if (i + 2 < n) moved[i + 2] += b * P_SKIP;
+      if (i + 1 < n) moved[i + 1] += b * pNext;
+      if (i + 2 < n) moved[i + 2] += b * pSkip;
     }
     for (let i = 0; i < n; i++) {
       const t = this.steps[i].template;
@@ -103,6 +121,53 @@ export class ChordFollower {
     }
     const total = moved.reduce((s, x) => s + x, 0) || 1;
     this.belief = moved.map((x) => x / total);
+    this.learnTempo();
+  }
+
+  /**
+   * Evidência das palavras: `lineScores[i]` (0–1) = quanto o trecho ouvido se parece com a linha i.
+   * Multiplica a crença dos acordes dessa linha (regra de Bayes); sem nenhuma linha parecida, não muda nada.
+   */
+  observeWords(lineScores: number[]): void {
+    if (!lineScores.some((x) => x > 0)) return;
+    const next = this.belief.map((b, i) => b * Math.exp(WORD_SHARPNESS * (lineScores[this.steps[i].line] ?? 0)));
+    const total = next.reduce((s, x) => s + x, 0) || 1;
+    this.belief = next.map((x) => x / total);
+  }
+
+  /** Andamento: quando a posição mais provável avança um acorde, a duração no anterior entra na média. */
+  private learnTempo(): void {
+    let top = 0;
+    for (let i = 1; i < this.belief.length; i++) if (this.belief[i] > this.belief[top]) top = i;
+    if (top === this.bestStep) {
+      this.framesOnBest++;
+      return;
+    }
+    if (top === this.bestStep + 1 && this.belief[top] > 0.5) {
+      const measured = Math.min(MAX_FRAMES_PER_CHORD, Math.max(MIN_FRAMES_PER_CHORD, this.framesOnBest));
+      this.framesPerChord += (measured - this.framesPerChord) * TEMPO_LEARNING;
+    }
+    this.bestStep = top;
+    this.framesOnBest = 0;
+  }
+
+  /** Para o diagnóstico: acorde da cifra mais parecido com o som agora, e o andamento aprendido. */
+  heardChord(chroma: number[]): { chord: string; similarity: number } {
+    let chord = "";
+    let similarity = 0;
+    for (const s of this.steps) {
+      if (!s.template.length) continue;
+      const sim = cosine(chroma, s.template);
+      if (sim > similarity) {
+        similarity = sim;
+        chord = s.chord;
+      }
+    }
+    return { chord, similarity };
+  }
+
+  secondsPerChord(): number {
+    return this.framesPerChord / 10;
   }
 
   /** Linha mais provável (somando os acordes dela) e sua probabilidade. */

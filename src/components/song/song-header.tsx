@@ -7,7 +7,6 @@ import {
   ChevronLeft,
   FastForward,
   FileEdit,
-  Guitar,
   Link2,
   ListMusic,
   Maximize,
@@ -24,15 +23,14 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { AuthHeaderControl } from "@/components/auth/user-menu";
 import { MicLevelMeter } from "@/components/ui/mic-level-meter";
-import { useChordFollow } from "@/hooks/use-chord-follow";
-import { useLyricsFollow } from "@/hooks/use-lyrics-follow";
-import { useMicLevel } from "@/hooks/use-mic-level";
+import { useSongFollow } from "@/hooks/use-song-follow";
 import { useIsSubscriber } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
 import { transposeRootNote } from "@/lib/music";
 import { cn } from "@/lib/utils";
 import type { CurrentSongMeta } from "@/lib/types";
 import { useSongViewContext } from "./song-context";
+import { FollowDiagnosticsPanel } from "./follow-diagnostics";
 import { VersionBadge } from "./song-version-menu";
 
 export function CifraClubMeta({
@@ -217,8 +215,7 @@ function SongHeaderActions({ extraActions }: SongHeaderProps) {
     <div className="flex shrink-0 flex-col items-end">
       <div className="flex items-center gap-0.5 sm:gap-1">
         <AutoScrollHeaderControl />
-        <FollowLyricsHeaderControl />
-        <FollowChordsHeaderControl />
+        <FollowSongHeaderControl />
         <AutoScrollSpeedControls />
         <MetronomeHeaderControl />
         <MetronomeBpmControls />
@@ -252,59 +249,16 @@ function AutoScrollHeaderControl() {
   );
 }
 
-/** Assinatura: rolagem pela voz — a linha que está sendo cantada fica no centro da tela. */
-function FollowLyricsHeaderControl() {
+/**
+ * Assinatura: "Seguir a música" — a linha que está sendo tocada/cantada fica no meio da tela.
+ * Combina acordes, voz (Whisper ou navegador) e andamento num só modelo (use-song-follow), com painel de diagnóstico.
+ */
+function FollowSongHeaderControl() {
   const isSubscriber = useIsSubscriber();
-  // No modo palco a barra do palco já ouve a voz; dois reconhecedores brigariam pelo microfone.
-  const inStage = useSearchParams().get("stage") === "1";
-  const { autoScroll, setAutoScroll } = useSongViewContext();
-  const { state, start, stop } = useLyricsFollow();
-  const following = state.status === "following";
-  const level = useMicLevel(following);
-  const engine = state.status === "following" ? state.engine : null;
-
-  useEffect(() => {
-    if (state.status === "error") toast.error(state.message);
-  }, [state]);
-
-  useEffect(() => {
-    if (engine) toast(engine === "whisper" ? "Seguindo pela voz com o Whisper" : "Seguindo pela voz com o reconhecedor do navegador", { duration: 2000 });
-  }, [engine]);
-
-  // As duas rolagens brigariam pela tela: ligar a por tempo desliga a por voz.
-  useEffect(() => {
-    if (autoScroll && following) stop();
-  }, [autoScroll, following, stop]);
-
-  if (!isSubscriber || inStage) return null;
-
-  return (
-    <HeaderToggleButton
-      active={following}
-      inactiveLabel="Rolagem pela voz (segue a letra cantada)"
-      activeLabel="Parar rolagem pela voz"
-      className="relative overflow-hidden"
-      onClick={() => {
-        if (following) {
-          stop();
-          return;
-        }
-        setAutoScroll(false);
-        void start();
-      }}
-    >
-      {following && <MicLevelMeter level={level} tone="onGhost" />}
-      <AudioLines className="relative size-[18px]" style={following ? { transform: `scaleY(${0.7 + level * 0.6})` } : undefined} />
-    </HeaderToggleButton>
-  );
-}
-
-/** Assinatura: rolagem pelos acordes tocados — não depende de reconhecer o canto. */
-function FollowChordsHeaderControl() {
-  const isSubscriber = useIsSubscriber();
+  // No modo palco a barra do palco já ouve; dois seguidores brigariam pelo microfone.
   const inStage = useSearchParams().get("stage") === "1";
   const { autoScroll, setAutoScroll, tone } = useSongViewContext();
-  const { state, start, stop } = useChordFollow(tone);
+  const { state, start, stop, downloadDiagnostics } = useSongFollow(tone);
   const following = state.status === "following";
   const level = following ? state.level : 0;
 
@@ -312,6 +266,7 @@ function FollowChordsHeaderControl() {
     if (state.status === "error") toast.error(state.message);
   }, [state]);
 
+  // As duas rolagens brigariam pela tela: ligar a por tempo desliga esta.
   useEffect(() => {
     if (autoScroll && following) stop();
   }, [autoScroll, following, stop]);
@@ -319,23 +274,26 @@ function FollowChordsHeaderControl() {
   if (!isSubscriber || inStage) return null;
 
   return (
-    <HeaderToggleButton
-      active={following}
-      inactiveLabel="Rolagem pelos acordes (segue o que você toca)"
-      activeLabel="Parar rolagem pelos acordes"
-      className="relative overflow-hidden"
-      onClick={() => {
-        if (following) {
-          stop();
-          return;
-        }
-        setAutoScroll(false);
-        void start();
-      }}
-    >
-      {following && <MicLevelMeter level={level} tone="onGhost" />}
-      <Guitar className="relative size-[18px]" style={following ? { transform: `scale(${0.85 + level * 0.35})` } : undefined} />
-    </HeaderToggleButton>
+    <>
+      <HeaderToggleButton
+        active={following}
+        inactiveLabel="Seguir a música (acordes + voz)"
+        activeLabel="Parar de seguir a música"
+        className="relative overflow-hidden"
+        onClick={() => {
+          if (following) {
+            stop();
+            return;
+          }
+          setAutoScroll(false);
+          void start();
+        }}
+      >
+        {following && <MicLevelMeter level={level} tone="onGhost" />}
+        <AudioLines className="relative size-[18px]" style={following ? { transform: `scaleY(${0.7 + level * 0.6})` } : undefined} />
+      </HeaderToggleButton>
+      {state.status === "following" && <FollowDiagnosticsPanel diag={state.diag} onDownload={downloadDiagnostics} />}
+    </>
   );
 }
 

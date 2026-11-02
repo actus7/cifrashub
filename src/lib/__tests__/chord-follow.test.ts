@@ -66,4 +66,49 @@ describe("ChordFollower", () => {
     for (let i = 0; i < 20; i++) f.step(null);
     expect(f.best().index).toBe(4);
   });
+
+});
+
+describe("ChordFollower — fusion with words and tempo", () => {
+  /** Letras das linhas (o verso 2 tem os mesmos acordes do verso 1, mas outra letra). */
+  const LYRICS = [
+    "nada novo achei pra dizer", "como expressar gratidao", "posso cantar alguma cancao", "vai acabar tua nao",
+    "entao vou levantar", "minhas maos louvar", "tudo que tenho aleluia", "simples pra um rei",
+    "resposta ti ha acao", "render aqui adoracao", "resposta ti ha acao", "render aqui adoracao",
+  ].map((l) => l.split(" "));
+  const scores = (heard: string) =>
+    LYRICS.map((line) => {
+      const h = heard.split(" ");
+      const m = line.filter((w) => h.includes(w)).length;
+      return m >= 2 ? m / line.length : 0;
+    });
+
+  it("words disambiguate a verse whose chords repeat another verse", () => {
+    const f = new ChordFollower(SONG, 0);
+    // Começa direto no verso 2 (linha 8): só pelos acordes ele acharia que é o verso 1 (linha 0).
+    for (let i = 0; i < 20; i++) f.step(chordChroma("C", 0, 0.15, i));
+    expect(f.best().index).toBe(0);
+    f.observeWords(scores("em resposta a ti ha uma acao"));
+    for (let i = 0; i < 20; i++) f.step(chordChroma("G", 0, 0.15, i + 40));
+    expect(f.best().index).toBe(8);
+  });
+
+  it("words place a line that has no chord of its own", () => {
+    const f = new ChordFollower(SONG, 0, 5);
+    for (let i = 0; i < 10; i++) f.step(chordChroma("Am", 0, 0.15, i));
+    f.observeWords(scores("tudo o que tenho e um aleluia"));
+    expect(f.best().index).toBe(6);
+  });
+
+  it("learns a faster tempo from the playing", () => {
+    const f = new ChordFollower(SONG, 0, 0);
+    let seed = 1;
+    for (const chords of fillChordless(SONG)) for (const c of chords) for (let i = 0; i < 10; i++) f.step(chordChroma(c, 0, 0.15, seed++));
+    expect(f.secondsPerChord()).toBeLessThan(1.6);
+  });
+
+  it("names the chord being heard for diagnostics", () => {
+    const f = new ChordFollower(SONG, 0);
+    expect(f.heardChord(chordChroma("Am", 0, 0.05)).chord).toBe("Am");
+  });
 });
