@@ -218,8 +218,11 @@ function ChordRow({
   effectiveTransposition,
   onChordClick,
 }: Omit<LineRenderProps, "lineHasChord" | "rowKey">) {
+  // Texto da letra para o "Seguir a letra" (use-lyrics-follow lê [data-lyric] em ordem).
+  const lyric = isLineTab ? "" : line.map((b) => b.text).join("").trim();
   return (
     <div
+      data-lyric={lyric || undefined}
       className={cn(
         "flex flex-wrap items-end",
         isLineTab && "min-w-0 max-w-max",

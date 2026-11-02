@@ -1,7 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import {
+  AudioLines,
   Bookmark,
   ChevronLeft,
   FastForward,
@@ -18,7 +19,10 @@ import {
   Rewind,
   Timer,
 } from "lucide-react";
+import { toast } from "sonner";
 import { AuthHeaderControl } from "@/components/auth/user-menu";
+import { useLyricsFollow } from "@/hooks/use-lyrics-follow";
+import { useIsSubscriber } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
 import { transposeRootNote } from "@/lib/music";
 import { cn } from "@/lib/utils";
@@ -208,6 +212,7 @@ function SongHeaderActions({ extraActions }: SongHeaderProps) {
     <div className="flex shrink-0 flex-col items-end">
       <div className="flex items-center gap-0.5 sm:gap-1">
         <AutoScrollHeaderControl />
+        <FollowLyricsHeaderControl />
         <AutoScrollSpeedControls />
         <MetronomeHeaderControl />
         <MetronomeBpmControls />
@@ -237,6 +242,43 @@ function AutoScrollHeaderControl() {
       ) : (
         <Play className="ml-0.5 size-[18px]" fill="currentColor" />
       )}
+    </HeaderToggleButton>
+  );
+}
+
+/** Assinatura: rolagem pela voz — a linha que está sendo cantada fica no centro da tela. */
+function FollowLyricsHeaderControl() {
+  const isSubscriber = useIsSubscriber();
+  const { autoScroll, setAutoScroll } = useSongViewContext();
+  const { state, start, stop } = useLyricsFollow();
+  const following = state.status === "following";
+
+  useEffect(() => {
+    if (state.status === "error") toast.error(state.message);
+  }, [state]);
+
+  // As duas rolagens brigariam pela tela: ligar a por tempo desliga a por voz.
+  useEffect(() => {
+    if (autoScroll && following) stop();
+  }, [autoScroll, following, stop]);
+
+  if (!isSubscriber) return null;
+
+  return (
+    <HeaderToggleButton
+      active={following}
+      inactiveLabel="Rolagem pela voz (segue a letra cantada)"
+      activeLabel="Parar rolagem pela voz"
+      onClick={() => {
+        if (following) {
+          stop();
+          return;
+        }
+        setAutoScroll(false);
+        start();
+      }}
+    >
+      <AudioLines className={cn("size-[18px]", following && "animate-pulse")} />
     </HeaderToggleButton>
   );
 }

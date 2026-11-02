@@ -285,3 +285,11 @@ html.zen-scroll-hide body::-webkit-scrollbar {
 [data-sonner-toaster][data-x-position="right"] {
   display: none !important;
 }
+
+/* Linha que está sendo cantada (Seguir a letra / modo palco). */
+[data-lyric][data-lyric-active] {
+  border-radius: 0.375rem;
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+  box-shadow: 0 0 0 6px color-mix(in oklab, var(--primary) 14%, transparent);
+  transition: background 200ms ease, box-shadow 200ms ease;
+}
