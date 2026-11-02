@@ -27,7 +27,8 @@ export function FollowDiagnosticsPanel({ diag, onDownload }: { diag: FollowDiagn
       <div className="mb-2 flex items-center justify-between">
         <span className="font-semibold">
           Seguir a música
-          {diag.lost && <span className="ml-1.5 animate-pulse font-normal text-amber-500">recalculando rota…</span>}
+          {diag.locating && <span className="ml-1.5 animate-pulse font-normal text-muted-foreground">localizando…</span>}
+          {!diag.locating && diag.lost && <span className="ml-1.5 animate-pulse font-normal text-amber-500">recalculando rota…</span>}
         </span>
         <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-[11px]" onClick={onDownload}>
           <Download className="size-3.5" /> Diagnóstico

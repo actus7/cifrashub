@@ -45,6 +45,8 @@ export type FollowDiagnostics = {
   secondsPerChord: number;
   /** "Recalculando rota": a posição atual não explica o som. */
   lost: boolean;
+  /** Ainda entendendo onde a música está (a tela não se mexe até decidir). */
+  locating: boolean;
 };
 
 export type SongFollowState =
@@ -68,6 +70,7 @@ const EMPTY_DIAG: FollowDiagnostics = {
   probability: 0,
   secondsPerChord: 2,
   lost: false,
+  locating: true,
 };
 
 /**
@@ -149,6 +152,7 @@ export function useSongFollow(
       const shown = stabilizer.update(best);
       followerRef.current?.setAnchor(shown);
       diag.line = shown;
+      diag.locating = stabilizer.locating;
       diag.lost = followerRef.current?.isLost() ?? false;
       if (shown < 0) return;
       moveTo(shown, best.probability);

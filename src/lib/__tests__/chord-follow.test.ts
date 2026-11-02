@@ -224,4 +224,44 @@ describe("calibration: no false jumps while playing in order", () => {
   it("still ends on the last line", () => {
     expect(falseJumps(7).end).toBeGreaterThanOrEqual(LONG.length - 2);
   });
+
+});
+
+describe("acquisition: understand where we are before moving the screen", () => {
+  const VERSE = [["C", "G"], ["Am", "F"], ["C", "G"], ["Am", "F"]];
+  const CHORUS = [["F", "C"], ["G", "Am"], ["F", "C"], ["G", "G"]];
+  const BRIDGE = [["Dm", "Em"], ["F", "G"]];
+  const LONG = [...VERSE, ...CHORUS, ...VERSE, ...CHORUS, ...BRIDGE, ...CHORUS];
+  const WRONG = ["E", "D", "Bm", "A", "B"];
+
+  /** Toca a partir de `startLine`; devolve a primeira linha mostrada e quando (quadro). */
+  function firstShown(startLine: number, seed0: number) {
+    const f = new ChordFollower(LONG, 0);
+    const screen = new LineStabilizer();
+    let seed = seed0;
+    let frame = 0;
+    for (const [offset, chords] of LONG.slice(startLine).entries()) {
+      for (const c of chords) {
+        for (let i = 0; i < 20; i++) {
+          seed++;
+          frame++;
+          f.step(chordChroma(seed % 10 === 0 ? WRONG[seed % 5] : c, 0, 0.4, seed));
+          const shown = anchorAndShow(f, screen);
+          if (shown >= 0) return { line: shown, frame, playing: startLine + offset };
+        }
+      }
+    }
+    return { line: -1, frame, playing: -1 };
+  }
+
+  it("starting from the top, the first line shown is at the top (10 runs)", () => {
+    for (let r = 1; r <= 10; r++) expect(firstShown(0, r * 131).line).toBeLessThanOrEqual(1);
+  });
+
+  it("starting at the bridge (unique chords), it locates it — taking its time", () => {
+    const { line, frame, playing } = firstShown(16, 77);
+    expect(line).toBe(playing); // a linha que está tocando quando decide
+    expect(frame).toBeGreaterThanOrEqual(30); // não decide no susto
+    expect(frame).toBeLessThanOrEqual(80); // mas decide em até ~8 s
+  });
 });
