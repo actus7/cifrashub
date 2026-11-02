@@ -9,11 +9,16 @@ import {
   FlipHorizontal,
   Guitar,
   Magnet,
+  Mic,
   Minus,
   Plus,
   Type,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useKeyDetect } from "@/hooks/use-key-detect";
+import { useIsSubscriber } from "@/hooks/use-subscription";
+import { usePlayerStore } from "@/store/use-player-store";
 import { cn } from "@/lib/utils";
 import { firstChordRoot, getRelativeKeyToggle, transposeRootNote } from "@/lib/music";
 import { useSongViewContext } from "./song-context";
@@ -143,6 +148,7 @@ export const SongToolbar = memo(function SongToolbar() {
       <ToolbarSeparator />
       <ToneControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
       <CapoControl expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
+      <KeyDetectControl />
       <ToolbarSeparator />
       <LayoutControls expanded={expanded} setExpanded={setExpanded} toggleMenu={toggleMenu} />
       <ToolbarSeparator />
@@ -162,7 +168,7 @@ function ToneControl({
 }) {
   const { tone, setTone, currentSong, songData, sharedContext } = useSongViewContext();
   const writtenKey = currentSong.cifraWrittenKey;
-  const displayKey = writtenKey ?? currentSong.cifraSoundingKey ?? firstChordRoot(songData);
+  const displayKey = songDisplayKey(currentSong, songData);
   const relToggle = writtenKey ? getRelativeKeyToggle(writtenKey, tone) : null;
   const locked = Boolean(sharedContext);
 
@@ -176,6 +182,81 @@ function ToneControl({
         <ToneButtonLabel displayKey={displayKey} tone={tone} />
       </ToolbarButton>
     </ToolbarPopoverGroup>
+  );
+}
+
+type SongViewValue = ReturnType<typeof useSongViewContext>;
+
+function songDisplayKey(song: SongViewValue["currentSong"], songData: SongViewValue["songData"]) {
+  return song.cifraWrittenKey ?? song.cifraSoundingKey ?? firstChordRoot(songData);
+}
+
+function firstChordKey(songData: SongViewValue["songData"]): string | undefined {
+  for (const section of songData) {
+    for (const line of section.content) {
+      for (const block of line) {
+        const m = block.chord?.match(/^([A-G][#b]?)(m(?!aj))?/);
+        if (m) return m[1] + (m[2] ?? "");
+      }
+    }
+  }
+  return undefined;
+}
+
+/** Assinatura: escuta a voz por alguns segundos (com a cifra rolando) e transpõe para o tom cantado. */
+function KeyDetectControl() {
+  const isSubscriber = useIsSubscriber();
+  const { tone, setTone, currentSong, songData, sharedContext } = useSongViewContext();
+  const displayKey = songDisplayKey(currentSong, songData);
+  // O tom do store é relativo aos acordes escritos, então a detecção parte do tom escrito (com o modo).
+  const { state, start, cancel } = useKeyDetect(currentSong.cifraWrittenKey ?? firstChordKey(songData));
+  const autoScrollBefore = useRef<boolean | null>(null);
+  const toneBefore = useRef(tone);
+
+  useEffect(() => {
+    if (state.status === "listening" || autoScrollBefore.current === null) return;
+    usePlayerStore.getState().setAutoScroll(autoScrollBefore.current);
+    autoScrollBefore.current = null;
+    if (state.status === "error") toast.error(state.message);
+    if (state.status !== "done") return;
+    const previous = toneBefore.current;
+    setTone(state.shift);
+    const label = displayKey ? transposeRootNote(displayKey, state.shift) : `${state.shift > 0 ? "+" : ""}${state.shift}`;
+    toast.success(`Tom detectado: ${label}`, {
+      action: { label: "Desfazer", onClick: () => setTone(previous) },
+    });
+  }, [state, displayKey, setTone]);
+
+  if (!isSubscriber) return null;
+
+  const listening = state.status === "listening";
+  const handleClick = () => {
+    if (listening) {
+      cancel();
+      return;
+    }
+    toneBefore.current = tone;
+    autoScrollBefore.current = usePlayerStore.getState().autoScroll;
+    usePlayerStore.getState().setAutoScroll(true);
+    void start();
+  };
+
+  return (
+    <ToolbarButton
+      active={listening}
+      onClick={handleClick}
+      title={listening ? "Cancelar" : "Descobrir o tom pela voz"}
+      disabled={Boolean(sharedContext)}
+      className="flex-col gap-0 p-0"
+    >
+      {listening ? (
+        <span className="text-xs font-bold leading-none" style={{ opacity: 0.6 + state.level * 0.4 }}>
+          {Math.ceil(state.remainingMs / 1000)}s
+        </span>
+      ) : (
+        <Mic className="size-4" />
+      )}
+    </ToolbarButton>
   );
 }
 

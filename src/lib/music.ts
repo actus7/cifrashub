@@ -1,6 +1,6 @@
 import type { Section, SectionType } from "./types";
 
-const NOTES = [
+export const NOTES = [
   "C",
   "C#",
   "D",
@@ -62,11 +62,11 @@ export function transposeChord(chord: string, steps: number): string {
     .join("/");
 }
 
-function isMinorKey(key: string): boolean {
+export function isMinorKey(key: string): boolean {
   return key.endsWith("m") && !key.endsWith("dim");
 }
 
-function keyRoot(key: string): string {
+export function keyRoot(key: string): string {
   return isMinorKey(key) ? key.slice(0, -1) : key;
 }
 
